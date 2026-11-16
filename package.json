@@ -1,6 +1,9 @@
 {
   "name": "cue-sheet",
   "private": true,
-  "scripts": { "start": "node server.js" },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/"
+  },
   "engines": { "node": ">=20" }
 }

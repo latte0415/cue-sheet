@@ -410,6 +410,38 @@ body.has-player .app{padding-bottom:calc(var(--player-h) + env(safe-area-inset-b
 .menu-note{margin:0;padding:8px 12px;font-size:12px;color:var(--ink-3);border-top:1px solid var(--rule);max-width:240px;white-space:normal}
 .movebar{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;padding:6px 10px;border-bottom:1px solid var(--accent);background:var(--accent-tint);font-size:13px}
 .movebar b{font-weight:600}
+/* 6차: 서버 동기화 상태 · 충돌 안내 · 프로젝트 목록 · 시작 화면 */
+.sync-st{font-size:12px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto}
+.sync-st.red{color:var(--red)}
+.syncbar{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px;padding:6px 10px;border-bottom:1px solid var(--red);background:var(--paper);color:var(--red);font-size:13px}
+.syncbar b{font-weight:600}
+.syncbar .btn{color:var(--ink)}
+.brand{position:relative}
+.proj-btn{font:inherit;color:inherit;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-bottom:1px dashed var(--rule-2)}
+.proj-btn:hover{border-bottom-color:var(--ink-3)}
+.proj-btn .caret{font-size:11px;color:var(--ink-3);margin-left:4px}
+.proj-menu{position:absolute;left:0;top:calc(100% - 4px);z-index:40;background:var(--paper);border:1px solid var(--rule-2);width:min(420px,calc(100vw - 16px));max-height:min(70vh,560px);overflow:auto;padding:10px 12px;display:flex;flex-direction:column;gap:10px;font-size:13px}
+.pj-h{display:flex;align-items:baseline;gap:8px;font-weight:600}
+.pj-list{list-style:none;margin:0;padding:0;border-top:1px solid var(--rule)}
+.pj-i{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px;padding:7px 0;border-bottom:1px solid var(--rule)}
+.pj-i .pj-open{flex:1 1 160px;min-width:0;text-align:left;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pj-i.cur .pj-open{font-weight:600;color:var(--accent)}
+.pj-i .note{flex:1 1 100%;order:3}
+.pj-a{display:inline-flex;gap:12px}
+.pj-new{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.pj-new input,.gate-box input,.proj-menu .field input{min-width:0;border:1px solid var(--rule-2);padding:5px 7px;font:inherit;background:var(--paper);color:var(--ink)}
+.pj-new input{flex:1 1 160px}
+.gate-box input,.proj-menu .field input{width:100%}
+.gate{position:fixed;inset:0;z-index:70;background:var(--paper);display:flex;justify-content:center;align-items:flex-start;overflow:auto;padding:16px}
+.gate-box{width:min(440px,100%);margin-top:10vh;border:1px solid var(--rule-2);padding:18px;display:flex;flex-direction:column;gap:12px;background:var(--paper)}
+.gate-box h2{margin:0;font-size:16px;font-weight:600}
+.gate-f{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.gate-list{list-style:none;margin:0;padding:0;border-top:1px solid var(--rule)}
+.gate-list li{border-bottom:1px solid var(--rule)}
+.gate-list button{display:block;width:100%;text-align:left;padding:8px 2px;font-size:14px}
+.gate-list button:hover{background:var(--tint)}
+.gate-list .note{display:block}
+.tr-prog{font-family:var(--mono);font-size:12px;color:var(--accent)}
 .app.moving .doc p[data-id]:hover{background:var(--accent-tint);cursor:pointer}
 .app.moving tr.row:hover td{background:var(--accent-tint)}
 .sc-cmt{font-family:var(--mono);font-size:12px}
@@ -502,6 +534,8 @@ body.has-player .app{padding-bottom:calc(var(--player-h) + env(safe-area-inset-b
       <button type="button" class="tb nav-toggle" id="btn-nav" data-act="nav-toggle" aria-controls="nav">목차</button>
       <h1 class="show-title" id="show-title"></h1>
       <span class="rev" id="rev"><span class="ce rev-v" id="rev-v" data-ce="rev" data-ph="판 이름" spellcheck="false" aria-label="판 이름"></span><span class="mono" id="rev-time"></span></span>
+      <span class="sync-st" id="sync-st" role="status" aria-live="polite"></span>
+      <div class="proj-menu" id="proj-menu" role="dialog" aria-label="프로젝트 목록" hidden></div>
     </div>
     <nav class="tabs" id="view-tabs" role="tablist" aria-label="보기 전환"></nav>
     <div class="tools-r">
@@ -526,6 +560,7 @@ body.has-player .app{padding-bottom:calc(var(--player-h) + env(safe-area-inset-b
     </div>
   </header>
   <div class="movebar" id="movebar" role="status" hidden></div>
+  <div class="syncbar" id="syncbar" role="alert" hidden></div>
   <div class="body">
     <aside class="nav" id="nav" aria-label="파트·씬 목록"></aside>
     <div class="scrim" id="nav-scrim" data-act="nav-close" hidden></div>
@@ -549,6 +584,7 @@ body.has-player .app{padding-bottom:calc(var(--player-h) + env(safe-area-inset-b
 <audio id="preview-audio" preload="auto"></audio>
 <div class="cd" id="cd" role="timer" aria-live="off" hidden><div class="cd-n" id="cd-n"></div><div class="cd-l" id="cd-l"></div><button type="button" class="btn" data-act="cd-stop">닫기 (Esc)</button></div>
 <div id="modal-root"></div>
+<div class="gate" id="gate" hidden></div>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script>
@@ -851,7 +887,9 @@ const state = {
   lastView: null, saveWarned: false, trackOpen: null,
   theme: 'system', booth: false,
   // 5차
-  panelScene: null, moveCue: null, autoCd: false, lastSeen: null, seenShown: null, trackRenum: null
+  panelScene: null, moveCue: null, autoCd: false, lastSeen: null, seenShown: null, trackRenum: null,
+  // 6차
+  projOpen: false
 };
 const SETUP_DONE = new Set(); // 런: 무대 세팅 체크 (세션 메모리만, 저장 안 함)
 let IDX = null;
@@ -901,7 +939,7 @@ function idbMsg(err) {
   return err.message || String(err);
 }
 function trackByNo(no) { return no == null ? null : state.show.tracks.find(t => t.no === no) || null; }
-function trackUrl(t) { return t && t.fileKey ? fileUrls.get(t.fileKey) || null : null; }
+function trackUrl(t) { return t && t.fileKey ? Store.fileUrl(t) : null; }
 function fmtDur(sec) { if (sec == null || !isFinite(sec)) return '—'; sec = Math.max(0, Math.round(sec)); return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'); }
 function probeDuration(url) {
   return new Promise(res => {
@@ -914,29 +952,8 @@ function probeDuration(url) {
     a.src = url;
   });
 }
-function loadAudioFiles() {
-  return IDB.keys().then(keys => {
-    const have = new Set(keys);
-    const need = state.show.tracks.filter(t => t.fileKey && have.has(t.fileKey) && !fileUrls.has(t.fileKey));
-    return Promise.all(need.map(t => IDB.get(t.fileKey).then(b => { if (b) fileUrls.set(t.fileKey, URL.createObjectURL(b)); })));
-  }).then(() => { idbError = ''; }, err => { idbError = idbMsg(err); }).then(() => render());
-}
-function uploadToTrack(t, file) {
-  trackErr.delete(t.id); trackBusy.add(t.id); render();
-  const key = uid('f');
-  IDB.put(key, file).then(() => {
-    const old = t.fileKey;
-    if (old && old !== key) { IDB.del(old).catch(() => {}); const u = fileUrls.get(old); if (u) { URL.revokeObjectURL(u); fileUrls.delete(old); } }
-    t.fileKey = key; t.fileName = file.name || ('BGM ' + t.no);
-    fileUrls.set(key, URL.createObjectURL(file));
-    return probeDuration(fileUrls.get(key));
-  }).then(d => {
-    if (d != null) t.durationSec = Math.round(d * 10) / 10;
-    trackBusy.delete(t.id); commit(); toast(`BGM ${t.no} 저장됨 — ${t.fileName}`);
-  }).catch(err => {
-    trackBusy.delete(t.id); trackErr.set(t.id, '저장 실패: ' + idbMsg(err)); render();
-  });
-}
+function loadAudioFiles() { return Store.loadFiles(); }
+function uploadToTrack(t, file) { Store.upload(t, file); }
 function guessNo(name) { const m = /^\s*(?:bgm|track|트랙|m)?[\s_\-.#]*0*(\d{1,3})(?!\d)/i.exec(name || ''); return m ? Number(m[1]) : null; }
 function dropFiles(files) {
   files = files.filter(f => /^audio\//.test(f.type) || /\.(mp3|wav|ogg|oga|m4a|aac|flac|webm|opus)$/i.test(f.name));
@@ -951,6 +968,448 @@ function dropFiles(files) {
     }
     uploadToTrack(t, f);
   });
+}
+
+/* ================= 저장 계층: Store ================= */
+// Store = LocalStore | ServerStore. 시작할 때 GET /api/health 가 되면 서버 모드, 아니면 로컬 모드(아티팩트·file://·서버 없음)
+//   saveShow()  지금 state.show 를 저장 (save() 가 부른다)
+//   fileUrl(t)  트랙 음원 주소 (없으면 null)
+//   loadFiles() 음원 목록/Blob 을 불러온 뒤 render
+//   upload(t, file) · delFile(key) · clearFiles() → Promise
+const LocalStore = {
+  mode: 'local',
+  saveShow() {
+    const ok = lsSet(KEY_SHOW, JSON.stringify(state.show));
+    if (!ok && !state.saveWarned) { state.saveWarned = true; toast('브라우저 저장소를 쓸 수 없어 이 탭에서만 유지됩니다.'); }
+  },
+  fileUrl(t) { return fileUrls.get(t.fileKey) || null; },
+  loadFiles() {
+    return IDB.keys().then(keys => {
+      const have = new Set(keys);
+      const need = state.show.tracks.filter(t => t.fileKey && have.has(t.fileKey) && !fileUrls.has(t.fileKey));
+      return Promise.all(need.map(t => IDB.get(t.fileKey).then(b => { if (b) fileUrls.set(t.fileKey, URL.createObjectURL(b)); })));
+    }).then(() => { idbError = ''; }, err => { idbError = idbMsg(err); }).then(() => render());
+  },
+  upload(t, file) {
+    trackErr.delete(t.id); trackBusy.add(t.id); render();
+    const key = uid('f');
+    IDB.put(key, file).then(() => {
+      const old = t.fileKey;
+      if (old && old !== key) LocalStore.delFile(old);
+      t.fileKey = key; t.fileName = file.name || ('BGM ' + t.no);
+      fileUrls.set(key, URL.createObjectURL(file));
+      return probeDuration(fileUrls.get(key));
+    }).then(d => {
+      if (d != null) t.durationSec = Math.round(d * 10) / 10;
+      trackBusy.delete(t.id); commit(); toast(`BGM ${t.no} 저장됨 — ${t.fileName}`);
+    }).catch(err => {
+      trackBusy.delete(t.id); trackErr.set(t.id, '저장 실패: ' + idbMsg(err)); render();
+    });
+  },
+  delFile(key) {
+    const u = fileUrls.get(key); if (u) { URL.revokeObjectURL(u); fileUrls.delete(key); }
+    return IDB.del(key).catch(() => {});
+  },
+  clearFiles() { return IDB.clear().then(() => { fileUrls.forEach(u => URL.revokeObjectURL(u)); fileUrls.clear(); }); }
+};
+
+// 서버 모드 상태. rev = 마지막으로 서버와 맞춘 판 번호, dirty = 아직 PUT 하지 않은 변경
+const Srv = {
+  key: '', showId: null, rev: 0, etag: null, list: [], audioKeys: null, hasPassword: false,
+  dirty: false, inflight: false, conflict: null, err: false, gone: false, retryT: null, pollT: null, polling: false, deferred: false,
+  runPos: {}, localRun: null
+};
+const POLL_MS = 5000, RETRY_MS = 5000;
+const trackProg = new Map();
+const enc = encodeURIComponent;
+function showPath(id) { return '/shows/' + enc(id || Srv.showId); }
+// <audio src> 와 다운로드 링크는 헤더를 못 실으니 ?key=
+function audioUrl(key, download) {
+  const q = [];
+  if (download) q.push('download=1');
+  if (Srv.key) q.push('key=' + enc(Srv.key));
+  return '/api' + showPath() + '/audio/' + enc(key) + (q.length ? '?' + q.join('&') : '');
+}
+function keyHeaders() { return Srv.key ? { 'X-App-Key': enc(Srv.key) } : {}; }
+// 모든 /api 호출. 401 이면 비밀번호를 다시 묻고 같은 요청을 다시 보낸다. 네트워크 오류는 reject
+async function api(method, p, body, headers) {
+  for (;;) {
+    const h = Object.assign(keyHeaders(), headers || {});
+    let b;
+    if (body !== undefined) { h['Content-Type'] = 'application/json'; b = JSON.stringify(body); }
+    const r = await fetch('/api' + p, { method, headers: h, body: b, cache: 'no-store' });
+    if (r.status === 401) { await askPassword(true); continue; }
+    let data = null;
+    if (r.status !== 304) { try { data = await r.json(); } catch (e) { data = null; } }
+    return { status: r.status, data, etag: r.headers.get('ETag') };
+  }
+}
+function pendingLocal() { return !!(saveT || Srv.dirty || Srv.inflight || Srv.conflict); }
+function backupLocal() {
+  if (!Srv.showId || !state.show) return;
+  lsSet('cueSheet.backup.' + Srv.showId, JSON.stringify({ baseRev: Srv.rev, savedAt: new Date().toISOString(), show: state.show }));
+}
+// PUT 은 한 번에 하나. 끝났을 때 또 바뀌어 있으면 이어서 한 번 더
+async function push() {
+  if (Store.mode !== 'server' || !Srv.showId || Srv.inflight || Srv.conflict || !Srv.dirty || Srv.gone) { renderSync(); return; }
+  clearTimeout(Srv.retryT); Srv.retryT = null;
+  const id = Srv.showId;
+  Srv.inflight = true; Srv.dirty = false; renderSync();
+  let r = null;
+  try { r = await api('PUT', showPath(id), { baseRev: Srv.rev, show: state.show }); } catch (e) { r = null; }
+  Srv.inflight = false;
+  if (id !== Srv.showId) return;
+  if (r && r.status === 200) {
+    Srv.rev = r.data.rev; Srv.etag = r.etag || `"${r.data.rev}"`; Srv.err = false;
+    state.show.updatedAt = r.data.updatedAt;
+    const it = Srv.list.find(x => x.id === id); if (it) { it.rev = r.data.rev; it.updatedAt = r.data.updatedAt; it.title = state.show.title; }
+  } else if (r && r.status === 409) {
+    Srv.dirty = true; Srv.err = false; Srv.conflict = r.data;
+  } else if (r && r.status === 404) {
+    Srv.dirty = true; Srv.gone = true; backupLocal(); showGone(); return;
+  } else {
+    Srv.dirty = true; Srv.err = true; backupLocal();
+    Srv.retryT = setTimeout(push, RETRY_MS);
+  }
+  renderRev(); renderSync(); renderSyncBar();
+  if (Srv.dirty && !Srv.err && !Srv.conflict) push();
+}
+// 저장 대기분을 서버에 다 보낼 때까지 기다린다 (전환·복제 전). 충돌·오류로 못 보내면 false
+function flushServer() {
+  flushSave();
+  return new Promise(res => {
+    const t0 = Date.now();
+    (function wait() {
+      if (Store.mode !== 'server' || !Srv.showId) return res(true);
+      if (!Srv.inflight && !Srv.dirty) return res(true);
+      if (Srv.conflict || Srv.err || Srv.gone || Date.now() - t0 > 15000) return res(false);
+      setTimeout(wait, 60);
+    })();
+  });
+}
+const ServerStore = {
+  mode: 'server',
+  saveShow() { Srv.dirty = true; push(); },
+  fileUrl(t) { return Srv.audioKeys && !Srv.audioKeys.has(t.fileKey) ? null : audioUrl(t.fileKey); },
+  loadFiles() {
+    const id = Srv.showId;
+    return api('GET', showPath(id) + '/audio').then(r => {
+      if (id !== Srv.showId) return;
+      if (r.status !== 200 || !Array.isArray(r.data)) throw new Error('HTTP ' + r.status);
+      Srv.audioKeys = new Set(r.data.map(x => x.fileKey)); idbError = '';
+    }).catch(err => { if (id === Srv.showId) idbError = '서버 음원 목록을 불러오지 못했습니다 (' + (err && err.message || err) + ')'; }).then(() => { if (state.show) render(); });
+  },
+  // XMLHttpRequest: fetch 로는 업로드 진행률을 못 받는다
+  upload(t, file) {
+    const tid = t.id, showId = Srv.showId, key = uid('f');
+    trackErr.delete(tid); trackBusy.add(tid); trackProg.set(tid, 0); render();
+    const done = (err) => {
+      trackBusy.delete(tid); trackProg.delete(tid);
+      if (showId !== Srv.showId) return;
+      if (err) { trackErr.set(tid, '업로드 실패: ' + err); render(); }
+    };
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', '/api' + showPath(showId) + '/audio/' + enc(key));
+    Object.entries(keyHeaders()).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+    xhr.setRequestHeader('Content-Type', /^audio\/[\w.+-]+$/.test(file.type || '') ? file.type : 'application/octet-stream');
+    xhr.setRequestHeader('X-File-Name', enc(file.name || ''));
+    xhr.upload.onprogress = e => {
+      if (!e.lengthComputable) return;
+      const p = Math.min(100, Math.round(e.loaded / e.total * 100));
+      trackProg.set(tid, p);
+      const el = document.getElementById('trprog-' + tid); if (el) el.textContent = `업로드 중 ${p}%`;
+    };
+    xhr.onerror = () => done('네트워크 오류');
+    xhr.onload = () => {
+      if (xhr.status === 401) { done('비밀번호가 필요합니다 — 다시 시도하세요'); askPassword(true); return; }
+      if (xhr.status !== 200) { done('HTTP ' + xhr.status + (xhr.status === 413 ? ' (100MB 초과)' : '')); return; }
+      if (showId !== Srv.showId) { done(); return; }
+      if (!Srv.audioKeys) Srv.audioKeys = new Set();
+      Srv.audioKeys.add(key);
+      probeDuration(audioUrl(key)).then(d => {
+        done();
+        // 업로드 중에 다른 기기의 변경을 불러왔을 수 있다 — 트랙을 id 로 다시 찾는다
+        const tr = state.show.tracks.find(x => x.id === tid);
+        if (!tr) { toast('업로드한 트랙이 그사이 삭제되었습니다'); ServerStore.delFile(key); render(); return; }
+        const old = tr.fileKey;
+        if (old && old !== key && !state.show.tracks.some(x => x !== tr && x.fileKey === old)) ServerStore.delFile(old);
+        tr.fileKey = key; tr.fileName = file.name || ('BGM ' + tr.no);
+        if (d != null) tr.durationSec = Math.round(d * 10) / 10;
+        commit(); toast(`BGM ${tr.no} 업로드됨 — ${tr.fileName}`);
+      });
+    };
+    xhr.send(file);
+  },
+  delFile(key) {
+    if (Srv.audioKeys) Srv.audioKeys.delete(key);
+    return api('DELETE', showPath() + '/audio/' + enc(key)).catch(() => {});
+  },
+  clearFiles() {
+    return api('DELETE', showPath() + '/audio').then(r => { if (r.status !== 200) throw new Error('HTTP ' + r.status); Srv.audioKeys = new Set(); });
+  }
+};
+let Store = LocalStore;
+
+/* ---- 상단 상태 표시 · 충돌 안내 바 ---- */
+function renderSync() {
+  const el = $('#sync-st'); if (!el) return;
+  let t = '', red = false;
+  if (Store.mode === 'local') t = '로컬 모드 — 이 브라우저에만 저장';
+  else if (!Srv.showId || !state.show) t = '';
+  else if (Srv.gone) { t = '저장 안 됨 — 프로젝트 없음'; red = true; }
+  else if (Srv.conflict) { t = '저장 안 됨 — 충돌'; red = true; }
+  else if (Srv.err) { t = '저장 안 됨 — 재시도 중'; red = true; }
+  else if (saveT || Srv.dirty || Srv.inflight) t = '저장 중…';
+  else t = '저장됨 · rev ' + Srv.rev;
+  if (el.textContent !== t) el.textContent = t;
+  el.classList.toggle('red', red);
+  el.title = Store.mode === 'local' ? '서버에 연결되지 않아 이 브라우저(localStorage·IndexedDB)에만 저장합니다' : Srv.err ? `${RETRY_MS / 1000}초마다 다시 저장합니다 — 그동안 이 브라우저에도 백업` : '';
+}
+function renderSyncBar() {
+  const b = $('#syncbar'); if (!b) return;
+  const c = Srv.conflict;
+  b.hidden = !c;
+  if (!c) { b.innerHTML = ''; return; }
+  b.innerHTML = `<span><b>다른 기기에서 수정됨</b> — 서버 rev ${esc(c.rev)}${c.updatedAt ? ' (' + esc(fmtTime(c.updatedAt)) + ')' : ''}. 이 기기의 변경은 아직 저장되지 않았습니다</span>
+    <button type="button" class="btn" id="sync-load" data-act="sync-load">서버 버전 불러오기</button><button type="button" class="btn" id="sync-overwrite" data-act="sync-overwrite" data-confirm="정말 덮어쓰기? (서버 rev ${esc(c.rev)} 의 변경이 사라짐)">내 버전으로 덮어쓰기</button>`;
+}
+
+/* ---- 다른 기기의 변경 반영 ---- */
+// 지금 입력 중인 곳: null(없음) · 'other'(모달·패널·입력칸) · { scene }(대본 편집기의 씬)
+function editingFocus() {
+  if (state.modal) return 'other';
+  const a = document.activeElement;
+  if (!a || a === document.body || !a.closest) return null;
+  if (a.closest('#gate, #proj-menu')) return null;
+  if (!(a.isContentEditable || a.matches('input, textarea, select'))) return null;
+  const sc = a.closest('#script .scene[data-scene]');
+  return sc ? { scene: sc.dataset.scene } : 'other';
+}
+function findScene(show, id) { for (const p of show.parts) for (const sc of p.scenes) if (sc.id === id) return sc; return null; }
+// 편집기에 포커스가 있으면: 구조가 같고 그 씬이 서버에서 안 바뀌었을 때만 나머지 씬을 갱신. 아니면 포커스가 빠질 때까지 미룬다
+function applyRemote(d, force) {
+  let show;
+  try { show = migrate(d.show); } catch (e) { return false; }
+  const f = force ? null : editingFocus();
+  if (f === 'other') { Srv.deferred = true; return false; }
+  let partial = false;
+  if (f) {
+    // 편집 중인 씬의 문단(id·원문)이 서버와 같아야 그 편집기 DOM 을 그대로 둘 수 있다
+    const a = findScene(state.show, f.scene), b = findScene(show, f.scene);
+    const txt = sc => JSON.stringify(sc.items.map(i => [i.id, itemToRaw(i)]));
+    // 파트·씬 구성(순서)이 같아야 한다 — 다른 씬의 문단 증감은 그 씬 편집기만 다시 그리면 된다
+    const shape = x => x.parts.map(p => p.id + ':' + p.scenes.map(sc => sc.id).join(',')).join('|');
+    if (state.view !== 'script' || mountedView !== 'script' || shape(show) !== shape(state.show) || !a || !b || txt(a) !== txt(b)) { Srv.deferred = true; return false; }
+    partial = true;
+  }
+  if (force) { clearTimeout(saveT); saveT = null; }
+  state.show = show; state.show.updatedAt = d.updatedAt || show.updatedAt;
+  Srv.rev = d.rev; Srv.etag = `"${d.rev}"`; Srv.dirty = false; Srv.conflict = null; Srv.err = false; Srv.deferred = false;
+  clearTimeout(Srv.retryT); Srv.retryT = null;
+  state.sceneEdit = null; state.moveCue = null; state.trackRenum = null;
+  if (partial) {
+    buildIndex();
+    $$('#script .doc').forEach(doc => {
+      if (doc.dataset.scene === f.scene) return;
+      UNDO.delete(doc.dataset.scene);
+      const se = IDX.byScene.get(doc.dataset.scene); if (!se) return;
+      const html = se.scene.items.map(paraHtml).join('') || '<p><br></p>';
+      if (doc.innerHTML !== html) { doc.innerHTML = html; Array.from(doc.children).forEach(p => { p._raw = textOf(p); }); markEmpty(doc); }
+    });
+    scriptSig = sig();
+    render();
+  } else {
+    UNDO.clear(); mountedView = null; render();
+  }
+  renderSync(); renderSyncBar();
+  // 다른 기기가 올린 음원: 목록을 다시 받기 전에도 바로 재생되게 낙관적으로 둔다
+  if (Srv.audioKeys && state.show.tracks.some(t => t.fileKey && !Srv.audioKeys.has(t.fileKey))) { Srv.audioKeys = null; loadAudioFiles(); }
+  return true;
+}
+async function poll() {
+  if (Store.mode !== 'server' || !Srv.showId || !state.show || Srv.polling || Srv.gone || GATE.type || document.visibilityState === 'hidden') return;
+  Srv.polling = true;
+  const id = Srv.showId;
+  try {
+    const r = await api('GET', showPath(id), undefined, Srv.etag ? { 'If-None-Match': Srv.etag } : {});
+    if (id !== Srv.showId || r.status === 304) return;
+    if (r.status === 404) { if (!pendingLocal()) { Srv.gone = true; showGone(); } return; }
+    if (r.status !== 200 || !r.data) return;
+    if (r.data.rev === Srv.rev) { Srv.etag = r.etag; return; }
+    if (pendingLocal()) return; // 내 변경이 대기 중이면 저장의 409 처리에 맡긴다
+    if (applyRemote(r.data, false)) toast('다른 기기의 변경을 불러왔습니다');
+  } catch (e) { /* 네트워크 오류 — 다음 폴링에서 */ } finally { Srv.polling = false; }
+}
+function startPoll() { clearInterval(Srv.pollT); Srv.pollT = Store.mode === 'server' ? setInterval(poll, POLL_MS) : null; }
+function showGone() {
+  renderSync();
+  toast('이 프로젝트는 다른 기기에서 삭제되었습니다 — 변경은 이 브라우저에 백업했습니다', { ms: 6000 });
+  refreshList().then(() => showGate(Srv.list.length ? 'pick' : 'first'), () => {});
+}
+
+/* ---- 프로젝트 ---- */
+function blankShow(title) {
+  return migrate({
+    id: uid('show'), title: title || '새 공연', version: 5, revision: '', updatedAt: new Date().toISOString(), preShowSetup: '',
+    people: [], tracks: [], parts: [{ id: uid('pt'), name: '1부', scenes: [{ id: uid('s'), type: 'act', title: '', cast: [], durationSec: null, setup: '', items: [], comments: [] }] }]
+  });
+}
+async function refreshList() {
+  const r = await api('GET', '/shows');
+  if (r.status !== 200 || !Array.isArray(r.data)) throw new Error('HTTP ' + r.status);
+  Srv.list = r.data;
+  return r.data;
+}
+function stopAllAudio() {
+  stopCountdown(); cancelRamp(); disarmRestart();
+  [audioEl(), previewEl()].forEach(a => { if (!a) return; a.pause(); a.removeAttribute('src'); a.dataset.key = ''; });
+  AU.shown = false; AU.trackNo = null; AU.gain = 1;
+}
+async function openShow(id) {
+  const r = await api('GET', showPath(id));
+  if (r.status === 404) { toast('프로젝트를 찾을 수 없습니다'); await refreshList(); showGate(Srv.list.length ? 'pick' : 'first'); return false; }
+  if (r.status !== 200 || !r.data) throw new Error('HTTP ' + r.status);
+  let show;
+  try { show = migrate(r.data.show); } catch (e) { showGate('error', '프로젝트 데이터를 읽지 못했습니다: ' + e.message); return false; }
+  stopAllAudio();
+  clearTimeout(saveT); saveT = null; clearTimeout(Srv.retryT);
+  Object.assign(Srv, { showId: id, rev: r.data.rev, etag: r.etag || `"${r.data.rev}"`, audioKeys: null, dirty: false, inflight: false, conflict: null, err: false, gone: false, deferred: false });
+  state.show = show; state.show.updatedAt = r.data.updatedAt;
+  state.selItem = null; state.sceneEdit = null; state.moveCue = null; state.trackRenum = null; state.panelScene = null;
+  state.menuOpen = false; state.projOpen = false; state.curScene = null;
+  state.runItemId = typeof Srv.runPos[id] === 'string' ? Srv.runPos[id] : null;
+  DEL.length = 0; SETUP_DONE.clear(); UNDO.clear(); trackErr.clear(); trackBusy.clear(); trackProg.clear();
+  mountedView = null;
+  hideGate(); savePrefs(); render(); renderSync(); renderSyncBar(); renderProj();
+  loadAudioFiles(); startPoll();
+  return true;
+}
+async function switchShow(id) {
+  if (id === Srv.showId) { state.projOpen = false; renderProj(); return; }
+  if (!(await flushServer())) { toast('저장되지 않은 변경이 있어 전환하지 않았습니다 — 상단 안내를 먼저 확인하세요'); return; }
+  savePrefs();
+  if (await openShow(id)) toast(`프로젝트 전환 — ${state.show.title}`);
+}
+async function createShow(kind, title) {
+  const show = kind === 'sample' ? sampleShow() : blankShow(title);
+  if (title) show.title = cut(title, 80);
+  if (Srv.showId && !(await flushServer())) { toast('저장되지 않은 변경이 있어 새 프로젝트를 만들지 않았습니다'); return; }
+  const r = await api('POST', '/shows', { show });
+  if (r.status !== 201 || !r.data) { toast('만들기 실패 (HTTP ' + r.status + ')'); return; }
+  await refreshList().catch(() => {});
+  savePrefs();
+  if (await openShow(r.data.id)) toast(`새 프로젝트 — ${state.show.title}`);
+}
+function projMeta(x) {
+  return [x.updatedAt ? '수정 ' + fmtTime(x.updatedAt) : '', '씬 ' + (x.sceneCount || 0), '큐 ' + (x.cueCount || 0)].filter(Boolean).join(' · ');
+}
+function renderProj() {
+  const m = $('#proj-menu'); if (!m) return;
+  const on = Store.mode === 'server' && state.projOpen && !!state.show;
+  m.hidden = !on;
+  const b = $('#proj-btn'); if (b) b.setAttribute('aria-expanded', String(on));
+  if (!on) { m.innerHTML = ''; return; }
+  const cur = Srv.showId;
+  let h = `<div class="pj-h">프로젝트<span class="note">${Srv.list.length}개 · 모든 기기가 함께 봅니다</span></div>`;
+  h += `<div class="field"><label for="pj-title">현재 프로젝트 이름</label><input type="text" id="pj-title" data-act="pj-rename" value="${esc(state.show.title)}" maxlength="80"></div>`;
+  h += '<ol class="pj-list" id="pj-list">' + Srv.list.map(x => {
+    const id = esc(x.id), isCur = x.id === cur;
+    return `<li class="pj-i ${isCur ? 'cur' : ''}" data-id="${id}"><button type="button" class="pj-open" data-act="proj-open" data-id="${id}" ${isCur ? 'aria-current="true"' : ''}>${esc(isCur ? state.show.title : x.title) || '(제목 없음)'}</button>
+      <span class="pj-a"><button type="button" class="tb" data-act="proj-dup" data-id="${id}">복제</button><button type="button" class="tb red" data-act="proj-del" data-id="${id}" data-confirm="정말 삭제? 복구 불가">삭제</button></span>
+      <span class="note">${esc(projMeta(x))}${isCur ? ' · 지금 보는 중' : ''}</span></li>`;
+  }).join('') + '</ol>';
+  h += `<div class="pj-new"><label class="sr-only" for="pj-new-title">새 프로젝트 제목</label><input type="text" id="pj-new-title" placeholder="새 프로젝트 제목" maxlength="80"><button type="button" class="btn" id="pj-new-blank" data-act="proj-new" data-kind="blank">새 프로젝트</button><button type="button" class="btn" id="pj-new-sample" data-act="proj-new" data-kind="sample">샘플로</button></div>`;
+  h += '<p class="note">삭제는 서버에서 지워져 되돌릴 수 없습니다. 복제는 음원 파일도 함께 복사합니다.</p>';
+  const keep = document.activeElement && m.contains(document.activeElement) ? document.activeElement.id : null;
+  const draft = $('#pj-new-title') ? $('#pj-new-title').value : '';
+  m.innerHTML = h;
+  if (draft) $('#pj-new-title').value = draft;
+  if (keep && document.getElementById(keep)) document.getElementById(keep).focus();
+}
+
+/* ---- 시작 화면(게이트): 연결 중 · 비밀번호 · 첫 프로젝트 · 프로젝트 선택 · 오류 ---- */
+const GATE = { type: null, err: '', prev: null };
+let pwWait = null, pwDone = null;
+function showGate(type, err) { GATE.type = type; GATE.err = err || ''; renderGate(); }
+function hideGate() { GATE.type = null; GATE.prev = null; renderGate(); }
+function askPassword(wrong) {
+  if (!pwWait) {
+    pwWait = new Promise(res => { pwDone = res; });
+    GATE.prev = GATE.type && GATE.type !== 'password' ? GATE.type : null;
+  }
+  showGate('password', wrong ? '비밀번호가 맞지 않습니다 — 다시 입력하세요' : '');
+  return pwWait;
+}
+function newShowFields(idp) {
+  return `<div class="field"><label for="${idp}-title">공연 제목</label><input type="text" id="${idp}-title" placeholder="예: 2026 정기공연" maxlength="80"></div>
+    <div class="gate-f"><button type="button" class="btn" id="${idp}-blank" data-act="gate-new" data-kind="blank">빈 프로젝트로</button><button type="button" class="btn strong" id="${idp}-sample" data-act="gate-new" data-kind="sample">샘플로 시작</button></div>`;
+}
+function renderGate() {
+  const g = $('#gate'); if (!g) return;
+  g.hidden = !GATE.type;
+  if (!GATE.type) { g.innerHTML = ''; return; }
+  const err = GATE.err ? `<p class="err" role="alert" id="gate-err">${esc(GATE.err)}</p>` : '';
+  let h = '';
+  if (GATE.type === 'loading') h = `<div class="gate-box" role="status"><p class="note">서버에 연결하는 중…</p></div>`;
+  else if (GATE.type === 'password') h = `<div class="gate-box" role="dialog" aria-modal="true" aria-labelledby="gate-h"><h2 id="gate-h">비밀번호</h2>
+    <p class="note">팀 공유 비밀번호를 입력하세요. 이 브라우저에 기억합니다.</p>
+    <div class="field"><label for="gate-pw">비밀번호</label><input type="password" id="gate-pw" autocomplete="current-password"></div>${err}
+    <div class="gate-f"><button type="button" class="btn strong" id="gate-pw-go" data-act="gate-pw">들어가기</button></div></div>`;
+  else if (GATE.type === 'first') h = `<div class="gate-box" role="dialog" aria-modal="true" aria-labelledby="gate-h"><h2 id="gate-h">첫 프로젝트 만들기</h2>
+    <p class="note">서버에 프로젝트가 없습니다. 공연 하나가 프로젝트 하나입니다 — 만들면 모든 기기에서 함께 봅니다.</p>${newShowFields('gate')}${err}</div>`;
+  else if (GATE.type === 'pick') h = `<div class="gate-box" role="dialog" aria-modal="true" aria-labelledby="gate-h"><h2 id="gate-h">프로젝트 선택</h2>
+    <ul class="gate-list" id="gate-list">${Srv.list.map(x => `<li><button type="button" data-act="gate-open" data-id="${esc(x.id)}">${esc(x.title) || '(제목 없음)'}<span class="note">${esc(projMeta(x))}</span></button></li>`).join('')}</ul>
+    <p class="note">또는 새로 만들기</p>${newShowFields('gate')}${err}</div>`;
+  else h = `<div class="gate-box" role="alertdialog" aria-labelledby="gate-h"><h2 id="gate-h">서버 오류</h2>${err}
+    <div class="gate-f"><button type="button" class="btn strong" id="gate-retry" data-act="gate-retry">다시 시도</button></div></div>`;
+  g.innerHTML = h;
+  const f = $('input', g); if (f) f.focus();
+}
+async function gatePassword() {
+  const inp = $('#gate-pw'), v = inp ? inp.value : '';
+  if (!v) { if (inp) inp.focus(); return; }
+  const btn = $('#gate-pw-go'); if (btn) btn.disabled = true;
+  let r;
+  try { r = await fetch('/api/shows', { headers: { 'X-App-Key': enc(v) }, cache: 'no-store' }); } catch (e) { showGate('password', '서버에 연결할 수 없습니다'); return; }
+  if (r.status === 401) { showGate('password', '비밀번호가 맞지 않습니다 — 다시 입력하세요'); return; }
+  if (!r.ok) { showGate('password', '서버 오류 (HTTP ' + r.status + ')'); return; }
+  Srv.key = v; savePrefs();
+  const prev = GATE.prev, done = pwDone;
+  pwWait = null; pwDone = null;
+  if (prev) showGate(prev); else hideGate();
+  if (done) done();
+  // 저장이 401 로 멈춰 있었으면 이어서
+  if (Srv.dirty && !Srv.inflight) push();
+}
+function bootFail(e) { showGate('error', '서버와 통신하지 못했습니다: ' + (e && e.message || e)); }
+async function detectServer() {
+  if (!/^https?:$/.test(location.protocol)) return null;
+  const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+  const to = setTimeout(() => { if (ctl) ctl.abort(); }, 4000);
+  try {
+    const r = await fetch('/api/health', { cache: 'no-store', signal: ctl ? ctl.signal : undefined });
+    if (!r.ok) return null;
+    const j = await r.json();
+    return j && j.ok === true ? j : null;
+  } catch (e) { return null; } finally { clearTimeout(to); }
+}
+function localBoot() {
+  Store = LocalStore;
+  hideGate();
+  loadLocalShow();
+  render();
+  save(true);
+  if (migratedNote) toast(migratedNote);
+  loadAudioFiles();
+}
+async function serverBoot(h) {
+  Store = ServerStore;
+  Srv.hasPassword = !!h.hasPassword;
+  if (h.hasPassword && !Srv.key) await askPassword(false);
+  await refreshList();
+  if (Srv.showId && Srv.list.some(x => x.id === Srv.showId)) await openShow(Srv.showId);
+  else if (Srv.list.length) showGate('pick');
+  else showGate('first');
 }
 
 /* ================= 음원: 플레이어 ================= */
@@ -1124,7 +1583,8 @@ function updatePlayer() {
 
 /* ================= 저장 ================= */
 let migratedNote = '';
-function loadAll() {
+// 로컬 모드: localStorage 의 show 를 읽는다 (서버 모드는 openShow)
+function loadLocalShow() {
   let show = null;
   const raw = lsGet(KEY_SHOW);
   if (raw) {
@@ -1136,13 +1596,15 @@ function loadAll() {
     } catch (e) { show = null; }
   }
   state.show = show || sampleShow();
+}
+function loadPrefs() {
   const pref = lsGet(KEY_PREF);
   if (pref) {
     try {
       const p = JSON.parse(pref);
       if (typeof p.role === 'string') state.role = p.role;
       if (typeof p.author === 'string') state.author = p.author;
-      if (typeof p.runItemId === 'string') state.runItemId = p.runItemId;
+      if (typeof p.runItemId === 'string') { state.runItemId = p.runItemId; Srv.localRun = p.runItemId; }
       state.runMine = !!p.runMine; state.panel = !!p.panel; state.cueView = !!p.cueView;
       if (typeof p.edit === 'boolean') state.edit = p.edit;
       if (typeof p.vol === 'number' && p.vol >= 0 && p.vol <= 1) AU.vol = p.vol;
@@ -1150,6 +1612,9 @@ function loadAll() {
       state.booth = !!p.booth;
       state.autoCd = !!p.autoCd;
       if (typeof p.lastSeenComments === 'string' && !isNaN(Date.parse(p.lastSeenComments))) state.lastSeen = p.lastSeenComments;
+      if (typeof p.appKey === 'string') Srv.key = p.appKey;
+      if (typeof p.currentShowId === 'string') Srv.showId = p.currentShowId;
+      if (p.runPos && typeof p.runPos === 'object' && !Array.isArray(p.runPos)) Srv.runPos = p.runPos;
     } catch (e) { /* 무시 */ }
   }
   // 처음 쓰는 브라우저: 지금 이후 코멘트만 "새"
@@ -1162,11 +1627,11 @@ let saveT = null;
 // keepTime: 내용이 바뀌지 않은 저장(시작·가져오기)은 수정 시각을 건드리지 않는다
 function save(keepTime) {
   clearTimeout(saveT); saveT = null;
+  if (!state.show) return;
   assignLabels(state.show);
   if (!keepTime) state.show.updatedAt = new Date().toISOString();
-  const ok = lsSet(KEY_SHOW, JSON.stringify(state.show));
-  if (!ok && !state.saveWarned) { state.saveWarned = true; toast('브라우저 저장소를 쓸 수 없어 이 탭에서만 유지됩니다.'); }
-  renderRev();
+  Store.saveShow();
+  renderRev(); renderSync();
 }
 function revTimeText() { return state.show.updatedAt ? fmtTime(state.show.updatedAt) : ''; }
 function renderRev() {
@@ -1178,10 +1643,15 @@ function renderRev() {
   tm.textContent = t ? (state.show.revision || state.edit ? '· ' : '') + t : '';
   tm.title = state.show.updatedAt ? '마지막 수정 ' + state.show.updatedAt : '';
 }
-function scheduleSave() { clearTimeout(saveT); saveT = setTimeout(save, 300); }
+function scheduleSave() { clearTimeout(saveT); saveT = setTimeout(save, 300); renderSync(); }
 function flushSave() { if (saveT) save(); }
 function savePrefs() {
-  lsSet(KEY_PREF, JSON.stringify({ role: state.role, author: state.author, runItemId: state.runItemId, runMine: state.runMine, panel: state.panel, cueView: state.cueView, edit: state.edit, vol: AU.vol, theme: state.theme, booth: state.booth, autoCd: state.autoCd, lastSeenComments: state.lastSeen }));
+  // 런 위치: 로컬 모드는 runItemId 하나, 서버 모드는 프로젝트별 runPos[showId]
+  const srv = Store.mode === 'server';
+  if (srv && Srv.showId && state.show) Srv.runPos[Srv.showId] = state.runItemId;
+  if (!srv) Srv.localRun = state.runItemId;
+  lsSet(KEY_PREF, JSON.stringify({ role: state.role, author: state.author, runItemId: Srv.localRun, runMine: state.runMine, panel: state.panel, cueView: state.cueView, edit: state.edit, vol: AU.vol, theme: state.theme, booth: state.booth, autoCd: state.autoCd, lastSeenComments: state.lastSeen,
+    appKey: Srv.key, currentShowId: Srv.showId, runPos: Srv.runPos }));
 }
 function commit() { save(); render(); }
 
@@ -1221,7 +1691,7 @@ function mcNavLabel(s, n) {
   return n ? '큐 ' + n : mcLabel(s);
 }
 function hasAttach(it) { return !!(it && (it.cues.length || it.comments.length)); }
-function sig() { return state.show.parts.map(p => p.id + ':' + p.scenes.map(s => s.id + '(' + s.items.map(i => i.id).join(',') + ')').join(';')).join('|'); }
+function sig(show) { return (show || state.show).parts.map(p => p.id + ':' + p.scenes.map(s => s.id + '(' + s.items.map(i => i.id).join(',') + ')').join(';')).join('|'); }
 
 /* ================= 역할 ================= */
 function roleDept() { return ['light', 'sound', 'stage'].includes(state.role) ? state.role : null; }
@@ -2069,12 +2539,13 @@ function checkIssues() {
     { k: 'tbd', t: '미정 큐', note: '공연 전에 확정하거나 리허설에서 정한 내용을 적어 두세요.' },
     { k: 'trig', t: '트리거가 비어 있는 큐', note: '언제 칠지 적혀 있지 않습니다.' },
     { k: 'light', t: '채널이 비어 있는 확정 조명 큐', note: '확정인데 채널·애니메이션이 없습니다.' },
-    { k: 'sound', t: '음원', note: '이 브라우저에 파일이 없는 BGM, 트랙 목록에 없는 번호를 쓰는 음향 큐.' },
+    { k: 'sound', t: '음원', note: '' },
     { k: 'cast', t: '인/아웃 연속성', note: '같은 사람의 IN 다음 IN, OUT 다음 OUT, 씬 출연에 없는 사람의 IN/OUT 큐.' },
     { k: 'empty', t: '문단 없는 액트 씬', note: '코멘트·큐를 달 문단이 없습니다.' },
     { k: 'cmt', t: '미해결 코멘트', note: '' }
   ];
   G.forEach(g => { g.list = []; });
+  G.find(g => g.k === 'sound').note = (Store.mode === 'server' ? '서버에' : '이 브라우저에') + ' 파일이 없는 BGM, 트랙 목록에 없는 번호를 쓰는 음향 큐.';
   const at = k => G.find(g => g.k === k).list;
   const ref = e => (e.q ? 'Q' + e.q + ' · ' : '') + sceneTitle(e.scene);
   const last = new Map(), missing = [];
@@ -2185,7 +2656,7 @@ function trackUses(t) {
 }
 function viewTracks() {
   const ed = state.edit;
-  let h = `<div class="sec-h"><h2>음원</h2><span class="note">${state.show.tracks.length}곡 · 파일은 이 브라우저(IndexedDB)에만 저장 — JSON 내보내기에는 트랙 정보만 들어갑니다</span>${ed ? '<button type="button" class="btn" id="btn-track-add" data-act="track-add">+ 트랙</button>' : ''}</div>
+  let h = `<div class="sec-h"><h2>음원</h2><span class="note">${state.show.tracks.length}곡 · ${Store.mode === 'server' ? '파일은 서버에 저장 — 모든 기기에서 재생' : '파일은 이 브라우저(IndexedDB)에만 저장'} — JSON 내보내기에는 트랙 정보만 들어갑니다</span>${ed ? '<button type="button" class="btn" id="btn-track-add" data-act="track-add">+ 트랙</button>' : ''}</div>
     ${idbError ? `<p class="err" role="alert">파일 저장소를 쓸 수 없습니다: ${esc(idbError)}</p>` : ''}
     <div class="dropzone" id="track-drop"><p class="note">오디오 파일을 여기에 끌어다 놓으면 파일명 앞 숫자(예: <span class="mono">03_멘탈.mp3</span>)로 트랙 번호를 맞춥니다. 맞는 번호가 없으면 새 트랙을 만듭니다.</p></div>
     <div class="table-wrap"><table class="ltable tr-table"><thead><tr><th class="n">번호</th><th>제목</th><th>파일</th><th class="n">길이</th><th>반복</th><th>사용 큐</th><th>미리듣기</th><th>파일</th><th>메모</th>${ed ? '<th></th>' : ''}</tr></thead><tbody>`;
@@ -2199,12 +2670,12 @@ function viewTracks() {
     h += `<tr class="${url ? '' : 'no-file'} ${playingNo === t.no ? 'playing' : ''}" id="track-${id}">
       <td class="n">${ed ? `<input type="number" id="trno-${id}" class="in-num" value="${noVal == null ? '' : noVal}" min="0" data-act="track-field" data-k="no" data-track="${id}" aria-label="트랙 번호">` : (t.no == null ? '?' : t.no)}</td>
       <td>${ed ? `<input type="text" id="trtitle-${id}" value="${esc(t.title)}" data-act="track-field" data-k="title" data-track="${id}" aria-label="제목">` : esc(t.title) || '<span class="muted">제목 없음</span>'}</td>
-      <td class="tr-file">${busy ? '<span class="note">저장 중…</span>' : url ? esc(t.fileName || '') : `<span class="muted">파일 없음${t.fileName ? ' (' + esc(t.fileName) + ' — 이 브라우저에 없음)' : ''}</span>`}</td>
+      <td class="tr-file">${busy ? (trackProg.has(t.id) ? `<span class="tr-prog" id="trprog-${id}">업로드 중 ${trackProg.get(t.id)}%</span>` : '<span class="note">저장 중…</span>') : url ? esc(t.fileName || '') : `<span class="muted">파일 없음${t.fileName ? ' (' + esc(t.fileName) + ' — ' + (Store.mode === 'server' ? '서버에' : '이 브라우저에') + ' 없음)' : ''}</span>`}</td>
       <td class="n">${fmtDur(t.durationSec)}</td>
       <td>${ed ? `<label class="chk" for="trloop-${id}"><input type="checkbox" id="trloop-${id}" data-act="track-field" data-k="loop" data-track="${id}" ${t.loop ? 'checked' : ''}>반복</label>` : t.loop ? '반복' : '<span class="muted">—</span>'}</td>
       <td>${uses.length ? `<button type="button" class="tb" data-act="track-uses" data-track="${id}" aria-expanded="${state.trackOpen === t.id}">${uses.length}개</button>` : '<span class="muted">0</span>'}</td>
       <td>${url ? `<button type="button" class="tb" id="trplay-${id}" data-act="track-play" data-track="${id}" title="공연용 플레이어와 별도로 재생">${previewOn(t) ? '미리듣기 정지' : '미리듣기'}</button>` : '<span class="muted">—</span>'}</td>
-      <td style="white-space:nowrap"><label class="tb" for="trfile-${id}" style="cursor:pointer">업로드<input type="file" id="trfile-${id}" class="sr-only" accept="audio/*" data-act="track-file" data-track="${id}"></label>${url ? ` &nbsp;<a class="tb" id="trdl-${id}" href="${url}" download="${esc(t.fileName || 'bgm-' + t.no)}" title="아티팩트 안에서는 다운로드가 막힐 수 있습니다">저장</a>` : ''}</td>
+      <td style="white-space:nowrap"><label class="tb" for="trfile-${id}" style="cursor:pointer">업로드<input type="file" id="trfile-${id}" class="sr-only" accept="audio/*" data-act="track-file" data-track="${id}"></label>${url ? ` &nbsp;<a class="tb" id="trdl-${id}" href="${esc(Store.mode === 'server' ? audioUrl(t.fileKey, true) : url)}" download="${esc(t.fileName || 'bgm-' + t.no)}" title="아티팩트 안에서는 다운로드가 막힐 수 있습니다">저장</a>` : ''}</td>
       <td>${ed ? `<input type="text" id="trnote-${id}" value="${esc(t.note)}" data-act="track-field" data-k="note" data-track="${id}" aria-label="메모">` : esc(t.note)}</td>
       ${ed ? `<td><button type="button" class="tb red" data-act="track-del" data-track="${id}" data-confirm="정말 삭제?">삭제</button></td>` : ''}
     </tr>`;
@@ -2252,7 +2723,12 @@ function renderNav() {
   $('#nav-scrim').hidden = !state.navOpen;
 }
 function renderTop() {
-  $('#show-title').textContent = state.show.title;
+  const st = $('#show-title');
+  if (Store.mode === 'server') {
+    const html = `<button type="button" class="proj-btn" id="proj-btn" data-act="proj-toggle" aria-haspopup="dialog" aria-controls="proj-menu" aria-expanded="${state.projOpen}" title="프로젝트 목록 · 전환">${esc(state.show.title) || '(제목 없음)'}<span class="caret" aria-hidden="true">▾</span></button>`;
+    if (st.innerHTML !== html) st.innerHTML = html;
+  } else st.textContent = state.show.title;
+  renderSync(); renderSyncBar();
   $('#view-tabs').innerHTML = VIEWS.map(v => `<button type="button" role="tab" id="tab-${v}" aria-selected="${state.view === v}" data-act="view" data-view="${v}">${VIEW_L[v]}</button>`).join('');
   const p = rolePerson();
   const perf = state.show.people.filter(x => ['performer', 'mc'].includes(x.role));
@@ -2384,6 +2860,7 @@ function applyTheme() {
   r.classList.toggle('booth', state.booth);
 }
 function render() {
+  if (!state.show) return;
   applyTheme();
   buildIndex();
   if (rolePerson() && !IDX.people.has(rolePerson())) state.role = 'all';
@@ -2534,9 +3011,11 @@ function renderModal(focusFirst) {
     title = 'JSON 가져오기';
     body = `<div class="field"><label for="import-file">파일 선택</label><input type="file" id="import-file" accept=".json,application/json" data-act="import-file"></div>
       <div class="field"><label for="import-text">또는 붙여넣기</label><textarea id="import-text" class="code" placeholder='{"title": "...", "parts": [...]}'>${esc(m.text || '')}</textarea></div>
-      <p class="note">현재 데이터를 대체합니다. 이전 형식(v1~v4)은 자동 변환합니다.</p>
+      <p class="note">${Store.mode === 'server' ? '덮어쓰기는 지금 프로젝트를 대체합니다(이 프로젝트를 여는 모든 기기에 반영). 새 프로젝트로 가져오면 지금 프로젝트는 그대로입니다.' : '현재 데이터를 대체합니다.'} 이전 형식(v1~v4)은 자동 변환합니다.</p>
       ${m.err ? `<p class="err" role="alert">${esc(m.err)}</p>` : ''}${m.warn ? `<p class="err" role="alert" id="import-warn">${esc(m.warn)}</p>` : ''}`;
-    foot = `<button type="button" class="btn" data-act="modal-close">취소</button><button type="button" class="btn ${m.warn ? 'armed' : 'strong'}" id="btn-import-do" data-act="import-do">${m.warn ? '그래도 가져오기' : '가져오기'}</button>`;
+    foot = Store.mode === 'server'
+      ? `<button type="button" class="btn" data-act="modal-close">취소</button><button type="button" class="btn" id="btn-import-new" data-act="import-do" data-mode="new">새 프로젝트로 가져오기</button><button type="button" class="btn ${m.warn ? 'armed' : 'strong'}" id="btn-import-do" data-act="import-do" data-mode="over">${m.warn ? '그래도 덮어쓰기' : '현재 프로젝트에 덮어쓰기'}</button>`
+      : `<button type="button" class="btn" data-act="modal-close">취소</button><button type="button" class="btn ${m.warn ? 'armed' : 'strong'}" id="btn-import-do" data-act="import-do">${m.warn ? '그래도 가져오기' : '가져오기'}</button>`;
   } else if (m.type === 'person') {
     title = '사람 추가';
     const d = m.draft;
@@ -2756,6 +3235,14 @@ function armConfirm(el) {
   return false;
 }
 
+function createImported(show) {
+  api('POST', '/shows', { show }).then(r => {
+    if (r.status !== 201) { if (state.modal) { state.modal.err = '가져오기 실패 (HTTP ' + r.status + ')'; renderModal(); } return; }
+    closeModal(true);
+    return flushServer().then(() => openShow(r.data.id)).then(ok => { if (ok) toast(`새 프로젝트로 가져왔습니다 — ${state.show.title}`); });
+  }).catch(e => { if (state.modal) { state.modal.err = '가져오기 실패: ' + e.message; renderModal(); } });
+}
+
 /* ================= 액션 ================= */
 function act(a, el) {
   const S = state.show;
@@ -2792,6 +3279,52 @@ function act(a, el) {
     }
     case 'track-renum-cancel': state.trackRenum = null; render(); break;
     case 'menu-toggle': state.menuOpen = !state.menuOpen; renderTop(); break;
+    // ---- 6차: 서버 동기화 · 프로젝트 · 시작 화면
+    case 'sync-load': {
+      const c = Srv.conflict; if (!c) break;
+      applyRemote(c, true); toast(`서버 버전(rev ${c.rev})을 불러왔습니다`); break;
+    }
+    case 'sync-overwrite': {
+      const c = Srv.conflict; if (!c) break;
+      Srv.rev = c.rev; Srv.conflict = null; Srv.dirty = true; renderSyncBar(); push(); toast('내 버전으로 덮어씁니다'); break;
+    }
+    case 'proj-toggle':
+      state.projOpen = !state.projOpen; state.menuOpen = false; renderTop(); renderProj();
+      if (state.projOpen) refreshList().then(renderProj, () => {});
+      break;
+    case 'proj-open': switchShow(el.dataset.id).catch(e => toast('전환 실패: ' + e.message)); break;
+    case 'proj-new': { const ti = $('#pj-new-title'); createShow(el.dataset.kind, ti ? ti.value.trim() : '').catch(e => toast('만들기 실패: ' + e.message)); break; }
+    case 'proj-dup': {
+      const id = el.dataset.id;
+      (id === Srv.showId ? flushServer() : Promise.resolve(true)).then(ok => {
+        if (!ok) { toast('저장되지 않은 변경이 있어 복제하지 않았습니다'); return null; }
+        return api('POST', showPath(id) + '/duplicate');
+      }).then(r => {
+        if (!r) return;
+        if (r.status !== 201) { toast('복제 실패 (HTTP ' + r.status + ')'); return; }
+        return refreshList().then(() => { renderProj(); const x = Srv.list.find(y => y.id === r.data.id); toast('복제했습니다 — ' + (x ? x.title : '')); });
+      }).catch(e => toast('복제 실패: ' + e.message));
+      break;
+    }
+    case 'proj-del': {
+      const id = el.dataset.id, cur = id === Srv.showId;
+      if (cur) { clearTimeout(saveT); saveT = null; Srv.dirty = false; clearTimeout(Srv.retryT); }
+      api('DELETE', showPath(id)).then(r => {
+        if (r.status !== 200 && r.status !== 404) { toast('삭제 실패 (HTTP ' + r.status + ')'); return; }
+        return refreshList().then(list => {
+          toast('프로젝트를 삭제했습니다 (복구 불가)');
+          if (!cur) { renderProj(); return; }
+          Srv.showId = null; state.projOpen = false; renderProj(); stopAllAudio(); clearInterval(Srv.pollT);
+          if (list.length) return openShow(list[0].id);
+          state.show = null; savePrefs(); showGate('first');
+        });
+      }).catch(e => toast('삭제 실패: ' + e.message));
+      break;
+    }
+    case 'gate-pw': gatePassword(); break;
+    case 'gate-new': { const ti = $('#gate-title'); createShow(el.dataset.kind, ti ? ti.value.trim() : '').catch(bootFail); break; }
+    case 'gate-open': openShow(el.dataset.id).catch(bootFail); break;
+    case 'gate-retry': location.reload(); break;
     case 'nav-toggle': state.navOpen = !state.navOpen; renderNav(); break;
     case 'nav-close': state.navOpen = false; renderNav(); break;
     case 'export': state.menuOpen = false; renderTop(); state.modal = { type: 'export' }; renderModal(); { const b = $('#btn-copy'); if (b) b.focus(); } break;
@@ -2918,16 +3451,15 @@ function act(a, el) {
     case 'track-add': { const max = S.tracks.reduce((m, x) => Math.max(m, x.no || 0), 0); S.tracks.push({ id: uid('tr'), no: max + 1, title: '', durationSec: null, fileName: null, fileKey: null, note: '' }); commit(); break; }
     case 'track-del': {
       const t = S.tracks.find(x => x.id === el.dataset.track); if (!t) break;
-      if (t.fileKey) { IDB.del(t.fileKey).catch(() => {}); const u = fileUrls.get(t.fileKey); if (u) { URL.revokeObjectURL(u); fileUrls.delete(t.fileKey); } }
+      if (t.fileKey && !S.tracks.some(x => x !== t && x.fileKey === t.fileKey)) Store.delFile(t.fileKey);
       S.tracks = S.tracks.filter(x => x !== t); commit(); break;
     }
     case 'audio-clear': {
       state.menuOpen = false;
       const au = audioEl(); cancelRamp(); au.pause(); au.removeAttribute('src'); au.dataset.key = ''; AU.shown = false;
       const pv = previewEl(); pv.pause(); pv.removeAttribute('src'); pv.dataset.key = '';
-      IDB.clear().then(() => {
-        fileUrls.forEach(u => URL.revokeObjectURL(u)); fileUrls.clear();
-        S.tracks.forEach(t => { t.fileKey = null; t.fileName = null; });
+      Store.clearFiles().then(() => {
+        state.show.tracks.forEach(t => { t.fileKey = null; t.fileName = null; });
         commit(); toast('저장된 음원 파일을 모두 삭제했습니다');
       }, err => { render(); toast('삭제 실패: ' + idbMsg(err)); });
       break;
@@ -2963,12 +3495,20 @@ function act(a, el) {
       if (!txt.trim()) { m.err = 'JSON 을 붙여넣거나 파일을 선택하세요.'; renderModal(); break; }
       const r = validateImport(txt);
       if (r.err) { m.err = r.err; m.warn = ''; renderModal(); break; }
-      // 가져올 판이 지금 판보다 오래됐으면 2단계 확인
+      const srv = Store.mode === 'server';
+      if (srv && el.dataset.mode === 'new') {
+        m.err = ''; renderModal();
+        createImported(r.show); break;
+      }
+      // 가져올 판이 지금 판보다 오래됐으면 2단계 확인. 서버 모드는 다른 기기 데이터를 덮어쓴다는 확인도 같은 단계에서
       const nt = Date.parse(r.show.updatedAt), ct = Date.parse(state.show.updatedAt);
-      if (!isNaN(nt) && !isNaN(ct) && nt < ct && m.ack !== txt) {
+      const older = !isNaN(nt) && !isNaN(ct) && nt < ct;
+      if ((older || srv) && m.ack !== txt) {
         const lab = x => (x.revision ? x.revision + ' · ' : '') + fmtTime(x.updatedAt);
         m.ack = txt; m.err = '';
-        m.warn = `가져올 판이 더 오래됨 — 가져올 판 ${lab(r.show)} / 지금 판 ${lab(state.show)}. 그래도 가져오려면 한 번 더 누르세요.`;
+        m.warn = (older ? `가져올 판이 더 오래됨 — 가져올 판 ${lab(r.show)} / 지금 판 ${lab(state.show)}. ` : '')
+          + (srv ? `서버의 다른 기기 데이터를 덮어씁니다 — "${state.show.title}" 을 여는 모든 기기에 반영됩니다. ` : '')
+          + `그래도 ${srv ? '덮어쓰려면' : '가져오려면'} 한 번 더 누르세요.`;
         renderModal(); break;
       }
       state.show = r.show; state.selItem = null; state.sceneEdit = null; state.moveCue = null; state.trackRenum = null; state.panelScene = null;
@@ -2994,6 +3534,7 @@ document.addEventListener('click', ev => {
   const t = ev.target;
   if (!t || !t.closest) return;
   if (state.menuOpen && !t.closest('.menu-wrap')) { state.menuOpen = false; renderTop(); }
+  if (state.projOpen && !t.closest('#proj-menu, #proj-btn')) { state.projOpen = false; renderProj(); }
   if (t.classList.contains('overlay')) { closeModal(false); return; }
   const el = t.closest('[data-act]');
   if (!el) return;
@@ -3017,6 +3558,11 @@ document.addEventListener('change', ev => {
     modalField(t); return;
   }
   const a = t.dataset.act;
+  if (a === 'pj-rename') {
+    const v = cut(t.value.trim(), 80) || '제목 없음';
+    if (v !== state.show.title) { state.show.title = v; commit(); const x = Srv.list.find(y => y.id === Srv.showId); if (x) x.title = v; renderProj(); toast('이름을 바꿨습니다'); }
+    return;
+  }
   if (a === 'track-file') {
     const tr = state.show.tracks.find(x => x.id === t.dataset.track), f = t.files && t.files[0];
     if (tr && f) uploadToTrack(tr, f);
@@ -3129,6 +3675,7 @@ document.addEventListener('input', ev => {
 });
 // focusout 은 innerHTML 교체로 요소가 빠질 때도 동기로 불린다 — DOM 을 만지는 후처리는 다음 틱으로 미룬다
 document.addEventListener('focusout', ev => {
+  if (Srv.deferred) setTimeout(() => { if (!editingFocus()) poll(); }, 30);
   const doc = ev.target.closest && ev.target.closest('.doc');
   if (doc && !(ev.relatedTarget && doc.contains(ev.relatedTarget))) {
     flushSave();
@@ -3162,6 +3709,12 @@ function curItemId() { const c = selCtx(); return c && c.p.dataset.id ? c.p.data
 document.addEventListener('keydown', ev => {
   const t = ev.target;
   const mod = ev.ctrlKey || ev.metaKey;
+  if (GATE.type || !state.show) {
+    if (ev.key === 'Enter' && t.id === 'gate-pw') { ev.preventDefault(); act('gate-pw'); }
+    return;
+  }
+  if (state.projOpen && ev.key === 'Escape') { state.projOpen = false; renderProj(); const b = $('#proj-btn'); if (b) b.focus(); return; }
+  if (ev.key === 'Enter' && t.id === 'pj-new-title') { ev.preventDefault(); act('proj-new', { dataset: { kind: 'blank' } }); return; }
   const doc = t.closest && t.closest('.doc');
   if (ev.key === 'Escape' && state.moveCue && !state.modal) { ev.preventDefault(); state.moveCue = null; renderTop(); renderPanel(); toast('큐 이동을 취소했습니다'); return; }
   // 편집기 단축키
@@ -3248,8 +3801,12 @@ window.addEventListener('hashchange', () => {
   if (VIEWS.includes(v) && v !== state.view) { flushSave(); state.view = v; render(); }
 });
 window.addEventListener('resize', () => { if (mountedView === 'script') queuePaint(); });
-window.addEventListener('pagehide', flushSave);
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushSave(); syncWake(); });
+window.addEventListener('pagehide', () => { flushSave(); if (Store.mode === 'server' && pendingLocal()) backupLocal(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') { flushSave(); clearInterval(Srv.pollT); Srv.pollT = null; }
+  else if (Store.mode === 'server' && Srv.showId) { poll(); startPoll(); }
+  if (state.show) syncWake();
+});
 
 document.addEventListener('dragover', ev => {
   if (!ev.dataTransfer || !Array.from(ev.dataTransfer.types || []).includes('Files')) return;
@@ -3279,12 +3836,13 @@ document.addEventListener('drop', ev => {
 })();
 
 /* ================= 시작 ================= */
-loadAll();
-render();
-save(true);
-if (migratedNote) toast(migratedNote);
+// http(s) 로 열렸으면 서버를 먼저 찾는다. 없으면(아티팩트·file://·정적 호스팅) 지금까지처럼 로컬 모드
+loadPrefs();
+if (/^https?:$/.test(location.protocol)) {
+  showGate('loading');
+  detectServer().then(h => { if (h) serverBoot(h).catch(bootFail); else localBoot(); });
+} else localBoot();
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (mountedView === 'script') queuePaint(); });
-loadAudioFiles();
 })();
 </script>
 <!-- ARTIFACT:END -->
