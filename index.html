@@ -270,17 +270,20 @@ input[type=color]{padding:0 2px;width:40px;height:30px;cursor:pointer}
 .cs-top h2{margin:0;font-size:18px;font-weight:600;letter-spacing:-.01em}
 .note{font-size:12px;color:var(--ink-3);margin:0}
 .table-wrap{overflow-x:auto;max-width:100%}
-.cs-table{border-collapse:collapse;width:100%;min-width:980px;font-size:13px}
-.cs-table th,.cs-table td{padding:8px 10px 9px;border-bottom:1px solid var(--rule);text-align:left;vertical-align:top}
-.cs-table thead th{font-size:12px;font-weight:400;color:var(--ink-3);border-bottom:1px solid var(--rule-2);white-space:nowrap}
-.cs-table thead th.col-mine{color:var(--ink);font-weight:500}
+/* 고정 레이아웃: 열 너비는 <colgroup> 이 정한다(이 기기 prefs csColW). 표 width·min-width 는 viewCuesheet·csApplyW 가 인라인으로 */
+.cs-table{border-collapse:collapse;width:100%;table-layout:fixed;font-size:13px}
+.cs-table th,.cs-table td{padding:8px 10px 9px;border-bottom:1px solid var(--rule);text-align:left;vertical-align:top;background:var(--rb,transparent)}
+.cs-table td:not(.cs-num){overflow:hidden;overflow-wrap:anywhere}
+.cs-table thead th{position:relative;font-size:12px;font-weight:400;color:var(--ink-3);border-bottom:1px solid var(--rule-2);white-space:nowrap}
+.cs-table thead th.col-mine,.cs-table thead th.col-mine .dl{color:var(--ink);font-weight:500}
+.cs-table .th-l{display:block;overflow:hidden;text-overflow:ellipsis}
+/* 행 호버·선택은 바탕을 바꾸지 않고 --rb 만 정한다 — 부서 바탕(wash)이 그 위에 섞인다 */
 .cs-table tbody tr.row{cursor:pointer}
-.cs-table tbody tr.row:hover td{background:var(--tint-2)}
-.cs-table tbody tr.sel td{background:var(--tint)}
-.cs-num{width:44px;font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--accent);font-weight:500;border-left:2px solid transparent}
+.cs-table tbody tr.row:hover{--rb:var(--tint-2)}
+.cs-table tbody tr.sel{--rb:var(--tint)}
+.cs-num{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--accent);font-weight:500;border-left:2px solid transparent}
 tr.tbd .cs-num{border-left:2px dashed var(--red)}
-.cs-q{width:30%;min-width:240px}
-.cs-ctx{display:block;font-size:12px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:380px}
+.cs-ctx{display:block;font-size:12px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
 .cs-trig{font-size:12px;color:var(--ink-3);margin:1px 0}
 .cs-text{font-size:14px;line-height:1.6;white-space:pre-wrap}
 .cs-text .spk{font-weight:600;font-size:13px;margin-right:5px}
@@ -295,8 +298,53 @@ tr.tbd .cs-num{border-left:2px dashed var(--red)}
 .rc-sum .qt{font-weight:600}
 .rc-sum .qv,.rc-sum .qdt{font-size:.8em}
 .cs-cont{font-size:12px;color:var(--ink-3)}
-.col-dim{opacity:.35}
-.cs-memo{width:15%;min-width:150px;font-size:12px;color:var(--ink-2)}
+/* 부서 열(.dcol): 머리글 아래 2px 부서색(고른 부서 3px) · 큐 한 덩어리마다 왼쪽 2px 부서색 + 8px (대본 큐 줄과 같은 말) */
+.cs-table .d-cast{--dc:var(--q-cast)}.cs-table .d-light{--dc:var(--q-light)}.cs-table .d-sound{--dc:var(--q-sound)}.cs-table .d-stage{--dc:var(--q-stage)}
+.cs-table thead th.dcol{border-bottom:2px solid var(--dc)}
+.cs-table thead th.dcol.col-mine{border-bottom-width:3px;padding-bottom:8px}
+.cs-table .dcol .cs-c{border-left:2px solid var(--dc,var(--rule-2));padding-left:8px}
+.cs-table td.col-dim .cs-c{--dc:var(--rule-2)}
+.cs-table .dcol .cs-cont{padding-left:10px}
+/* 부서 바탕: 부서색을 종이색에 아주 옅게 섞는다(불투명). 고른 부서 열만 한 단계 진하게. 씬 경계 행·번호·큐·메모 열은 바탕 없음 */
+:root{--w-base:4%;--w-on:8%}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){--w-base:6%;--w-on:12%} }
+:root[data-theme="dark"]{--w-base:6%;--w-on:12%}
+:root.booth[data-theme="dark"]{--w-base:4%;--w-on:8%}
+.cs-table .dcol{--cs-w:var(--w-base);background:color-mix(in srgb,var(--dc) var(--cs-w),var(--rb,var(--paper)))}
+.cs-table .dcol.col-mine{--cs-w:var(--w-on)}
+/* 바탕 위 작은 글자는 --ink-2 (라이트 8% 바탕에서 --ink-3 은 4.5:1 에 못 미침) */
+.cs-table .dcol .qdt,.cs-table .dcol .cs-ct,.cs-table .dcol .cs-cont,.cs-table .dcol .play.nofile{color:var(--ink-2)}
+/* 흐림: 칸 전체 opacity 대신 내용에만 — 부서 바탕·괘선은 그대로 */
+.cs-table th.col-dim>:not(.rz),.cs-table td.col-dim>*{opacity:.35}
+.cs-table tr.col-dim>td:not(.dcol),.cs-table tr.col-dim>td.dcol>*{opacity:.35}
+.cs-table thead th.dcol.col-dim{border-bottom-color:color-mix(in srgb,var(--dc) 35%,var(--paper))}
+/* 내 큐가 있는 행: 표 왼쪽 여백(10px)에 2px 역할색 — 번호 칸의 빨간 점선(미정)과 자리를 나눈다 */
+.cs-wrap{padding-left:10px}
+.cs-table tr.mine td.cs-num{position:relative}
+.cs-table tr.mine td.cs-num::before{content:"";position:absolute;left:-10px;top:-1px;bottom:-1px;border-left:2px solid var(--mc,var(--accent))}
+/* 열 너비 조절: 머리글 경계 위 8px 잡는 자리. 호버·포커스·끄는 중에만 1px 선 */
+.rz{position:absolute;top:0;bottom:-1px;right:-4px;width:8px;z-index:2;cursor:col-resize;touch-action:none}
+.rz::after{content:"";position:absolute;top:0;bottom:0;left:4px;border-left:1px solid transparent}
+.rz:hover::after,.rz:focus-visible::after,.rz.drag::after{border-left-color:var(--accent)}
+.rz:focus-visible{outline:0}
+.cs-table thead th:last-child .rz{right:0}
+.cs-table thead th:last-child .rz::after{left:7px}
+body.rz-on,body.rz-on *{cursor:col-resize!important;user-select:none!important;-webkit-user-select:none!important}
+/* 접기: 머리글 오른쪽 끝 − · 접힌 열은 28px 띠(+ · 세로 부서 이름), 칸에는 큐마다 2×12px 눈금(미정은 빨강) */
+.cs-table .dh-in{display:flex;align-items:baseline;justify-content:space-between;gap:6px;min-width:0}
+.cs-table .dh-in .dl{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.cs-table .fold{font-family:var(--mono);font-size:12px;color:var(--ink-3);padding:0 2px;border-bottom:1px solid transparent;line-height:1.2;flex:none}
+.cs-table .fold:hover{color:var(--accent);border-bottom-color:var(--accent)}
+.cs-table th.strip,.cs-table td.strip{padding:8px 0 9px;text-align:center}
+.cs-table th.strip{cursor:pointer}
+.strip-h{display:flex;flex-direction:column;align-items:center;gap:6px;width:100%;color:var(--ink-3);font-size:12px;line-height:1.1}
+.strip-h .vt{writing-mode:vertical-rl;text-orientation:upright;letter-spacing:.08em}
+.cs-table th.strip:hover .strip-h,.cs-table th.strip:hover .fold{color:var(--accent)}
+.cs-table .tks{display:block}
+.cs-table .tk{display:block;width:2px;height:12px;margin:4px auto 0;background:var(--dc)}
+.cs-table .tk.tbd{background:var(--red)}
+.cs-table .pr-only{display:none}
+.cs-memo{font-size:12px;color:var(--ink-2)}
 .cs-memo div+div{margin-top:3px}
 .cs-scene th{border-top:2px solid var(--ink);border-bottom:1px solid var(--rule);padding-top:14px;font-weight:400;scroll-margin-top:8px}
 .cs-scene b{font-size:15px;font-weight:600;margin-right:10px}
@@ -614,7 +662,7 @@ body.has-player .app{padding-bottom:var(--player-h)}
 .gate-list .note{display:block}
 .tr-prog{font-family:var(--mono);font-size:12px;color:var(--accent)}
 .app.moving .doc p[data-id]:hover{background:var(--accent-tint);cursor:pointer}
-.app.moving tr.row:hover td{background:var(--accent-tint)}
+.app.moving .cs-table tbody tr.row:hover{--rb:var(--accent-tint)}
 .sc-cmt{font-family:var(--mono);font-size:12px}
 .new{font-size:11px;color:var(--accent);font-weight:600;margin-left:6px}
 .cmt-r{font-size:12px;color:var(--ink-3);margin-left:6px}
@@ -811,7 +859,15 @@ body.has-player .app{padding-bottom:var(--player-h)}
   .cs-table tbody{break-inside:avoid}
   .cs-scene th{border-top:1.5px solid #000}
   .cs-ctx{white-space:normal;max-width:none}
-  .col-dim{opacity:1}
+  .cs-table th.col-dim>*,.cs-table td.col-dim>*,.cs-table tr.col-dim>td,.cs-table tr.col-dim>td>*{opacity:1}
+  /* 큐시트: 접힌 열도 펼쳐서, 부서 바탕·너비 조절·접기 단추 없이. 열 너비는 종이에 맞춰 자동 */
+  .cs-wrap{padding-left:0}
+  .cs-table{table-layout:auto!important;width:100%!important;min-width:0!important}
+  .cs-table col{width:auto!important}
+  .cs-table th,.cs-table td,.cs-table .dcol{background:none!important}
+  .cs-table th.strip,.cs-table td.strip{padding:4px 6px;text-align:left;cursor:auto}
+  .rz,.cs-table .fold,.strip-h,.cs-table .tks,.cs-table tr.mine td.cs-num::before{display:none!important}
+  .cs-table .pr-only{display:block}
   /* 7차: 사람별 대본 — 흑백에서도 구분되게 굵게 + 왼쪽 선. 머리에 사람 이름 */
   .spk-btn,.spk-pop,.namebar,.ml-top .note{display:none!important}
   .print-h:not(:empty){display:block;font-size:13px;font-weight:600;border-bottom:1.5px solid #000;padding:0 0 4px;margin:0 0 6px}
@@ -924,6 +980,32 @@ const KEY_SHOW = 'cueSheet.show';
 const KEY_PREF = 'cueSheet.prefs';
 const DEPTS = ['cast', 'light', 'sound', 'stage'];
 const DEPT_L = { cast: '출연', light: '조명', sound: '음향', stage: '무대' };
+// 큐시트 열 너비 — 이 기기 prefs csColW({ 열 키: px }). 열마다 [기본, 최소] px. 큐 열은 기본이 없다(null) = 남는 폭을 다 쓴다(최소 CS_Q_FILL).
+// 접힌 부서 열(prefs csFold: 부서 키 배열)은 CS_STRIP_W 띠로 고정 — 너비 조절을 받지 않는다
+const CS_COLS = ['num', 'q', 'cast', 'light', 'sound', 'stage', 'memo'];
+const CS_COL_W = { num: [44, 36], q: [null, 120], cast: [140, 60], light: [140, 60], sound: [140, 60], stage: [140, 60], memo: [160, 80] };
+const CS_W_MAX = 900, CS_Q_FILL = 240, CS_STRIP_W = 28;
+function csClampW(k, v) {
+  const d = CS_COL_W[k]; if (!d || typeof v !== 'number' || !Number.isFinite(v)) return null;
+  return Math.min(CS_W_MAX, Math.max(d[1], Math.round(v)));
+}
+// prefs 에서 읽은 값 정리: 아는 열 키 · 숫자만, 범위 안으로
+function csColWPrefs(o) {
+  const r = {}; if (!o || typeof o !== 'object' || Array.isArray(o)) return r;
+  CS_COLS.forEach(k => { const w = csClampW(k, o[k]); if (w != null) r[k] = w; });
+  return r;
+}
+function csFoldPrefs(a) { return Array.isArray(a) ? DEPTS.filter(d => a.includes(d)) : []; }
+// → { w: { 열 키: px | null }, fill, total }. fill(큐 열 너비를 안 정함): 표 width 100% + min-width total. 아니면 표 width = total
+function csLayout(colW, fold) {
+  const w = {}; let sum = 0;
+  CS_COLS.forEach(k => {
+    const v = DEPTS.includes(k) && fold.includes(k) ? CS_STRIP_W : colW[k] != null ? colW[k] : CS_COL_W[k][0];
+    w[k] = v; if (v != null) sum += v;
+  });
+  const fill = w.q == null;
+  return { w, fill, total: sum + (fill ? CS_Q_FILL : 0) };
+}
 const CH = ['back', 'top', 'front', 'house'];
 const CH_L = { back: '백', top: '탑', front: '프론트', house: '객석' };
 const L_ACT = ['on', 'off', 'fadeIn', 'fadeOut', 'anim'];
@@ -1315,7 +1397,9 @@ const state = {
   // 8차: 무대 상황 뷰에서 고른 시점('pre' | 'scene:<id>' | 문단 id, 세션 메모리만) · 소품 탭에서 펼친 소품
   stageAt: null, propOpen: null,
   // 9차: 점검 — 역할과 상관없이 전체 보기 · 펼친 그룹({ k: true }) · 마지막으로 누른 항목 key · 목록 스크롤 · 점검에서 온 이동({ key, pos, panelWas, panel }) (모두 세션 메모리만)
-  ckAll: false, ckOpen: {}, ckLast: null, ckScroll: 0, ckNav: null
+  ckAll: false, ckOpen: {}, ckLast: null, ckScroll: 0, ckNav: null,
+  // 큐시트 표(이 기기 prefs): 열 너비 { 열 키: px } · 접은 부서 열 — 역할과 무관
+  csColW: {}, csFold: []
 };
 const SETUP_DONE = new Set(); // 런: 무대 세팅 체크 (세션 메모리만, 저장 안 함)
 let IDX = null;
@@ -2723,6 +2807,7 @@ function loadPrefs() {
       if (typeof p.currentShowId === 'string') Srv.showId = p.currentShowId;
       if (p.runPos && typeof p.runPos === 'object' && !Array.isArray(p.runPos)) Srv.runPos = p.runPos;
       if (p.showMode && typeof p.showMode === 'object' && !Array.isArray(p.showMode)) SM.prefs = p.showMode;
+      state.csColW = csColWPrefs(p.csColW); state.csFold = csFoldPrefs(p.csFold);
     } catch (e) { /* 무시 */ }
   }
   // 처음 쓰는 브라우저: 지금 이후 코멘트만 "새"
@@ -2760,7 +2845,7 @@ function savePrefs() {
   if (srv && Srv.showId && state.show) Srv.runPos[Srv.showId] = state.runItemId;
   if (!srv) Srv.localRun = state.runItemId;
   lsSet(KEY_PREF, JSON.stringify({ role: state.role, author: state.author, runItemId: Srv.localRun, runMine: state.runMine, panel: state.panel, hideCues: state.hideCues, myLines: state.myLines, edit: state.edit, vol: AU.vol, theme: state.theme, booth: state.booth, autoCd: state.autoCd, lastSeenComments: state.lastSeen,
-    appKey: Srv.key, currentShowId: Srv.showId, runPos: Srv.runPos, showMode: SM.prefs }));
+    appKey: Srv.key, currentShowId: Srv.showId, runPos: Srv.runPos, showMode: SM.prefs, csColW: state.csColW, csFold: state.csFold }));
 }
 function commit() { save(); render(); }
 
@@ -3867,8 +3952,8 @@ function viewCuesheet() {
       const tr = trigLabels(it.cues);
       const tbd = it.cues.filter(c => c.status === 'tbd');
       const nC = it.comments.length, open = it.comments.filter(c => !c.resolved).length;
-      const dim = rolePerson() && !itemMine(it);
-      rows += `<tr class="row ${tbd.length ? 'tbd' : ''} ${state.selItem === it.id ? 'sel' : ''} ${dim ? 'col-dim' : ''}" id="it-${id}" data-item="${id}" data-act="open-item">
+      const mine = itemMine(it), dim = rolePerson() && !mine;
+      rows += `<tr class="row ${tbd.length ? 'tbd' : ''} ${state.selItem === it.id ? 'sel' : ''} ${dim ? 'col-dim' : ''}${mine ? ' mine' : ''}"${mine ? ` style="--mc:var(--q-${roleDept() || 'cast'})"` : ''} id="it-${id}" data-item="${id}" data-act="open-item">
         <td class="cs-num">${esc(e.q)}</td>
         <td class="cs-q">${ctx}<div class="cs-trig">${tr.length ? esc(tr.join(' / ')) : '<span class="muted">트리거 미지정</span>'}</div>${itemTextHtml(it, 'cs-text')}</td>`;
       DEPTS.forEach(d => {
@@ -3876,7 +3961,9 @@ function viewCuesheet() {
         let cell = cs.map(c => `<div class="cs-c">${c.dept === 'sound' ? playBtn(c, it) : ''}${cueSumHtml(c, { when: false, memo: false, tbd: false })}${tr.length > 1 && trigLabel(c) ? `<span class="cs-ct">↳ ${esc(trigLabel(c))}</span>` : ''}</div>`).join('');
         if (d === 'sound' && !cs.length) { const b = bgm.get(it.id); if (b) cell = `<span class="cs-cont" title="종료 큐 없음 — 다음 음향 큐까지 계속">· BGM ${b.no} 계속</span>`; }
         if (d === 'light' && !cs.length) { const l = lt[e.ord]; if (l && l.text) cell = `<span class="cs-cont cs-lkeep" title="${esc(l.text)}">· 상태 유지</span>`; }
-        rows += `<td class="d-${d} ${colClass(d)}">${cell}</td>`;
+        // 접힌 열: 큐마다 눈금만. 내용은 인쇄용으로 숨겨 둔다(인쇄는 모든 열을 펼친다)
+        if (state.csFold.includes(d)) rows += `<td class="d-${d} dcol strip ${colClass(d)}"><span class="tks">${cs.map(c => `<i class="tk${c.status === 'tbd' ? ' tbd' : ''}" title="${esc(DEPT_L[d] + ' · ' + cueText(c))}"></i>`).join('')}</span><div class="pr-only">${cell}</div></td>`;
+        else rows += `<td class="d-${d} dcol ${colClass(d)}">${cell}</td>`;
       });
       const memo = it.cues.map(c => [c, cueDetail(c).memo]).filter(x => x[1]).map(([c, m]) => `<div>${DEPT_L[c.dept]} · ${esc(m)}</div>`).join('');
       rows += `<td class="cs-memo">${tbd.length ? `<div class="red">미정 <span class="muted">${esc(Array.from(new Set(tbd.map(c => DEPT_L[c.dept]))).join('·'))}</span></div>` : ''}${nC ? `<div class="${open ? 'red' : 'muted'}">※ 코멘트 ${nC}${open ? ` (미해결 ${open})` : ''}</div>` : ''}${memo}</td></tr>`;
@@ -3885,8 +3972,92 @@ function viewCuesheet() {
   }));
   const d = roleDept(), p = rolePerson();
   let h = `<div class="cs-top"><h2>큐시트</h2><span class="note">${d ? DEPT_L[d] + ' 컬럼 강조' : p ? esc(pname(p)) + ' 의 행 강조' : '전체'} · 큐 추가는 대본에서 문단 왼쪽 여백 클릭(또는 Ctrl+K) · 회색 윗줄 = 바로 앞 문단</span></div>`;
-  h += `<div class="table-wrap"><table class="cs-table"><thead><tr><th class="cs-num">#</th><th class="cs-q">큐</th>${DEPTS.map(dd => `<th class="d-${dd} ${colClass(dd)}"><span class="dl">${DEPT_L[dd]}</span></th>`).join('')}<th class="cs-memo">상태 · 코멘트</th></tr></thead>${rows}</table></div>`;
+  const L = csLayout(state.csColW, state.csFold);
+  const col = k => `<col data-col="${k}"${L.w[k] != null ? ` style="width:${L.w[k]}px"` : ''}>`;
+  const dh = dd => {
+    const n = DEPT_L[dd];
+    if (state.csFold.includes(dd)) return `<th class="d-${dd} dcol strip ${colClass(dd)}" data-act="cs-fold" data-dept="${dd}"><button type="button" class="strip-h" data-act="cs-fold" data-dept="${dd}" aria-expanded="false" aria-label="${n} 열 펼치기" title="${n} 열 펼치기"><span class="fold" aria-hidden="true">+</span><span class="vt">${n}</span></button><span class="dl pr-only">${n}</span></th>`;
+    return `<th class="d-${dd} dcol ${colClass(dd)}"><span class="dh-in"><span class="dl">${n}</span><button type="button" class="fold" data-act="cs-fold" data-dept="${dd}" aria-expanded="true" aria-label="${n} 열 접기" title="${n} 열 접기">−</button></span>${csRz(dd, n, L.w[dd])}</th>`;
+  };
+  h += `<div class="table-wrap cs-wrap"><table class="cs-table" style="${L.fill ? `width:100%;min-width:${L.total}px` : `width:${L.total}px`}"><colgroup>${CS_COLS.map(col).join('')}</colgroup><thead><tr><th class="cs-num"><span class="th-l">#</span>${csRz('num', '번호', L.w.num)}</th><th class="cs-q"><span class="th-l">큐</span>${csRz('q', '큐', L.w.q)}</th>${DEPTS.map(dh).join('')}<th class="cs-memo"><span class="th-l">상태 · 코멘트</span>${csRz('memo', '상태 · 코멘트', L.w.memo)}</th></tr></thead>${rows}</table></div>`;
   return h;
+}
+/* 큐시트 열 너비 조절 — 머리글 경계의 .rz (role=separator). 마우스·펜·터치는 Pointer Events, 키보드는 ←/→(Shift 크게) · Enter 기본 너비.
+   끄는 동안은 <col> 너비와 표 너비만 바꾸고(다시 그리지 않음) 놓을 때 prefs 저장. 두 번 클릭(탭)하면 기본 너비 */
+const CS_RZ_TITLE = '끌어서 너비 조절 · ←/→ 16px (Shift 64px) · 두 번 클릭 또는 Enter 로 기본 너비';
+function csRz(k, name, w) {
+  return `<span class="rz" role="separator" aria-orientation="vertical" tabindex="0" data-col="${k}" aria-label="${esc(name)} 열 너비" aria-valuemin="${CS_COL_W[k][1]}" aria-valuemax="${CS_W_MAX}"${w != null ? ` aria-valuenow="${w}"` : ''} title="${esc(name)} 열 — ${CS_RZ_TITLE}"></span>`;
+}
+function csApplyW(tbl) {
+  const L = csLayout(state.csColW, state.csFold);
+  CS_COLS.forEach(k => { const c = tbl.querySelector(`col[data-col="${k}"]`); if (c) c.style.width = L.w[k] != null ? L.w[k] + 'px' : ''; });
+  tbl.style.width = L.fill ? '100%' : L.total + 'px';
+  tbl.style.minWidth = L.fill ? L.total + 'px' : '';
+}
+// 지금 너비: 정한 값 → 기본값 → (큐 열 기본) 그려진 폭
+function csColNow(tbl, k) {
+  const v = state.csColW[k] != null ? state.csColW[k] : CS_COL_W[k][0];
+  if (v != null) return v;
+  const h = tbl.querySelector(`.rz[data-col="${k}"]`);
+  return h ? Math.round(h.parentElement.getBoundingClientRect().width) : CS_Q_FILL;
+}
+function csAria(tbl) { $$('.rz', tbl).forEach(h => h.setAttribute('aria-valuenow', String(csColNow(tbl, h.dataset.col)))); }
+function csSetW(tbl, k, v) {
+  if (v == null) delete state.csColW[k]; else state.csColW[k] = csClampW(k, v);
+  csApplyW(tbl);
+}
+const RZ = { k: null, id: null, x0: 0, w0: 0, tbl: null, h: null, moved: false, tapK: null, tapT: 0 };
+document.addEventListener('pointerdown', ev => {
+  const h = ev.target && ev.target.closest && ev.target.closest('.cs-table .rz');
+  if (!h || ev.button !== 0 || RZ.k != null) return;
+  ev.preventDefault();
+  const tbl = h.closest('table'), k = h.dataset.col;
+  Object.assign(RZ, { k, id: ev.pointerId, x0: ev.clientX, w0: csColNow(tbl, k), tbl, h, moved: false });
+  try { h.setPointerCapture(ev.pointerId); } catch (e) { /* 무시 */ }
+  h.classList.add('drag'); document.body.classList.add('rz-on');
+  h.focus({ preventScroll: true });
+});
+document.addEventListener('pointermove', ev => {
+  if (RZ.k == null || ev.pointerId !== RZ.id) return;
+  const dx = ev.clientX - RZ.x0;
+  if (!RZ.moved && Math.abs(dx) < 3) return; // 살짝 떨린 것은 끌기로 보지 않는다 (두 번 탭 판정)
+  RZ.moved = true;
+  const w = csClampW(RZ.k, RZ.w0 + dx);
+  if (w !== state.csColW[RZ.k]) { state.csColW[RZ.k] = w; csApplyW(RZ.tbl); RZ.h.setAttribute('aria-valuenow', String(w)); }
+});
+function csRzEnd(ev) {
+  if (RZ.k == null || ev.pointerId !== RZ.id) return;
+  const { k, tbl, h, moved } = RZ;
+  RZ.k = null; RZ.id = null;
+  h.classList.remove('drag'); document.body.classList.remove('rz-on');
+  if (moved) { RZ.tapK = null; savePrefs(); csAria(tbl); return; }
+  // 움직이지 않은 두 번 탭(마우스는 두 번 클릭) → 기본 너비
+  const now = Date.now();
+  if (ev.type === 'pointerup' && RZ.tapK === k && now - RZ.tapT < 400) { RZ.tapK = null; csSetW(tbl, k, null); savePrefs(); csAria(tbl); }
+  else { RZ.tapK = k; RZ.tapT = now; }
+}
+document.addEventListener('pointerup', csRzEnd);
+document.addEventListener('pointercancel', csRzEnd);
+document.addEventListener('keydown', ev => {
+  const h = ev.target && ev.target.closest && ev.target.closest('.cs-table .rz');
+  if (!h || ev.ctrlKey || ev.metaKey || ev.altKey || ev.isComposing) return;
+  const tbl = h.closest('table'), k = h.dataset.col, step = ev.shiftKey ? 64 : 16;
+  if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight') csSetW(tbl, k, csColNow(tbl, k) + (ev.key === 'ArrowRight' ? step : -step));
+  else if (ev.key === 'Enter') csSetW(tbl, k, null);
+  else return;
+  ev.preventDefault(); ev.stopPropagation();
+  savePrefs(); csAria(tbl);
+}, true);
+// 큐 열이 남는 폭을 쓸 때는 그려진 폭이 창 크기에 따라 바뀐다 — 포커스 때 다시 잰다
+document.addEventListener('focusin', ev => { const h = ev.target && ev.target.closest && ev.target.closest('.cs-table .rz'); if (h) csAria(h.closest('table')); });
+// 부서 열 접기/펼치기 (이 기기 prefs csFold). 다시 그린 뒤 같은 부서의 반대 단추로 포커스, 표 가로 스크롤 유지
+function csToggleFold(d) {
+  if (!DEPTS.includes(d)) return;
+  const w = $('#view .cs-wrap'), sl = w ? w.scrollLeft : 0;
+  state.csFold = state.csFold.includes(d) ? state.csFold.filter(x => x !== d) : csFoldPrefs(state.csFold.concat(d));
+  savePrefs(); render();
+  const w2 = $('#view .cs-wrap'); if (w2) w2.scrollLeft = sl;
+  const b = $(`#view .cs-table button[data-act="cs-fold"][data-dept="${d}"]`); if (b) b.focus({ preventScroll: true });
 }
 
 /* ================= 뷰: 런 ================= */
@@ -4910,6 +5081,7 @@ function render() {
     mountedView = vk;
     renderTop();
     if (vk === 'script') afterMountScript();
+    if (vk === 'cuesheet') { const t = $('.cs-table', view); if (t) csAria(t); }
   }
   if ((SPK.p && !SPK.p.isConnected) || !state.edit) spkClose();
   if (spkBtnEl && (!state.edit || mountedView !== 'script')) spkBtnEl.hidden = true;
@@ -5889,6 +6061,7 @@ function act(a, el) {
     case 'name-fix': nameFix(el.dataset.name, el.dataset.person); break;
     case 'name-ignore': IGNORED.add(el.dataset.name); renderNameBar(); break;
     case 'open-item': openItem(el.dataset.item); break;
+    case 'cs-fold': csToggleFold(el.dataset.dept); break;
     case 'item-del': deleteItem(el.dataset.item); break;
     case 'cue-new': openCueModal(el.dataset.item, null); break;
     case 'cue-edit': openCueModal(el.dataset.item, el.dataset.cue); break;
