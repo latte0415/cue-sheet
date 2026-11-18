@@ -167,8 +167,9 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
 - **브라우저 쪽: 409 자동 병합 (2단계 a, 구현됨).** 브라우저는 5초마다 `If-None-Match` 로 폴링하고, 고치던 내용이 없으면 MCP 수정을
   바로 받아 온다. **그 사이 브라우저에 저장 안 된 편집이 있으면** 다음 저장이 409 가 되는데, 이때 선택 바를 바로 띄우지 않고 id 단위로
   합친다. 예전에는 "서버 버전 / 내 버전" 둘 중 하나를 골라야 해서 "내 버전" 을 고르면 MCP 수정이 사라졌다.
-  - 병합은 `lib/merge.js` 의 `mergeShows(base, local, remote, { relabel })` (Node 는 `require`, 브라우저는 index.html 의
-    `<script src="lib/merge.js">` → `window.CueMerge`, 서버가 `/lib/merge.js` 로 내준다 — 빌드 없음). 기준(`Srv.base`)은 마지막으로
+  - 병합은 `lib/merge.js` 의 `mergeShows(base, local, remote, { relabel })` (Node 는 `require`, 브라우저는 서버 모드로
+    시작할 때(`serverBoot`, 프로젝트를 열기 전) `/lib/merge.js` 를 `<script>` 로 동적으로 읽어 `window.CueMerge` — 빌드 없음. 로컬 모드
+    (claude.ai 아티팩트·`file://`)에서는 외부 스크립트를 못 읽으므로 요청하지 않는다). 기준(`Srv.base`)은 마지막으로
     서버와 맞춘 내용 — 열 때, 저장(PUT) 성공 때(보낸 그 내용), 서버 내용을 반영할 때(폴링·"서버 버전 사용"·버전 복원·잠금 "버리기") 바뀐다.
     세 값 모두 `migrate()` 를 거쳐 넘긴다.
   - **충돌 없음** → 합친 것을 이 기기 내용으로 삼아 화면에 반영(서버 변경 반영과 같은 경로라 커서·선택·편집 중인 씬은 그대로)하고,

@@ -457,7 +457,7 @@ function createServer(opts) {
         res.end(req.method === 'HEAD' ? undefined : data);
       });
     }
-    // 브라우저 409 자동 병합 (index.html 이 <script src="lib/merge.js"> 로 읽는다 — 같은 파일을 Node 테스트도 require)
+    // 브라우저 409 자동 병합 (index.html 이 서버 모드일 때만 이 경로를 <script> 로 동적으로 읽는다 — 같은 파일을 Node 테스트도 require)
     if (pathname === '/lib/merge.js') {
       return fs.readFile(path.join(__dirname, 'lib', 'merge.js'), (err, data) => {
         if (err) return text(500, 'error');

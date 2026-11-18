@@ -794,8 +794,6 @@ body.has-player .app{padding-bottom:calc(var(--player-h) + env(safe-area-inset-b
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <div class="spk-pop" id="spk-pop" role="listbox" aria-label="화자 선택" hidden></div>
 
-<!-- 409 자동 병합(window.CueMerge). 못 읽으면(파일로 열었는데 lib/ 가 없음 등) 병합 없이 예전 선택 바로 동작 -->
-<script src="lib/merge.js"></script>
 <script>
 (function () {
 'use strict';
@@ -1801,8 +1799,25 @@ function localBoot() {
   if (migratedNote) toast(migratedNote);
   loadAudioFiles();
 }
+// 409 자동 병합 모듈(window.CueMerge)은 서버 모드에서만 같은 출처의 /lib/merge.js 로 읽는다 — 아티팩트·file:// 에서는 외부 스크립트를
+// 못 읽으므로 요청 자체를 하지 않는다. 실패·시간 초과면 CueMerge 가 없을 뿐(병합 없이 예전 선택 바). 끝나면(성공·실패 모두) resolve
+let mergeLoad = null;
+function loadMergeModule() {
+  if (window.CueMerge) return Promise.resolve();
+  if (mergeLoad) return mergeLoad;
+  mergeLoad = new Promise(res => {
+    const el = document.createElement('script');
+    const to = setTimeout(res, 4000);
+    el.src = '/lib/merge.js'; el.async = true;
+    el.onload = () => { clearTimeout(to); res(); };
+    el.onerror = () => { clearTimeout(to); el.remove(); res(); };
+    document.head.appendChild(el);
+  });
+  return mergeLoad;
+}
 async function serverBoot(h) {
   Store = ServerStore;
+  const merging = loadMergeModule(); // 프로젝트를 열기 전에 끝나 있어야 열 때의 내용을 병합 기준으로 삼을 수 있다
   Srv.hasPassword = !!h.hasPassword;
   Srv.schemaAt = Date.now();
   if (Number(h.schema) > SHOW_VER) markOutdated();
@@ -1814,6 +1829,7 @@ async function serverBoot(h) {
     if (Srv.list.some(x => x.id === qShow)) Srv.showId = qShow;
     try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) { /* 무시 */ }
   }
+  await merging;
   if (Srv.showId && Srv.list.some(x => x.id === Srv.showId)) await openShow(Srv.showId);
   else if (Srv.list.length) showGate('pick');
   else showGate('first');
