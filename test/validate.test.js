@@ -158,7 +158,7 @@ test('소품이 있는 정상 문서는 오류·경고 없음, v5 도 경고 없
   assert.deepEqual(rr.warnings.filter(w => w.code !== 'action-echo').map(w => w.code), ['stage-no-props', 'stage-no-props', 'stage-no-props']);
 });
 
-test('action-echo: 큐의 대상·액션·트리거만 다시 적은 지문은 "지우세요" 경고 (보수적)', () => {
+test('action-echo: 큐의 대상·액션·트리거만 다시 적은 지문은 "큐 지점으로 바꾸세요" 경고 (보수적)', () => {
   const look = { person: id => ({ 'p-yejun': '조예준', 'p-daehoon': '박대훈' })[id] || '', track: () => '', prop: id => ({ 'pr-card': '카드' })[id] || '' };
   const ch = (c, action) => ({ ch: c, action, dim: null, color: null, colorName: null, timeSec: null });
   const cue = (dept, body, extra) => Object.assign({ dept, trigger: '', offsetSec: null, note: '', status: 'set', [dept]: body }, extra);
@@ -184,7 +184,7 @@ test('action-echo: 큐의 대상·액션·트리거만 다시 적은 지문은 "
   const v = validateShow(e);
   assert.deepEqual(v.errors, []);
   assert.deepEqual(v.warnings.map(w => [w.path, w.code]), [['parts[0].scenes[0].items[0].text', 'action-echo']]);
-  assert.match(v.warnings[0].msg, /큐를 다시 적은 지문 — .*지우세요/);
+  assert.match(v.warnings[0].msg, /큐를 다시 적은 지문 — .*큐 지점으로 바꾸세요 \(kind:"cue"/);
 });
 
 test('action-echo: 실데이터(cues/backstage-part1.json)에서 걸리는 지문 15개 — 데이터 정리 목록', () => {
@@ -330,4 +330,26 @@ test('unwrapShow / basicInvalid', () => {
   assert.match(basicInvalid({ version: 5, parts: [{ scenes: [{ items: [{ cues: 'x' }] }] }] }), /cues 가 배열이 아닙니다/);
   assert.match(basicInvalid({ version: 5, parts: [], people: 'x' }), /people/);
   assert.ok(basicInvalid({ parts: [] }));
+});
+
+test('큐 지점(kind:"cue"): 본문·화자 없이 큐만 — 정상은 경고 없음, 본문·화자는 경고, 큐 0개는 오류 · migrate 는 그대로 둔다', () => {
+  const e = docExample();
+  const i1 = e.parts[0].scenes[0].items[0];
+  i1.kind = 'cue'; i1.text = '';
+  let v = validateShow(e);
+  assert.deepEqual(v.errors, []); assert.deepEqual(v.warnings, []);
+  const m = plain(FE.migrate(e));
+  assert.deepEqual([m.parts[0].scenes[0].items[0].kind, m.parts[0].scenes[0].items[0].text, m.parts[0].scenes[0].items[0].label], ['cue', '', '1'], '큐 지점도 번호 대상');
+  i1.text = '(공연 시작)'; i1.speaker = 'p-yejun';
+  v = validateShow(e);
+  assert.deepEqual(v.warnings.map(w => [w.path, w.code || '']), [['parts[0].scenes[0].items[0].text', 'cue-text'], ['parts[0].scenes[0].items[0].speaker', '']]);
+  assert.deepEqual(plain(FE.migrate(e)).parts[0].scenes[0].items[0].text, '', '사이트는 본문을 버린다');
+  i1.text = ''; i1.speaker = null; i1.cues = [];
+  v = validateShow(e);
+  assert.deepEqual(v.errors.map(x => x.path), ['parts[0].scenes[0].items[0].cues']);
+  // 사이트는 큐 없는 지점을 빈 지문으로 (코멘트·id 보존)
+  assert.equal(plain(FE.migrate(e)).parts[0].scenes[0].items[0].kind, 'action');
+  // 옛 데이터는 자동 변환하지 않는다 — 실데이터 중복 지문은 action 그대로(경고만)
+  const real = plain(FE.migrate(unwrapShow(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cues', 'backstage-part1.json'), 'utf8')))));
+  assert.ok(!real.parts.some(p => p.scenes.some(sc => sc.items.some(i => i.kind === 'cue'))));
 });

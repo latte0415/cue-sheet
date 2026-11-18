@@ -105,6 +105,16 @@ test('lib/labels.js 는 브라우저 함수와 같다: 그대로 · 끼우기 ·
   same(JSON.parse(/```json\n([\s\S]*?)```/.exec(md)[1]), '문서 예시');
 });
 
+test('큐 지점(kind:"cue")도 큐가 있는 문단이라 번호 대상 — 사이트와 lib 가 같다', () => {
+  const t = backstage();
+  const sc = t.parts[0].scenes[1];
+  sc.items.splice(1, 0, Object.assign(newCueItem('pt'), { kind: 'cue', text: '' }));
+  same(t, '큐 지점 끼우기');
+  FE.relabel(t);
+  assert.ok(items(t).find(i => i.id === 'pt').label != null);
+  assert.deepEqual(cueLabels(t), seq(cueLabels(t).length));
+});
+
 test('lib/labels.js: 배열이 빠진 서버 데이터도 던지지 않는다', () => {
   const s = { parts: [{ scenes: [{ items: [{ id: 'a', label: '3', cues: [{}] }, { id: 'b', label: '9' }, null] }, {}] }, {}] };
   assert.equal(LIB.relabel(s), true);

@@ -69,6 +69,22 @@ test('입력은 바꾸지 않고, 같은 입력이면 같은 결과', () => {
   assert.deepEqual(a.show, b.show);
 });
 
+test('큐 지점(kind:"cue"): 양쪽이 큐를 하나씩 다른 곳으로 옮겨 비면 병합 결과에서 지점이 사라진다', () => {
+  const base = remoteOps(backstage(), [{ op: 'set', id: 'i-7', fields: { kind: 'cue' } }]);
+  assert.equal(find(base, 'i-7').kind, 'cue');
+  assert.deepEqual(find(base, 'i-7').cues.map(c => c.id), ['q-5', 'q-6']);
+  // 이 기기: q-5 를 i-k 로 (지점에는 q-6 이 남는다)
+  const local = plain(base); const li = find(local, 'i-7'); find(local, 'i-k').cues.push(li.cues.shift()); find(local, 'i-k').isCue = true; relabel(local);
+  // 서버: q-6 을 i-l 로 (지점에는 q-5 가 남는다)
+  const remote = remoteOps(base, [{ op: 'move', id: 'q-6', parent: 'i-l' }]);
+  const r = merge(base, local, remote);
+  assert.deepEqual(r.conflicts, []);
+  assert.equal(find(r.show, 'i-7'), null, '합친 결과 큐가 0개인 지점은 없다');
+  assert.equal(parentOf(r.show, 'q-5'), 'i-k'); assert.equal(parentOf(r.show, 'q-6'), 'i-l');
+  assert.ok(inOrder(r.show));
+  assert.deepEqual(validateShow(r.show).errors, []);
+});
+
 test('v8: 큐 상세(note)를 양쪽에서 다르게 고치면 충돌 — 설명은 "상세" (사람·소품의 note 는 "메모")', () => {
   const base = backstage();
   const remote = remoteOps(base, [{ op: 'set', id: 'q-5', fields: { note: '서버 상세' } }, { op: 'set', id: 'p-yejun', fields: { note: '서버 메모' } }]);

@@ -14,7 +14,7 @@ function frontend() {
     return html.slice(a, b);
   };
   return vm.runInNewContext(cut('큐 번호', '마이그레이션') + cut('끌어 옮기기: 모델', '끌어 옮기기: 화면') +
-    '\n;({ relocateItem, relocateCue, relocateCueGroup, stepSlot, labelMap, restoreLabels, renumberLabels })', {});
+    '\n;({ relocateItem, relocateCue, relocateCueGroup, stepSlot, labelMap, restoreLabels, renumberLabels, pruneCuePoint, restoreCuePoint })', {});
 }
 const FE = frontend();
 const plain = o => JSON.parse(JSON.stringify(o));
@@ -92,7 +92,7 @@ test('큐 하나를 다른 문단으로 — isCue 갱신, 기본은 맨 뒤', ()
   assert.equal(find(s, 'a').isCue, false);
   assert.deepEqual(find(s, 'd').cues.map(x => x.id), ['q4', 'q1']);
   assert.equal(find(s, 'd').isCue, true);
-  assert.deepEqual(plain(r), { from: { itemId: 'a', index: 0 }, to: { itemId: 'd', index: 1 }, changed: true });
+  assert.deepEqual(plain(r), { from: { itemId: 'a', index: 0 }, to: { itemId: 'd', index: 1 }, changed: true, pruned: null });
   // 되돌리기
   FE.relocateCue(s, 'q1', r.from.itemId, r.from.index);
   assert.deepEqual(find(s, 'a').cues.map(x => x.id), ['q1']);
@@ -147,7 +147,7 @@ test('큐를 옮겨 큐가 없어진 문단은 되돌린 번호가 없으면 nul
 test('Q 묶음: 문단의 큐 전부를 원래 순서대로 — 본문·코멘트는 제자리, isCue 갱신, 기본은 끝', () => {
   const s = show();
   const r = FE.relocateCueGroup(s, 'c', 'b', null);
-  assert.deepEqual(plain(r), { ids: ['q2', 'q3'], from: { itemId: 'c', index: 0 }, to: { itemId: 'b', index: 0 }, changed: true });
+  assert.deepEqual(plain(r), { ids: ['q2', 'q3'], from: { itemId: 'c', index: 0 }, to: { itemId: 'b', index: 0 }, changed: true, pruned: null });
   assert.deepEqual(find(s, 'b').cues.map(x => x.id), ['q2', 'q3']);
   assert.equal(find(s, 'b').isCue, true);
   assert.deepEqual(find(s, 'c').cues, []);
@@ -217,4 +217,47 @@ test('Q 묶음: 번호를 다시 매기고, labelMap 으로 적어 둔 번호로
   FE.relocateCueGroup(s, r.to.itemId, r.from.itemId, r.from.index, r.ids);
   FE.restoreLabels(s, m);
   assert.deepEqual(['a', 'c', 'd'].map(i => find(s, i).label), ['1', '2', '3']);
+});
+
+// ---- 큐 지점(kind:'cue'): 큐가 0개면 지점도 없다 — 옮겨서 비면 정리, 되돌리면 같은 자리에 되살린다
+const point = (id, cues) => ({ id, kind: 'cue', speaker: null, text: '', label: null, isCue: true, cues, comments: [] });
+test('큐 지점: 큐 하나를 옮겨 비면 지점이 사라지고(pruned), restoreCuePoint 로 되살려 되돌린다', () => {
+  const s = show();
+  s.parts[0].scenes[0].items.splice(1, 0, point('pt', [cue('qp')]));
+  const r = FE.relocateCue(s, 'qp', 'd', null);
+  assert.deepEqual(plain(r.pruned), { sceneId: 'S1', index: 1, item: { id: 'pt', kind: 'cue', speaker: null, text: '', label: null, isCue: false, cues: [], comments: [] } });
+  assert.ok(!find(s, 'pt'));
+  assert.deepEqual(find(s, 'd').cues.map(c => c.id), ['q4', 'qp']);
+  // 되돌리기 = 지점을 먼저 되살리고 큐를 돌려보낸다
+  assert.equal(FE.restoreCuePoint(s, r.pruned), true);
+  FE.relocateCue(s, 'qp', r.from.itemId, r.from.index);
+  assert.deepEqual(s.parts[0].scenes[0].items.map(i => i.id), ['a', 'pt', 'b', 'c']);
+  assert.deepEqual(find(s, 'pt').cues.map(c => c.id), ['qp']);
+  assert.equal(find(s, 'pt').isCue, true);
+});
+
+test('큐 지점: Q 묶음을 통째로 옮겨도 정리, 큐가 남거나 일반 문단이면 그대로, 코멘트가 있으면 빈 지문으로 남긴다', () => {
+  const s = show();
+  s.parts[0].scenes[0].items.push(point('pt', [cue('x1'), cue('x2')]));
+  let r = FE.relocateCueGroup(s, 'pt', 'b', null);
+  assert.equal(r.pruned.item.id, 'pt'); assert.ok(!find(s, 'pt'));
+  // 일부만(ids) 옮기면 남은 큐가 있어 지점 유지
+  const s2 = show(); s2.parts[0].scenes[0].items.push(point('pt', [cue('x1'), cue('x2')]));
+  r = FE.relocateCueGroup(s2, 'pt', 'b', null, ['x1']);
+  assert.equal(r.pruned, null); assert.deepEqual(find(s2, 'pt').cues.map(c => c.id), ['x2']);
+  // 일반 문단은 큐가 0개여도 남는다
+  const s3 = show();
+  r = FE.relocateCue(s3, 'q1', 'b', null);
+  assert.equal(r.pruned, null); assert.ok(find(s3, 'a'));
+  // 코멘트 달린 지점: 지우지 않고 빈 지문으로 (코멘트 보존)
+  const s4 = show(); const pc = point('pc', [cue('y1')]); pc.comments.push({ id: 'cm', text: '확인' }); s4.parts[0].scenes[1].items.push(pc);
+  r = FE.relocateCue(s4, 'y1', 'a', null);
+  assert.equal(r.pruned, null); assert.equal(find(s4, 'pc').kind, 'action');
+});
+
+test('큐 지점은 큐 번호 대상이다 (큐가 있는 문단)', () => {
+  const s = show();
+  s.parts[0].scenes[0].items.splice(1, 0, point('pt', [cue('qp')]));
+  FE.renumberLabels(s);
+  assert.deepEqual(['a', 'pt', 'c', 'd'].map(i => find(s, i).label), ['1', '2', '3', '4']);
 });

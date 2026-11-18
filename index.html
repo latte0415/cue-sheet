@@ -221,6 +221,9 @@ input[type=color]{padding:0 2px;width:40px;height:30px;cursor:pointer}
 /* 큐가 달린 지문 = 굵은 큐 머리글 아래에 붙는 보충 디테일 → 흐리게. 큐가 없는 지문·대사는 보통, 큐를 숨기면 보통 */
 .doc p.k-action.has-qb{color:var(--ink-3);font-size:.875em}
 .hide-cues .doc p.k-action.has-qb{color:var(--ink-2);font-size:inherit}
+/* 큐 지점(kind:'cue'): 본문 줄 없이 큐 블록만 — 표지 높이 = 큐 블록. 큐를 숨기면 얇은 점선 한 줄 */
+.doc p.qpt{padding-bottom:0;min-height:0;user-select:none;cursor:default}
+.hide-cues .doc p.qpt{padding-top:0;height:0;margin:3px 0;border-top:1px dashed var(--rule-2)}
 .ql .qn{font-family:var(--mono);font-size:11px;color:var(--accent);white-space:nowrap}
 .ql.other .qt{font-weight:400;color:var(--ink-3)}
 .ql.other .qd{color:var(--ink-3);font-weight:400}
@@ -501,6 +504,7 @@ tr.cmt-hit{animation:none}
 .chks input{margin:0 5px 0 0;vertical-align:-2px;accent-color:var(--accent)}
 .pr-new{display:flex;gap:10px;align-items:center;padding-top:8px}
 .pr-new input{flex:1;min-width:0}
+.pn-adds{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center}
 .dimbox,.colorbox{display:flex;gap:6px;align-items:center}
 .dimbox input[type=range]{flex:1;min-width:60px}
 .dimbox input[type=number]{width:62px}
@@ -1036,6 +1040,29 @@ function relabel(show) { if (labelsInOrder(show)) return false; renumberLabels(s
 // 불러오기·렌더 때: 큐가 있는데 번호가 없는 문단(번호 없이 올린 파일)이 있을 때만 화면용으로 채운다. 그 밖의 번호는 그대로
 function fillLabels(show) { if (!showItems(show).some(i => i.cues.length && i.label == null)) return false; renumberLabels(show); return true; }
 
+/* ================= 큐 지점 ================= */
+// 큐 지점 = kind:'cue' 문단. 지문 디테일에 매달린 큐가 아니라 대본 흐름 안의 실행 지점 그 자체 — 본문 없이 큐 블록만 보인다.
+// 큐가 0개인 지점은 없다: 큐를 지우거나 옮겨 비면 지점도 사라진다. pruneCuePoint 가 지운 자리를 돌려주면 restoreCuePoint 로 되살린다(되돌리기)
+function isCuePoint(it) { return !!it && it.kind === 'cue'; }
+function newCuePoint(cues) { return { id: uid('i'), kind: 'cue', speaker: null, text: '', label: null, isCue: true, cues: cues || [], comments: [] }; }
+function pruneCuePoint(show, itemId) {
+  for (const p of show.parts) for (const s of p.scenes) {
+    const i = s.items.findIndex(x => x.id === itemId); if (i < 0) continue;
+    const it = s.items[i];
+    if (!isCuePoint(it) || it.cues.length) return null;
+    // 코멘트가 달린 지점은 지우지 않고 빈 지문으로 (코멘트를 잃지 않게)
+    if (it.comments.length) { it.kind = 'action'; it.isCue = false; return null; }
+    s.items.splice(i, 1);
+    return { sceneId: s.id, index: i, item: it };
+  }
+  return null;
+}
+function restoreCuePoint(show, pr) {
+  if (!pr) return false;
+  for (const p of show.parts) for (const s of p.scenes) if (s.id === pr.sceneId) { s.items.splice(Math.min(pr.index, s.items.length), 0, pr.item); return true; }
+  return false;
+}
+
 /* ================= 마이그레이션 / 정규화 ================= */
 // v8: 큐 상세(note) = 모든 부서 공통 자유 문장 하나. v7 까지의 출연·무대 설명(cast.text · stage.text)과 메모(memo)를
 // " / " 로 이어 옮긴다(같은 문장은 한 번만). 이미 note 가 있으면 그것이 앞. lib/ops.js upgradeShow 와 같은 규칙
@@ -1112,7 +1139,8 @@ function migrate(raw) {
   }
   // v5: 해결자·해결 시각 · v7: snapshot(선택) 코멘트 당시 문단 { kind, speaker, text, cues } — 없으면 키도 없다 (v6 → v7 은 version 만 바뀐다)
   const normSnap = v => v && typeof v === 'object' && !Array.isArray(v)
-    ? { kind: v.kind === 'action' ? 'action' : 'line', speaker: ensure(v.speaker), text: String(v.text || ''), cues: (Array.isArray(v.cues) ? v.cues : []).map(normCue) } : null;
+    ? Object.assign({ kind: v.kind === 'action' || v.kind === 'cue' ? v.kind : 'line', speaker: ensure(v.speaker), text: String(v.text || ''), cues: (Array.isArray(v.cues) ? v.cues : []).map(normCue) },
+      v.kind === 'cue' ? { speaker: null, text: '' } : {}) : null;
   const normCmts = a => (Array.isArray(a) ? a : []).filter(c => c && typeof c === 'object').map(c => {
     const resolved = !!c.resolved, snap = normSnap(c.snapshot);
     return {
@@ -1133,14 +1161,15 @@ function migrate(raw) {
         id: String(s.id || uid('s')), type: s.type === 'mc' ? 'mc' : 'act', title: String(s.title || ''), cast,
         durationSec: dur != null && dur >= 0 ? dur : null, setup: String(s.setup || ''), comments: normCmts(s.comments),
         items: (Array.isArray(s.items) ? s.items : []).filter(i => i && typeof i === 'object').map(i => {
-          const kind = i.kind === 'action' ? 'action' : 'line';
-          let text = String(i.text || '');
+          const cues = (Array.isArray(i.cues) ? i.cues : []).map(normCue);
+          // 큐 지점(kind:'cue'): 본문 없이 대본 흐름 안의 실행 지점. 큐가 하나도 없으면 지점이 아니므로 빈 지문으로 둔다(코멘트·id 보존)
+          const kind = i.kind === 'cue' ? (cues.length ? 'cue' : 'action') : i.kind === 'action' ? 'action' : 'line';
+          let text = kind === 'cue' ? '' : String(i.text || '');
           // v3 편집기는 문단 앞 기호로 동작을 구분 — 이전 동작 텍스트에 괄호를 씌워 왕복이 맞게
           if (kind === 'action' && ver < 3 && text && !ACT_RE.test(text)) text = '(' + text + ')';
-          const cues = (Array.isArray(i.cues) ? i.cues : []).map(normCue);
           const lab = i.label == null || i.label === '' ? null : cut(String(i.label).trim(), 12) || null;
           return {
-            id: String(i.id || uid('i')), kind, speaker: ensure(i.speaker), text, label: ver < 4 ? null : lab, isCue: cues.length > 0 || !!i.isCue, cues,
+            id: String(i.id || uid('i')), kind, speaker: kind === 'cue' ? null : ensure(i.speaker), text, label: ver < 4 ? null : lab, isCue: cues.length > 0 || !!i.isCue, cues,
             comments: normCmts(i.comments)
           };
         })
@@ -1195,7 +1224,7 @@ function validateImport(txt) {
 
 /* ================= 코멘트 스냅샷: 코멘트 당시 문단 → 차이 · 되돌리기 (순수 함수 — test/comment-snapshot.test.js) ================= */
 // 문단 코멘트에만 남긴다. 씬 코멘트는 위치 이동만 — 씬을 통째로 되돌리면 그 뒤에 생긴 문단·큐·남의 코멘트까지 지워진다
-function cmtSnap(it) { return { kind: it.kind === 'action' ? 'action' : 'line', speaker: it.speaker || null, text: String(it.text || ''), cues: clone(it.cues || []) }; }
+function cmtSnap(it) { return { kind: it.kind === 'action' || it.kind === 'cue' ? it.kind : 'line', speaker: it.speaker || null, text: String(it.text || ''), cues: clone(it.cues || []) }; }
 // 키 순서와 무관한 비교용 문자열 (모달에서 고친 큐는 키 순서가 달라질 수 있다)
 function canon(v) {
   if (Array.isArray(v)) return '[' + v.map(canon).join(',') + ']';
@@ -2679,8 +2708,12 @@ function trigLabel(c) { const a = []; if (c.trigger) a.push(c.trigger); if (c.of
 function trigLabels(cues) { return Array.from(new Set(cues.map(trigLabel).filter(Boolean))); }
 function itemRefText(e, n) {
   const it = e.item;
-  return (it.kind === 'line' && it.speaker ? pname(it.speaker) + ': ' : '') + cut(it.text || '(빈 문단)', n || 40);
+  return (it.kind === 'line' && it.speaker ? pname(it.speaker) + ': ' : '') + cut(it.text || emptyItemText(it), n || 40);
 }
+// 본문이 없는 문단의 대신 글: 큐 지점(또는 큐만 있는 문단)은 그 큐 머리글, 아니면 "(빈 문단)"
+function emptyItemText(it) { return it.cues && it.cues.length ? '큐 · ' + it.cues.map(c => cueHead(c).head).join(' · ') : '(빈 문단)'; }
+// 문단 한 줄(되돌리기 모달 · 끌기 표시 등): 원문, 없으면 위의 대신 글
+function itemLabel(it) { return (it.kind !== 'cue' && itemToRaw(it)) || emptyItemText(it); }
 
 /* ================= 문단 문법 ================= */
 function findPerson(name) {
@@ -2760,6 +2793,7 @@ function selCtx() {
   if (!doc) return null;
   let p = paraOf(sc, doc);
   if (!p && sc === doc) p = doc.children[Math.min(r.startOffset, doc.children.length - 1)] || null;
+  if (isQpt(p)) return null; // 큐 지점 표지에는 커서를 두지 않는다 — 나누기·합치기·입력의 대상이 아니다
   return p ? { doc, p, r } : null;
 }
 function caretOffset(p, r) {
@@ -2808,7 +2842,7 @@ function syncDoc(doc, light) {
     // IME 조합 중: DOM 은 건드리지 않고 텍스트만 반영
     Array.from(doc.children).forEach(p => {
       const it = p.dataset && p.dataset.id && ITEMS.get(p.dataset.id);
-      if (!it) return;
+      if (!it || it.kind === 'cue') return;
       const raw = textOf(p);
       if (p._raw !== raw) { if (itemToRaw(it) !== raw) TOUCHED.add(it.id); applyParse(it, raw, false, scene); p._raw = raw; }
     });
@@ -2827,6 +2861,12 @@ function syncDoc(doc, light) {
   if (!lone) ps.forEach(p => {
     let id = p.dataset.id, it = id && !seen.has(id) ? ITEMS.get(id) : null;
     if (it && !oldIds.has(id) && IDX.byItem.has(id)) it = null; // 다른 씬 문단의 id 가 복사돼 들어온 경우
+    if (it && it.kind === 'cue') {
+      // 큐 지점 표지: 글을 읽지 않는다. 브라우저가 표지 안에 글을 넣었으면 밖의 새 문단으로 빼낸다
+      const stray = textOf(p);
+      if (!isQpt(p) || stray) { const np = cuePointEl(it); p.replaceWith(np); if (stray) { const tp = mkP(stray); np.after(tp); } }
+      items.push(it); seen.add(it.id); return;
+    }
     if (!it) { it = newItem('line'); ITEMS.set(it.id, it); p.dataset.id = it.id; p._raw = undefined; }
     const raw = textOf(p);
     if (p._raw !== raw) {
@@ -2842,18 +2882,20 @@ function syncDoc(doc, light) {
     items.push(it); seen.add(it.id);
   });
   // 큐·코멘트가 붙은 문단이 사라졌으면 빈 문단으로 되살린다 (삭제는 거터에서 2단계 확인)
-  let kept = 0;
+  let kept = 0, keptPt = 0;
   old.forEach((r, oi) => {
     if (seen.has(r.id) || !hasAttach(r)) return;
     let at = 0, anchor = null;
     for (let k = oi - 1; k >= 0; k--) { const j = items.indexOf(old[k]); if (j >= 0) { at = j + 1; anchor = old[k]; break; } }
-    r.text = ''; r.speaker = null; r.kind = 'line';
-    items.splice(at, 0, r); seen.add(r.id); kept++;
-    const np = mkP(''); np.dataset.id = r.id; np._raw = '';
+    const pt = r.kind === 'cue';
+    if (!pt) { r.text = ''; r.speaker = null; r.kind = 'line'; }
+    items.splice(at, 0, r); seen.add(r.id); if (pt) keptPt++; else kept++;
+    const np = pt ? cuePointEl(r) : mkP(''); np.dataset.id = r.id; np._raw = '';
     const ap = anchor && doc.querySelector(`p[data-id="${cssq(anchor.id)}"]`);
     if (ap) ap.after(np); else doc.prepend(np);
   });
   if (kept) toast(`큐·코멘트가 붙은 문단 ${kept}개는 빈 문단으로 남겼습니다 — 지우려면 왼쪽 여백의 [삭제]`);
+  else if (keptPt) toast('큐 지점은 글처럼 지워지지 않습니다 — 큐를 지우면 지점도 사라집니다');
   if (lone && doc.children.length === 1) doc.firstElementChild.removeAttribute('data-id');
   markEmpty(doc);
   scene.items = items;
@@ -2930,6 +2972,7 @@ function restyleDocs() {
   if (mountedView !== 'script') return;
   const c = selCtx();
   $$('#script .doc > p').forEach(p => {
+    if (isQpt(p)) return;
     const raw = textOf(p), html = rawToHtml(raw);
     if (p.innerHTML === html) return;
     if (composing && c && c.p === p) return;
@@ -3124,7 +3167,7 @@ function pushUndo(doc, force) {
 }
 function restoreSnap(doc, s) {
   doc.innerHTML = '';
-  s.paras.forEach(x => { const p = mkP(x.raw); if (x.id) p.dataset.id = x.id; doc.appendChild(p); });
+  s.paras.forEach(x => { const it = x.id && ITEMS.get(x.id); const p = it && it.kind === 'cue' ? cuePointEl(it) : mkP(x.raw); if (x.id) p.dataset.id = x.id; doc.appendChild(p); });
   if (!doc.firstElementChild) doc.innerHTML = '<p><br></p>';
   if (s.caret) { const p = doc.children[Math.min(s.caret.i, doc.children.length - 1)]; if (p) setCaret(p, s.caret.off); }
   syncDoc(doc);
@@ -3172,6 +3215,7 @@ function insertBreak(c) {
   const cp = selCtx(); if (cp) cp.p.scrollIntoView({ block: 'nearest' });
 }
 function warnAttached(it) {
+  if (it && it.kind === 'cue') { toast('큐 지점은 글처럼 지워지지 않습니다 — 큐를 지우면 지점도 사라집니다'); return; }
   toast(`큐 ${it.cues.length}·코멘트 ${it.comments.length}개가 붙은 빈 문단입니다 — 지우려면 왼쪽 여백의 [삭제]`);
 }
 function mergeParas(doc, upper, lower, dir) {
@@ -3233,7 +3277,13 @@ function movePara(doc, d) {
 
 /* ================= 뷰: 대본 ================= */
 function ceAttr() { return `contenteditable="${state.edit ? 'true' : 'false'}"`; }
+// 큐 지점: 편집 문서 안의 비편집 표지(contenteditable=false, 본문 없음). 높이는 위에 얹는 큐 블록(--qh)만큼이라 큐 블록만 보인다.
+// 키 입력으로 글 문단이 되거나 지워지지 않는다 — 지워져도 syncDoc 이 되살리고, 지우는 길은 큐를 지우는 것뿐
+function cuePointHtml(it) { return `<p data-id="${esc(it.id)}" class="qpt" contenteditable="false" aria-label="큐 지점"></p>`; }
+function cuePointEl(it) { const t = document.createElement('template'); t.innerHTML = cuePointHtml(it); const p = t.content.firstChild; p._raw = ''; return p; }
+const isQpt = p => !!p && p.classList && p.classList.contains('qpt');
 function paraHtml(it) {
+  if (it.kind === 'cue') return cuePointHtml(it);
   const raw = itemToRaw(it);
   return `<p data-id="${esc(it.id)}" class="${kindClass(raw)}">${rawToHtml(raw)}</p>`;
 }
@@ -3392,7 +3442,7 @@ function gutterHtml(s) {
     if (it.cues.length) inner += `<span class="gq">Q${esc(e.q)}</span>`;
     // 둘째 줄: 코멘트 수. 큐 내용·미정은 문단 위 큐 블록에 줄마다 나온다
     if (nC) inner += `<span class="g2"><span class="gc ${open ? 'open' : ''}">※${nC}</span></span>`;
-    const empty = !(it.text || '').trim() && !(it.kind === 'line' && it.speaker);
+    const empty = it.kind !== 'cue' && !(it.text || '').trim() && !(it.kind === 'line' && it.speaker); // 큐 지점은 큐를 지워야 사라진다 — [삭제] 없음
     const label = `큐 ${it.cues.length}개${tbd ? ' (미정 포함)' : ''}, 코멘트 ${nC}개 — 상세 열기${state.edit && it.cues.length ? ' · 끌면 큐 전부 옮기기, Alt+위/아래 화살표로 한 문단씩' : ''}`;
     return `<div class="${cls}" data-for="${id}"><button type="button" class="g-open" data-act="open-item" data-item="${id}" aria-label="${label}" title="${label}">${inner}</button>${empty && state.edit ? `<button type="button" class="g-del" data-act="item-del" data-item="${id}" data-confirm="정말?" title="큐 ${it.cues.length}·코멘트 ${nC}개와 함께 삭제">삭제</button>` : ''}</div>`;
   }).join('');
@@ -3420,7 +3470,7 @@ let paintRaf = 0;
 function queuePaint() { if (paintRaf) return; paintRaf = requestAnimationFrame(() => { paintRaf = 0; if (mountedView === 'script') paintGutters(); }); }
 const RO = typeof ResizeObserver === 'function' ? new ResizeObserver(ents => { ents.forEach(en => { const sh = en.target.closest('.sheet'); if (sh) { layoutCues(sh); layoutGutter(sh); } }); }) : null;
 function markEmpty(doc) {
-  const e = doc.children.length === 1 && !textOf(doc.firstElementChild) && state.edit;
+  const e = doc.children.length === 1 && !textOf(doc.firstElementChild) && !isQpt(doc.firstElementChild) && state.edit;
   if (e) doc.setAttribute('data-empty', '비어 있음 — 여기에 입력 (이름: 대사 / (동작) · Tab 화자 목록 · Shift+Enter 문단 안 줄바꿈)'); else doc.removeAttribute('data-empty');
 }
 function afterMountScript() {
@@ -3462,7 +3512,7 @@ function refreshSceneHeads() {
 function refreshScript() {
   const root = $('#script');
   root.classList.toggle('ro', !state.edit);
-  $$('[contenteditable]', root).forEach(el => el.setAttribute('contenteditable', state.edit ? 'true' : 'false'));
+  $$('[contenteditable]:not(.qpt)', root).forEach(el => el.setAttribute('contenteditable', state.edit ? 'true' : 'false'));
   const pre = $('.pre-v', root);
   if (pre && document.activeElement !== pre && pre.textContent !== state.show.preShowSetup) pre.textContent = state.show.preShowSetup;
   refreshSceneHeads();
@@ -3495,7 +3545,7 @@ function viewMyLines() {
         const cue = k > last ? s.items[k] : null;
         last = ii;
         const cueH = cue ? `<span class="ml-cue">${cue.kind === 'line' && cue.speaker ? `<span class="spk">${esc(pname(cue.speaker))}</span>` : ''}${escT(cut(cue.text, 90))}</span>` : '';
-        const meH = line ? `<span class="spk">${me}</span>${parenHtml(it.text)}` : escT(itemToRaw(it) || '(빈 문단)');
+        const meH = line ? `<span class="spk">${me}</span>${parenHtml(it.text)}` : (it.kind === 'cue' ? (cs.length ? '' : escT(emptyItemText(it))) : escT(itemToRaw(it) || '(빈 문단)')); // 큐 지점은 큐 줄만(내 큐가 없으면 머리글)
         // 내 인/아웃 큐: 큐 내용(진하게) → 그 문단
         const qH = cs.length ? `<span class="ml-q">${cueLinesHtml(cs, it.label)}</span>` : '';
         body += `<li><button type="button" class="ml-it ${state.selItem === it.id ? 'sel' : ''}" id="ml-${esc(it.id)}" data-act="ml-goto" data-item="${esc(it.id)}">${cueH}<span class="ml-me ${line ? '' : 'mv'}">${qH}<span class="ml-tx">${meH}</span></span></button></li>`;
@@ -3556,6 +3606,7 @@ function lightStateText(st) {
   return CH.filter(ch => st[ch]).map(ch => CH_L[ch] + ' ' + lightChText(st[ch])).join(' · ');
 }
 function itemTextHtml(it, cls) {
+  if (it.kind === 'cue') return `<div class="${cls} k-cue"></div>`; // 큐 지점: 본문 칸 없이 트리거·큐만
   const spk = it.kind === 'line' && it.speaker ? `<span class="spk">${esc(pname(it.speaker))}</span>` : '';
   return `<div class="${cls} ${it.kind === 'action' ? 'k-action' : ''}">${spk}${it.kind === 'action' ? escT(it.text) : parenHtml(it.text) || '<span class="muted">(빈 문단)</span>'}</div>`;
 }
@@ -3568,7 +3619,7 @@ function viewCuesheet() {
   S.parts.forEach(p => p.scenes.forEach(s => {
     const items = s.items.filter(i => i.cues.length);
     const meta = sceneMeta(s);
-    rows += `<tbody class="cs-sc"><tr class="cs-scene ${s.type === 'mc' ? 'mc' : ''}" id="sc-${esc(s.id)}" data-scene="${esc(s.id)}"><th colspan="7"><b>${esc(sceneTitle(s))}</b><span class="sc-meta">${esc(p.name)}${meta ? ' · ' + meta : ''}${s.setup ? ' · 세팅 ' + esc(s.setup) : ''}</span>${sceneCmtBtn(s, false)}${s.comments.length ? ' ' : ''}${state.edit ? `<button type="button" class="tb" data-act="action-cue-add" data-scene="${esc(s.id)}">+ 동작 큐</button>` : ''}</th></tr>`;
+    rows += `<tbody class="cs-sc"><tr class="cs-scene ${s.type === 'mc' ? 'mc' : ''}" id="sc-${esc(s.id)}" data-scene="${esc(s.id)}"><th colspan="7"><b>${esc(sceneTitle(s))}</b><span class="sc-meta">${esc(p.name)}${meta ? ' · ' + meta : ''}${s.setup ? ' · 세팅 ' + esc(s.setup) : ''}</span>${sceneCmtBtn(s, false)}${s.comments.length ? ' ' : ''}${state.edit ? `<button type="button" class="tb" data-act="action-cue-add" data-scene="${esc(s.id)}">+ 큐 지점</button>` : ''}</th></tr>`;
     if (!items.length) { rows += '<tr class="cs-none"><td></td><td colspan="6">큐 없음</td></tr></tbody>'; return; }
     items.forEach(it => {
       const e = IDX.byItem.get(it.id), id = esc(it.id);
@@ -4496,7 +4547,7 @@ function renderPanel() {
             <button type="button" class="tb red" data-act="cue-del" ${ids} data-confirm="정말 삭제?">삭제</button>` : ''}</div></li>`;
       }).join('')}</ol>`;
       else h += '<p class="empty">이 문단에는 큐가 없습니다.</p>';
-      if (state.edit) h += `<button type="button" class="btn" id="pn-cue-add" data-act="cue-new" data-item="${iid}">+ 큐 추가</button>`;
+      if (state.edit) h += `<div class="pn-adds"><button type="button" class="btn" id="pn-cue-add" data-act="cue-new" data-item="${iid}">+ 큐 추가</button><button type="button" class="tb" id="pn-cuept-add" data-act="cuept-new" data-item="${iid}" title="이 문단 바로 뒤에 본문 없는 큐 지점을 만든다">+ 이 문단 뒤에 큐 지점</button></div>`;
       h += '</section>';
       h += `<section class="pn-sec" id="pn-cmts"><h4>코멘트 ${it.comments.length}</h4>`;
       const se0 = IDX.byScene.get(e.scene.id);
@@ -4562,7 +4613,7 @@ function revertBody(m) {
   if (!c || !c.snapshot) return '<p class="empty">삭제된 문단입니다 — 되돌릴 대상이 없습니다.</p>';
   const d = snapDiff(c.snapshot, e.item), rows = [];
   const row = (k, now, then, gone) => rows.push(`<tr><th class="rv-k">${k}</th><td class="${gone ? 'rv-out' : ''}">${now == null ? '<span class="muted">—</span>' : esc(now)}</td><td>${then == null ? '<span class="muted">—</span>' : esc(then)}</td></tr>`);
-  if (d.text) row('문장', itemToRaw(e.item) || '(빈 문단)', itemToRaw(c.snapshot) || '(빈 문단)', true);
+  if (d.text) row('문장', itemLabel(e.item), itemLabel(c.snapshot), true);
   d.extra.forEach(q => row('큐 삭제', rvCue(q), null, true));
   d.gone.forEach(q => row('큐 복원', null, rvCue(q)));
   d.changed.forEach(x => row('큐 변경', rvCue(x.now), rvCue(x.then), true));
@@ -4709,8 +4760,10 @@ function draftCue(d) {
   else cue.cast = { personId: d.cast.personId, move: d.cast.move };
   return cue;
 }
+// extra.newPoint = { sceneId, after(문단 id | null = 씬 처음) } — 큐 지점 새로 만들기. 저장할 때 지점이 생긴다(취소하면 아무것도 안 남는다)
 function openCueModal(itemId, cueId, extra) {
-  const e = IDX.byItem.get(itemId); if (!e) return;
+  const e = itemId ? IDX.byItem.get(itemId) : null;
+  if (!e && !(extra && extra.newPoint && IDX.byScene.get(extra.newPoint.sceneId))) return;
   const draft = blankCue();
   if (cueId) {
     const c = e.item.cues.find(x => x.id === cueId); if (!c) return;
@@ -4740,9 +4793,11 @@ function cuePrevHtml(m) {
 function updateCuePreview() { const m = state.modal, el = $('#m-prev'); if (m && m.type === 'cue' && el) el.innerHTML = cuePrevHtml(m); }
 function cueModalBody() {
   const m = state.modal, d = m.draft, e = IDX.byItem.get(m.itemId);
-  let h = m.newItem
-    ? `<div class="field"><label for="m-itemtext">동작 문단 (대본에 들어갈 내용)</label><input type="text" id="m-itemtext" data-f="itemText" value="${esc(m.itemText || '')}" placeholder="예: (탑햇 세팅)"></div>`
-    : `<div class="m-ref">${esc(sceneTitle(e.scene))} — ${esc(itemRefText(e, 80))}</div>`;
+  let h;
+  if (m.newPoint) {
+    const se = IDX.byScene.get(m.newPoint.sceneId), ae = m.newPoint.after && IDX.byItem.get(m.newPoint.after);
+    h = `<div class="m-ref">새 큐 지점 — ${esc(se ? sceneTitle(se.scene) : '')} · ${ae ? esc(itemRefText(ae, 60)) + ' 뒤' : '씬 처음'} <span class="muted">(본문 없이 큐만 있는 실행 지점)</span></div>`;
+  } else h = `<div class="m-ref">${esc(sceneTitle(e.scene))} — ${esc(itemRefText(e, 80))}</div>`;
   h += `<div class="m-tabs" role="group" aria-label="부서">${DEPTS.map(x => `<button type="button" id="m-dept-${x}" data-act="m-dept" data-dept="${x}" aria-pressed="${d.dept === x}">${DEPT_L[x]}</button>`).join('')}</div>
     <div class="qprev d-${esc(d.dept)}"><div class="qprev-h"><span>머리글 미리보기 · 자동</span><span>직접 고칠 수 없음 — 대상·액션을 바꾸세요</span></div><div class="qprev-l" id="m-prev" aria-live="polite">${cuePrevHtml(m)}</div></div>`;
   if (d.dept === 'light') {
@@ -4935,7 +4990,7 @@ function renderModal(focusFirst) {
   if (!m) { root.innerHTML = ''; return; }
   let title = '', body = '', foot = '';
   if (m.type === 'cue') {
-    title = m.newItem ? '동작 큐 추가' : m.cueId ? '큐 수정' : '큐 추가';
+    title = m.newPoint ? '큐 지점 추가' : m.cueId ? '큐 수정' : '큐 추가';
     body = cueModalBody();
     foot = `${m.cueId ? '<button type="button" class="tb red left" id="m-del" data-act="m-del" data-confirm="정말 삭제?">큐 삭제</button>' : ''}
       <button type="button" class="btn" data-act="modal-close">취소</button><button type="button" class="btn strong" id="m-save" data-act="m-save">저장</button>`;
@@ -5014,11 +5069,6 @@ function renderModal(focusFirst) {
 function closeModal(saved) {
   const m = state.modal;
   state.modal = null; renderModal();
-  if (m && m.type === 'cue' && m.newItem && !saved) {
-    // 큐 없이 취소하면 방금 만든 동작 문단도 거둔다
-    const e = IDX.byItem.get(m.itemId);
-    if (e && !e.item.cues.length && !e.item.comments.length) { e.scene.items.splice(e.ii, 1); commit(); }
-  }
 }
 // ---- 편집 비밀번호 · 버전 기록 (서버 모드)
 // 오류 줄은 입력값을 지우지 않게 다시 그리지 않고 글자만 바꾼다
@@ -5209,7 +5259,6 @@ function modalField(t) {
 function cueField(t) {
   const m = state.modal, f = t.dataset.f, d = m.draft, v = t.value;
   if (f === 'trigger' || f === 'note') d[f] = v;
-  else if (f === 'itemText') m.itemText = v;
   else if (f === 'offsetSec') d.offsetSec = num(v);
   else if (f === 'tbd') { d.status = t.checked ? 'tbd' : 'set'; if (m.err) { m.err = ''; const e = $('.modal-b > .err'); if (e) e.remove(); } }
   else if (f === 'light.anim') d.light.anim = v;
@@ -5269,8 +5318,8 @@ function cueModalAct(a, el) {
 }
 function saveCue() {
   const m = state.modal, d = m.draft;
-  const e = IDX.byItem.get(m.itemId);
-  if (!e) { closeModal(true); return; }
+  const e = m.newPoint ? null : IDX.byItem.get(m.itemId);
+  if (!e && !(m.newPoint && IDX.byScene.get(m.newPoint.sceneId))) { closeModal(true); return; }
   let err = '';
   const tbd = d.status === 'tbd', cue = draftCue(d);
   if (!tbd) {
@@ -5283,10 +5332,13 @@ function saveCue() {
   if (err) { m.err = err; renderModal(); return; }
   // 모달에서 등록한 소품 중 이 큐가 쓰는 것만 소품 목록에 넣는다
   if (d.dept === 'stage') (m.newProps || []).forEach(p => { if (cue.stage.props.some(x => x.propId === p.id) && !state.show.props.some(x => x.id === p.id)) state.show.props.push(p); });
-  if (m.newItem) {
-    let t = (m.itemText || '').trim() || '(동작)';
-    if (!ACT_RE.test(t)) t = '(' + t + ')';
-    e.item.kind = 'action'; e.item.speaker = null; e.item.text = t;
+  if (m.newPoint) {
+    // 큐 지점: 큐와 함께 처음 생긴다 (큐 0개인 지점은 없다)
+    const sc = IDX.byScene.get(m.newPoint.sceneId).scene, pt = newCuePoint([cue]);
+    const ai = m.newPoint.after ? sc.items.findIndex(x => x.id === m.newPoint.after) : -1;
+    sc.items.splice(ai + 1, 0, pt);
+    closeModal(true); commit(); openItem(pt.id); toast('큐 지점을 만들었습니다');
+    return;
   }
   const i = e.item.cues.findIndex(c => c.id === cue.id);
   if (i >= 0) e.item.cues[i] = cue; else e.item.cues.push(cue);
@@ -5368,6 +5420,8 @@ function deleteCue(itemId, cueId) {
   delSnap(`큐 ${e.q ? 'Q' + e.q + ' ' : ''}${DEPT_L[c.dept]}`);
   e.item.cues = e.item.cues.filter(x => x !== c); e.item.isCue = e.item.cues.length > 0;
   if (state.moveCue && state.moveCue.cueId === cueId) state.moveCue = null;
+  // 큐 지점의 마지막 큐면 지점도 사라진다 (되돌리기는 delSnap 스냅숏)
+  if (pruneCuePoint(state.show, itemId)) { if (state.selItem === itemId) state.selItem = null; buildIndex(); }
   return true;
 }
 
@@ -5621,12 +5675,15 @@ function act(a, el) {
       savePrefs(); render(); break;
     case 'countdown': { const e = IDX.byItem.get(el.dataset.item); const c = e && e.item.cues.find(x => x.id === el.dataset.cue); if (c) cueCountdown(e.item, c); break; }
     case 'cd-stop': stopCountdown(); break;
-    case 'action-cue-add': {
+    case 'action-cue-add': { // 큐시트 씬 머리: 씬 끝에 큐 지점
       const se = IDX.byScene.get(el.dataset.scene); if (!se) break;
-      const it = newItem('action'); it.text = '(동작)';
-      se.scene.items.push(it); buildIndex(); save();
-      openCueModal(it.id, null, { newItem: true, itemText: '' });
-      if (!roleDept() && !rolePerson()) { state.modal.draft.dept = 'stage'; renderModal(true); }
+      const last = se.scene.items[se.scene.items.length - 1];
+      openCueModal(null, null, { newPoint: { sceneId: se.scene.id, after: last ? last.id : null } });
+      break;
+    }
+    case 'cuept-new': { // 패널: 이 문단 바로 뒤에 큐 지점
+      const e = IDX.byItem.get(el.dataset.item); if (!e) break;
+      openCueModal(null, null, { newPoint: { sceneId: e.scene.id, after: e.item.id } });
       break;
     }
     case 'part-add': {
@@ -6265,7 +6322,8 @@ function relocateCue(show, cueId, itemId, index) {
   at.item.isCue = at.item.cues.length > 0;
   const k = dndClamp(index, dst.item.cues.length);
   dst.item.cues.splice(k, 0, c); dst.item.isCue = true;
-  return { from: { itemId: at.item.id, index: at.index }, to: { itemId, index: k }, changed: at.item.id !== itemId || at.index !== k };
+  // 옮겨서 빈 큐 지점은 사라진다 — pruned 를 되돌릴 때 restoreCuePoint 로 먼저 되살린다
+  return { from: { itemId: at.item.id, index: at.index }, to: { itemId, index: k }, changed: at.item.id !== itemId || at.index !== k, pruned: pruneCuePoint(show, at.item.id) };
 }
 // Q 묶음 통째로: fromItemId 문단의 큐 전부(ids 가 있으면 그중 그 id 들만)를 원래 순서대로 toItemId 문단의 index 자리에 (없으면 끝).
 // 대상에 큐가 이미 있으면 합친다. 되돌리기는 relocateCueGroup(show, to.itemId, from.itemId, from.index, ids) — 합친 큐는 남는다
@@ -6280,7 +6338,7 @@ function relocateCueGroup(show, fromItemId, toItemId, index, ids) {
   a.item.isCue = a.item.cues.length > 0;
   const k = dndClamp(index, b.item.cues.length);
   b.item.cues.splice(k, 0, ...moved); b.item.isCue = true;
-  return { ids: moved.map(c => c.id), from: { itemId: fromItemId, index: from }, to: { itemId: toItemId, index: k }, changed: true };
+  return { ids: moved.map(c => c.id), from: { itemId: fromItemId, index: from }, to: { itemId: toItemId, index: k }, changed: true, pruned: pruneCuePoint(show, fromItemId) };
 }
 // 한 칸 위/아래 자리 — 씬의 처음/끝이면 이전 씬의 끝 / 다음 씬의 처음 (파트 경계도 넘는다). 더 갈 곳이 없으면 null
 function stepSlot(show, itemId, d) {
@@ -6401,7 +6459,7 @@ function dndStart() {
   const tag = dndTag();
   if (f) { const c = f.item.cues[f.index]; tag.textContent = DEPT_L[c.dept] + ' ' + cut(cueText(c), 34); }
   else if (g) tag.textContent = groupTag(g.item);
-  else { const it = ITEMS.get(DND.id); tag.textContent = cut(it ? itemToRaw(it) : '', 40) || '(빈 문단)'; }
+  else { const it = ITEMS.get(DND.id); tag.textContent = cut(it ? itemLabel(it) : '', 40) || '(빈 문단)'; }
   tag.hidden = false;
   dndLoop();
 }
@@ -6570,10 +6628,10 @@ function dndMoveCue(cueId, itemId) {
   const r = relocateCue(state.show, cueId, itemId, null);
   if (!r || !r.changed) return false;
   renumberLabels(state.show);
-  dndPush({ kind: 'cue', id: cueId, from: r.from, to: r.to, labels, scenes: Array.from(new Set([fromScene, dst.scene.id])) });
+  dndPush({ kind: 'cue', id: cueId, from: r.from, to: r.to, labels, scenes: Array.from(new Set([fromScene, dst.scene.id])), pruned: r.pruned });
   // 편집기에 커서가 남아 있으면 Ctrl+Z 가 그 씬의 글 되돌리기로 가므로 놓고 나면 편집기에서 빠진다
   const a = document.activeElement; if (a && a.classList && a.classList.contains('doc')) a.blur();
-  dndRedraw([fromScene, dst.scene.id], false, null);
+  dndRedraw([fromScene, dst.scene.id], !!r.pruned, null); // 빈 큐 지점이 사라졌으면 편집기도 다시 그린다
   const ne = IDX.byItem.get(itemId);
   toast(`큐를 옮겼습니다 → ${ne && ne.q ? 'Q' + ne.q + ' · ' : ''}${cut(ne ? itemRefText(ne, 24) : '', 30)} — Ctrl+Z 되돌리기`);
   return true;
@@ -6594,9 +6652,9 @@ function dndMoveGroup(fromId, toId, ids) {
   if (!r || !r.changed) return null;
   renumberLabels(S);
   const sids = Array.from(new Set([a.scene.id, b.scene.id]));
-  dndPush({ kind: 'group', id: fromId, ids: r.ids, from: r.from, to: r.to, labels, scenes: sids });
+  dndPush({ kind: 'group', id: fromId, ids: r.ids, from: r.from, to: r.to, labels, scenes: sids, pruned: r.pruned });
   const ac = document.activeElement; if (ac && ac.classList && ac.classList.contains('doc')) ac.blur(); // dndMoveCue 와 같은 이유
-  dndRedraw(sids, false, null);
+  dndRedraw(sids, !!r.pruned, null);
   const ne = IDX.byItem.get(toId), q = ne && ne.q ? 'Q' + ne.q : '';
   toast(merged ? `${q} 에 합쳤습니다 — 트리거 확인 · Ctrl+Z 되돌리기`
     : `큐 ${r.ids.length}개를 옮겼습니다 → ${q ? q + ' · ' : ''}${cut(ne ? itemRefText(ne, 24) : '', 30)} — Ctrl+Z 되돌리기`);
@@ -6624,26 +6682,34 @@ document.addEventListener('keydown', ev => {
 // e 를 되돌리거나(redo=false) 다시 실행(redo=true)
 function dndApply(e, redo) {
   const S = state.show, dst = redo ? e.to : e.from;
-  let sids;
+  let sids, docs = e.kind === 'item';
   if (e.kind === 'item') {
     const cur = dndFindItem(S, e.id); if (!cur || !dndScene(S, dst.sceneId)) return false;
     sids = [cur.scene.id, dst.sceneId];
     dndSync(sids);
     if (!relocateItem(S, e.id, dst.sceneId, dst.index)) return false;
-  } else if (e.kind === 'group') {
-    // 묶음의 큐가 지금 있는 문단에서 그 큐들만 (합친 문단의 원래 큐는 남는다)
-    const cur = e.ids.map(id => dndFindCue(S, id)).find(Boolean), di = dndFindItem(S, dst.itemId); if (!cur || !di) return false;
-    sids = [cur.scene.id, di.scene.id];
-    const r = relocateCueGroup(S, cur.item.id, dst.itemId, dst.index, e.ids);
-    if (!r || !r.changed) return false;
   } else {
-    const cur = dndFindCue(S, e.id), di = dndFindItem(S, dst.itemId); if (!cur || !di) return false;
-    sids = [cur.scene.id, di.scene.id];
-    if (!relocateCue(S, e.id, dst.itemId, dst.index)) return false;
+    // 되돌리기: 옮기면서 사라진 큐 지점을 먼저 제자리에 되살린다 (다시 실행하면 relocate 가 다시 정리하고 새 자리를 적는다)
+    if (!redo && e.pruned && !dndFindItem(S, e.pruned.item.id)) restoreCuePoint(S, e.pruned);
+    let r;
+    if (e.kind === 'group') {
+      // 묶음의 큐가 지금 있는 문단에서 그 큐들만 (합친 문단의 원래 큐는 남는다)
+      const cur = e.ids.map(id => dndFindCue(S, id)).find(Boolean), di = dndFindItem(S, dst.itemId); if (!cur || !di) return false;
+      sids = [cur.scene.id, di.scene.id];
+      r = relocateCueGroup(S, cur.item.id, dst.itemId, dst.index, e.ids);
+      if (!r || !r.changed) return false;
+    } else {
+      const cur = dndFindCue(S, e.id), di = dndFindItem(S, dst.itemId); if (!cur || !di) return false;
+      sids = [cur.scene.id, di.scene.id];
+      r = relocateCue(S, e.id, dst.itemId, dst.index);
+      if (!r) return false;
+    }
+    if (redo) e.pruned = r.pruned;
+    if (e.pruned) docs = true;
   }
   if (redo) renumberLabels(S); else restoreLabels(S, e.labels);
   e.scenes = Array.from(new Set(e.scenes.concat(sids)));
-  dndRedraw(sids, e.kind === 'item', e.kind === 'item' ? e.id : null);
+  dndRedraw(sids, docs, e.kind === 'item' ? e.id : null);
   return true;
 }
 // 되돌리기 한 단계. sid 가 있으면(편집기 안) 그 씬을 건드린 이동만 본다

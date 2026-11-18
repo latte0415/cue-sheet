@@ -134,6 +134,9 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
 - **얕은 합치기.** 큐의 `light`·`sound`·`stage`·`cast` 객체는 한 단계만 합친다: `{ sound: { level: 80 } }` 은 track·action·timeSec 을
   그대로 두고 level 만 바꾼다. 배열(`light.channels`, `stage.props`, `scene.cast`, show 의 `preShowProps`)은 통째로 바뀐다. 채널의 빠진 필드는 기본값
   (`ch:"front", action:"on"`, 나머지 null), 소품 행은 `action:"in"`, `at:""`. `dept` 를 바꾸면 이전 부서 내용은 버리고 새 부서 기본값에서 시작한다.
+- **큐 지점 (`kind:"cue"`).** 본문·화자 없이 큐만 있는 문단(대본 흐름 안의 실행 지점). `add` 는 `data.cues` 가 하나 이상이어야 하고 본문을 주면 거부.
+  `set` 으로 `fields.kind:"cue"` 를 주면 본문을 비우고 화자를 지운다 — op 에 `"textToNote":true` 를 함께 주면 옛 본문(괄호를 벗겨)을 첫 큐의 `note` 뒤에 붙인다.
+  op 를 다 적용한 뒤 큐가 0개인 지점은 지운다(코멘트가 있으면 빈 지문으로 남긴다) — 결과 `changes` 에 적힌다. 실데이터의 중복 지문은 `action-echo` 경고로만 알린다(자동 변환 없음).
 - **브라우저와 같은 정리.** action 문단은 화자를 지우고, 본문 첫 줄이 지문 머리(`(` `*` `—` 등, index.html `isActHead`)로
   시작하지 않으면 괄호를 씌운다(경고). `data.kind` 없이 본문 첫 줄이 `(` 로 시작하면 action.
 - **표기 규칙** (`docs/cue-format.md` "표기 규칙"). 지문은 `(…)` 괄호 한 쌍 — `*`·`—` 시작, `)` 로 안 끝남, 괄호 안 괄호는

@@ -504,6 +504,41 @@ test('v6: 개요·검색에 소품', () => {
   assert.match(outline(g, {}), /q-4 stage \(삭제된 소품 pr-tophat\) IN/);
 });
 
+// ---- 큐 지점 (kind:"cue") — 본문 없이 큐만 있는 실행 지점
+test('큐 지점: add 는 큐와 함께, set kind:"cue" 는 본문을 비우고(textToNote 면 첫 큐 note 로), 큐가 0개가 되면 지점이 사라진다', () => {
+  const s = docExample();
+  // 새 큐 지점 — 큐 없이 만들거나 본문을 주면 거부
+  let r = applyOps(s, [{ op: 'add', kind: 'item', parent: 's-1', after: 'i-1', data: { id: 'i-pt', kind: 'cue', cues: [{ dept: 'cast', cast: { personId: 'p-yejun', move: 'out' } }] } }]);
+  const pt = find(r.show, 'i-pt');
+  assert.deepEqual([pt.kind, pt.text, pt.speaker, pt.label, pt.isCue], ['cue', '', null, '2', true]);
+  assert.deepEqual(validateShow(r.show).errors, []); assert.deepEqual(r.warnings, []);
+  rejects(() => applyOps(s, [{ op: 'add', kind: 'item', parent: 's-1', data: { kind: 'cue' } }]), 'bad_field', /needs at least one cue/);
+  rejects(() => applyOps(s, [{ op: 'add', kind: 'item', parent: 's-1', data: { kind: 'cue', text: '(x)', cues: [{ dept: 'cast', cast: { personId: 'p-yejun' } }] } }]), 'bad_field', /has no text/);
+  // 지문을 큐 지점으로: 본문은 비운다. textToNote 면 괄호를 벗긴 옛 본문이 첫 큐 note 뒤에
+  r = applyOps(s, [{ op: 'set', id: 'i-1', fields: { kind: 'cue' } }]);
+  assert.deepEqual([find(r.show, 'i-1').kind, find(r.show, 'i-1').text, find(r.show, 'q-1').note], ['cue', '', '']);
+  r = applyOps(s, [{ op: 'set', id: 'i-1', fields: { kind: 'cue' }, textToNote: true }]);
+  assert.equal(find(r.show, 'q-1').note, '공연 시작');
+  r = applyOps(s, [{ op: 'set', id: 'i-2', fields: { kind: 'cue' } }]);
+  assert.deepEqual([find(r.show, 'i-2').kind, find(r.show, 'i-2').speaker], ['cue', null], '대사도 큐가 있으면 지점이 될 수 있다(화자는 지운다)');
+  rejects(() => applyOps(s, [{ op: 'set', id: 'i-1', fields: { text: 'x' }, textToNote: true }]), 'bad_op', /textToNote/);
+  const s2 = docExample(); s2.parts[0].scenes[0].items[0].cues = [];
+  rejects(() => applyOps(s2, [{ op: 'set', id: 'i-1', fields: { kind: 'cue' } }]), 'bad_field', /needs at least one cue/);
+  // 지점의 큐를 지우거나 옮겨 비면 지점이 사라진다 (번호도 다시)
+  const base = applyOps(s, [{ op: 'set', id: 'i-1', fields: { kind: 'cue' } }]).show;
+  r = applyOps(base, [{ op: 'remove', id: 'q-1' }, { op: 'move', id: 'q-2', parent: 'i-2' }]);
+  assert.equal(find(r.show, 'i-1'), null);
+  assert.ok(r.changes.some(c => /removed empty cue point i-1/.test(c.text)));
+  assert.deepEqual(items(r.show).map(i => [i.id, i.label]), [['i-2', '1']]);
+  // 코멘트가 있으면 빈 지문으로 남긴다
+  const withCmt = JSON.parse(JSON.stringify(base)); find(withCmt, 'i-1').comments.push({ id: 'c-x', author: 'a', text: '확인', createdAt: '2026-11-01T00:00:00.000Z', resolved: false, resolvedBy: null, resolvedAt: null });
+  r = applyOps(withCmt, [{ op: 'remove', id: 'q-1' }, { op: 'remove', id: 'q-2' }]);
+  assert.equal(find(r.show, 'i-1').kind, 'action');
+  // 개요
+  const { outline } = require('../lib/view');
+  assert.match(outline(base, {}), /i-1 Q1 \(cue point\)/);
+});
+
 // ---- show v8: 상세 note · 소품 필수 · clean · 객석 on/off
 test('v8: note 편집, 객석 채널은 on/off 만 받는다', () => {
   const s = docExample();
