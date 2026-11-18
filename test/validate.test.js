@@ -11,7 +11,7 @@ function frontend() {
   const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const a = html.indexOf('/* ================= 상수'), b = html.indexOf('/* ================= 상태');
   assert.ok(a > 0 && b > a, 'index.html 에서 상수~상태 구간 표시를 찾지 못했습니다 (구간 주석이 바뀌었으면 이 테스트를 고치세요)');
-  return vm.runInNewContext(html.slice(a, b) + '\n;({ sampleShow, migrate, DEPTS, CH, L_ACT, S_ACT, MOVES, ROLES, ACT_RE })', {});
+  return vm.runInNewContext(html.slice(a, b) + '\n;({ sampleShow, migrate, DEPTS, CH, L_ACT, S_ACT, MOVES, PROP_ACTS, ROLES, ACT_RE })', {});
 }
 const FE = frontend();
 const plain = o => JSON.parse(JSON.stringify(o));
@@ -29,12 +29,13 @@ test('상수가 index.html 과 같다', () => {
   assert.deepEqual(plain(FE.L_ACT), CONST.L_ACT);
   assert.deepEqual(plain(FE.S_ACT), CONST.S_ACT);
   assert.deepEqual(Object.keys(FE.MOVES), CONST.MOVES);
+  assert.deepEqual(Object.keys(FE.PROP_ACTS), CONST.PROP_ACTS);
   assert.deepEqual(Object.keys(FE.ROLES), CONST.ROLES);
   assert.ok(CONST.SHOW_VERS.includes(plain(FE.migrate({ version: 5, parts: [] })).version), '프런트가 내보내는 version 은 읽을 수 있는 형식이어야 한다');
   // 프런트가 내보내는 version = 서버 스키마 SHOW_VER (MCP ops 도 이 값으로 저장)
   assert.equal(plain(FE.migrate({ version: 6, parts: [] })).version, SHOW_VER);
   assert.ok(CONST.SHOW_VERS.includes(SHOW_VER) && SHOW_VER === Math.max(...CONST.SHOW_VERS), 'SHOW_VER 는 읽을 수 있는 형식 중 가장 새 것');
-  assert.equal(plain(FE.migrate({ version: 7, parts: [] })).version, 7);
+  assert.equal(plain(FE.migrate({ version: 7, parts: [] })).version, 8);
   assert.equal(FE.ACT_RE.source, CONST.ACT_RE.source);
 });
 
@@ -137,45 +138,129 @@ test('경고: 지문 표기 규칙 — 괄호 한 쌍 (…)', () => {
   assert.equal(CONST.ACT_RE.test('* x') && CONST.ACT_RE.test('— x'), true);
 });
 
-test('v6: 소품이 있는 정상 문서는 오류·경고 없음, v5 도 경고 없음', () => {
+test('소품이 있는 정상 문서는 오류·경고 없음, v5 도 경고 없음 · 실데이터(v5)는 소품 없는 무대 큐만 경고', () => {
   const s = docExample();
-  assert.equal(s.version, 7);
+  assert.equal(s.version, 8);
   assert.ok(s.props.length && s.preShowProps.length);
   assert.deepEqual(validateShow(s).warnings, []);
   const v5 = plain(s); v5.version = 5; delete v5.props; delete v5.preShowProps;
   v5.parts[0].scenes[0].items[1].cues[1].stage = { text: '탑햇테이블에 탑햇 세팅' };
+  v5.parts[0].scenes[0].items[1].cues[1].status = 'tbd';
+  v5.parts[0].scenes[0].items[1].cues.forEach(c => { c.memo = c.note; delete c.note; });
   const r = validateShow(v5);
   assert.deepEqual(r.errors, []);
-  assert.deepEqual(r.warnings, []);
-  // 실데이터(v5, 배포 서버에 있는 파일)
+  assert.deepEqual(r.warnings, [], 'v7 이하의 memo · stage.text 는 정상');
+  // 실데이터(v5, 배포 서버에 있는 파일): 소품 없는 확정 무대 큐 3개만 경고 — 올라가는 데는 문제없다
   const real = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cues', 'backstage-part1.json'), 'utf8'));
   const rr = validateShow(unwrapShow(real));
   assert.equal(unwrapShow(real).version, 5);
   assert.deepEqual(rr.errors, []);
-  assert.deepEqual(rr.warnings, []);
+  assert.deepEqual(rr.warnings.map(w => w.code), ['stage-no-props', 'stage-no-props', 'stage-no-props']);
 });
 
-test('v6: 소품 검사 — 모르는 propId 경고, 잘못된 action 오류, 빈 stage 큐 경고, 레지스트리 id 중복 오류', () => {
+test('소품 검사 — 모르는 propId 경고, 잘못된 action 오류, clean 허용, 레지스트리 id 중복 오류', () => {
   const s = docExample();
   const st = s.parts[0].scenes[0].items[1].cues[1].stage;
   const P = 'parts[0].scenes[0].items[1].cues[1].stage';
-  st.props.push({ propId: 'pr-ghost', action: 'in', at: '' }, { propId: 'pr-tophat', action: 'enter', at: '' });
+  st.props.push({ propId: 'pr-ghost', action: 'in', at: '' }, { propId: 'pr-tophat', action: 'enter', at: '' }, { propId: 'pr-table', action: 'clean', at: '' });
   s.preShowProps.push({ propId: 'pr-ghost', at: '' });
   s.props.push({ id: 'pr-tophat', name: '중복' });
-  let v = validateShow(s);
+  const v = validateShow(s);
   assert.deepEqual(paths(v.errors).sort(), ['props[2].id', `${P}.props[2].action`].sort());
+  assert.match(v.errors.find(e => e.path === `${P}.props[2].action`).msg, /in\|out\|move\|clean/);
   assert.deepEqual(paths(v.warnings).sort(), [`${P}.props[1].propId`, 'preShowProps[1].propId'].sort());
   assert.match(v.warnings.find(w => w.path === 'preShowProps[1].propId').msg, /"pr-ghost" 가 props 에 없습니다/);
-
   const e = docExample();
-  e.parts[0].scenes[0].items[1].cues[1].stage = { text: ' ', props: [] };
-  v = validateShow(e);
-  assert.deepEqual(v.errors, []);
-  assert.deepEqual(paths(v.warnings), ['parts[0].scenes[0].items[1].cues[1].stage']);
-  e.parts[0].scenes[0].items[1].cues[1].stage = { text: '', props: [{ propId: 'pr-tophat', action: 'out', at: '' }] }; // props 만 있어도 유효
-  assert.deepEqual(validateShow(e).warnings, []);
   e.parts[0].scenes[0].items[1].cues[1].stage.props[0].propId = 3;
   assert.deepEqual(paths(validateShow(e).errors), ['parts[0].scenes[0].items[1].cues[1].stage.props[0].propId']);
+});
+
+test('v8: 소품 없는 무대 큐는 경고(올라감), 미정이면 경고 없음', () => {
+  const e = docExample();
+  const c = e.parts[0].scenes[0].items[1].cues[1];
+  c.stage = { props: [] }; c.status = 'set';
+  let v = validateShow(e);
+  assert.deepEqual(v.errors, []);
+  assert.deepEqual(v.warnings.map(w => [w.path, w.code]), [['parts[0].scenes[0].items[1].cues[1].stage', 'stage-no-props']]);
+  assert.match(v.warnings[0].msg, /소품이 필요합니다/);
+  c.status = 'tbd';
+  assert.deepEqual(validateShow(e).warnings, []);
+});
+
+test('v8: note 허용, memo · cast.text · stage.text 는 v8 에서 옛 필드 경고 (v7 이하는 정상)', () => {
+  const e = docExample();
+  const [cast, stage] = e.parts[0].scenes[0].items[1].cues;
+  cast.memo = '옛 메모'; cast.cast.text = '옛 설명'; stage.stage.text = '옛 작업';
+  let v = validateShow(e);
+  assert.deepEqual(v.errors, []);
+  const P = 'parts[0].scenes[0].items[1]';
+  assert.deepEqual(v.warnings.map(w => [w.path, w.code]).sort(), [[`${P}.cues[0].memo`, 'legacy-field'], [`${P}.cues[0].cast.text`, 'legacy-field'], [`${P}.cues[1].stage.text`, 'legacy-field']].sort());
+  e.version = 7;
+  assert.deepEqual(validateShow(e).warnings, []);
+  // note 는 문자열
+  const n = docExample(); n.parts[0].scenes[0].items[1].cues[0].note = ['x'];
+  assert.deepEqual(paths(validateShow(n).errors), [`${P}.cues[0].note`]);
+});
+
+test('v8: 객석(house)에 on/off 외 액션이나 밝기·색·시간이 있으면 경고', () => {
+  const e = docExample();
+  const chs = e.parts[0].scenes[0].items[0].cues[0].light.channels;
+  const house = chs.find(x => x.ch === 'house');
+  assert.deepEqual(validateShow(e).warnings, [], '객석 off 는 정상');
+  house.action = 'fadeOut';
+  let v = validateShow(e);
+  assert.deepEqual(v.warnings.map(w => w.code), ['house-onoff']);
+  assert.match(v.warnings[0].msg, /on\/off 만/);
+  house.action = 'on'; house.dim = 40;
+  assert.deepEqual(validateShow(e).warnings.map(w => w.code), ['house-onoff']);
+  house.dim = null; house.colorName = '앰버';
+  assert.deepEqual(validateShow(e).warnings.map(w => w.code), ['house-onoff']);
+  // 무대 채널은 무엇이든 된다
+  house.colorName = null; chs[0].action = 'fadeIn'; chs[0].dim = 40; chs[0].timeSec = 3;
+  assert.deepEqual(validateShow(e).warnings, []);
+});
+
+test('v8 migrate: memo · text → note, 소품 없는 무대 큐는 남김, 객석은 on/off 로 접고 흔적, 왕복해도 같다', () => {
+  const real = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cues', 'backstage-part1.json'), 'utf8'));
+  const m = plain(FE.migrate(unwrapShow(real)));
+  assert.equal(m.version, 8);
+  const cues = m.parts.flatMap(p => p.scenes.flatMap(s => s.items.flatMap(i => i.cues)));
+  const raw = unwrapShow(real).parts.flatMap(p => p.scenes.flatMap(s => s.items.flatMap(i => i.cues)));
+  assert.equal(cues.length, raw.length, '큐를 하나도 잃지 않는다');
+  cues.forEach(c => { assert.ok(!('memo' in c), 'memo 없음'); assert.equal(typeof c.note, 'string'); if (c.dept === 'cast' || c.dept === 'stage') assert.ok(!('text' in c[c.dept]), `${c.dept}.text 없음`); });
+  const stage = cues.filter(c => c.dept === 'stage');
+  assert.equal(stage.length, 3);
+  assert.ok(stage.every(c => c.stage.props.length === 0 && c.note.length > 5), '소품 없는 무대 큐는 그대로, 원래 문장은 note');
+  assert.equal(cues.find(c => c.dept === 'cast' && c.note).note, '마이크 들고 들어와 라태형에게 건넴');
+  assert.equal(cues.find(c => c.dept === 'light' && c.note === '조명 상세 미정').status, 'tbd');
+  // 둘 다 있으면 text / memo
+  const both = FE.migrate({ version: 7, parts: [{ scenes: [{ items: [{ cues: [
+    { id: 'q1', dept: 'cast', memo: '확인 필요', cast: { personId: null, move: 'in', text: '마이크 들고' } },
+    { id: 'q2', dept: 'stage', memo: '같은 말', stage: { text: '같은 말', props: [] } },
+    { id: 'q3', dept: 'light', memo: '', light: { channels: [{ ch: 'house', action: 'fadeIn', dim: 40, timeSec: 3 }, { ch: 'back', action: 'fadeIn', dim: 40, timeSec: 3 }], anim: '' } },
+    { id: 'q4', dept: 'light', memo: '메모', light: { channels: [{ ch: 'house', action: 'fadeOut' }, { ch: 'top', action: 'anim' }], anim: '체이스' } },
+    { id: 'q5', dept: 'stage', stage: { props: [{ propId: 'pr-card', action: 'clean', at: '' }] } }
+  ] }] }] }] });
+  const q = plain(both).parts[0].scenes[0].items[0].cues;
+  assert.equal(q[0].note, '마이크 들고 / 확인 필요');
+  assert.deepEqual(q[0].cast, { personId: null, move: 'in' });
+  assert.equal(q[1].note, '같은 말', '같은 문장은 한 번만');
+  assert.deepEqual(q[1].stage, { props: [] });
+  assert.deepEqual(q[2].light.channels[0], { ch: 'house', action: 'on', dim: null, color: null, colorName: null, timeSec: null });
+  assert.deepEqual(q[2].light.channels[1], { ch: 'back', action: 'fadeIn', dim: 40, color: null, colorName: null, timeSec: 3 }, '무대 채널은 그대로');
+  assert.equal(q[2].note, '(객석: 원래 FADE IN 40% 3s)');
+  assert.equal(q[3].light.channels[0].action, 'off');
+  assert.equal(q[3].note, '메모 / (객석: 원래 FADE OUT)');
+  assert.equal(q[4].stage.props[0].action, 'clean');
+  // 왕복: 한 번 더 migrate 해도 같고, 검증 통과(소품 없는 무대 큐 경고만)
+  const again = plain(FE.migrate(m));
+  delete again.updatedAt; const m2 = plain(m); delete m2.updatedAt;
+  assert.deepEqual(again, m2);
+  const v = validateShow(m);
+  assert.deepEqual(v.errors, []);
+  assert.deepEqual(v.warnings.map(w => w.code), ['stage-no-props', 'stage-no-props', 'stage-no-props']);
+  const b2 = plain(FE.migrate(plain(both)));
+  assert.deepEqual(b2.parts[0].scenes[0].items[0].cues, q, 'note 흔적이 두 번 붙지 않는다');
 });
 
 test('fillIds: 빠진 id 만 위치 기반으로, 기존 id 와 겹치지 않게', () => {

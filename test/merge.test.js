@@ -45,7 +45,7 @@ const ids = sc => sc.items.map(i => i.id);
 // 서버 쪽 편집은 MCP 와 같게 applyOps 로 만들고, 브라우저가 받을 때처럼 migrate 를 거친다
 const remoteOps = (base, ops) => migrate(applyOps(base, ops).show);
 const newItem = (id, text, extra) => Object.assign({ id, kind: 'line', speaker: null, text, label: null, isCue: false, cues: [], comments: [] }, extra);
-const soundCue = (id, track) => ({ id, dept: 'sound', trigger: '', offsetSec: null, memo: '', status: 'set', sound: { track, action: 'play', timeSec: null, level: null } });
+const soundCue = (id, track) => ({ id, dept: 'sound', trigger: '', offsetSec: null, note: '', status: 'set', sound: { track, action: 'play', timeSec: null, level: null } });
 
 test('바뀐 게 없으면 그대로, 한쪽만 바뀌면 그쪽', () => {
   const base = backstage();
@@ -139,11 +139,11 @@ test('삭제: 다른 쪽이 그대로면 삭제, 다른 쪽이 고쳤으면 충�
   assert.equal(find(r.show, 'i-k'), null);
 
   // 이 기기가 지움 + 서버가 고침 → 충돌, 서버 쪽으로 정하면 서버 내용으로 되살림
-  remote = remoteOps(base, [{ op: 'set', id: 'q-o', fields: { memo: '서버 메모' } }]);
+  remote = remoteOps(base, [{ op: 'set', id: 'q-o', fields: { note: '서버 메모' } }]);
   local = plain(base); find(local, 's-v').items = find(local, 's-v').items.filter(i => i.id !== 'i-p');
   r = merge(base, local, remote);
   assert.equal(r.conflicts.length, 1); assert.equal(r.conflicts[0].type, 'delete-local'); assert.equal(r.conflicts[0].id, 'i-p');
-  assert.equal(find(r.show, 'q-o').memo, '서버 메모');
+  assert.equal(find(r.show, 'q-o').note, '서버 메모');
   assert.deepEqual(ids(find(r.show, 's-v')), ids(find(base, 's-v')), '제자리로');
 
   // 순서만 바꾼 것은 고친 것이 아니다
@@ -197,13 +197,13 @@ test('순서: 양쪽이 다른 항목을 옮기면 둘 다, 같은 항목을 옮
 test('다른 부모로 옮기기는 부모 필드 — 내용 편집과 합쳐지고, 서로 다른 곳으로 옮기면 충돌', () => {
   const base = backstage();
   // 이 기기: q-o 를 i-q 로 옮김 / 서버: q-o 메모 고침
-  let remote = remoteOps(base, [{ op: 'set', id: 'q-o', fields: { memo: '서버 메모' } }]);
+  let remote = remoteOps(base, [{ op: 'set', id: 'q-o', fields: { note: '서버 메모' } }]);
   let local = plain(base);
   const q = find(local, 'i-p').cues.pop(); find(local, 'i-p').isCue = false;
   find(local, 'i-q').cues.push(q); find(local, 'i-q').isCue = true;
   let r = merge(base, local, remote);
   assert.deepEqual(r.conflicts, []);
-  assert.equal(parentOf(r.show, 'q-o'), 'i-q'); assert.equal(find(r.show, 'q-o').memo, '서버 메모');
+  assert.equal(parentOf(r.show, 'q-o'), 'i-q'); assert.equal(find(r.show, 'q-o').note, '서버 메모');
   assert.equal(find(r.show, 'i-q').isCue, true);
   // 서버는 i-s 로 옮김 → 충돌, 서버 위치
   remote = remoteOps(base, [{ op: 'move', id: 'q-o', parent: 'i-s' }]);
@@ -227,16 +227,16 @@ test('큐 여러 개의 부모 변경(Q 묶음 통째로 이동): 서버 편집�
     relabel(l);
     return l;
   };
-  // 서버: q-6 메모 + 원래 문단 i-7 에 새 큐 + i-k 본문 고침
+  // 서버: q-6 상세 + 원래 문단 i-7 에 새 큐 + i-k 본문 고침
   let remote = remoteOps(base, [
-    { op: 'set', id: 'q-6', fields: { memo: '서버 메모' } },
-    { op: 'add', kind: 'cue', parent: 'i-7', data: { id: 'q-R7', dept: 'stage', stage: { text: '서버 무대' } } },
+    { op: 'set', id: 'q-6', fields: { note: '서버 메모' } },
+    { op: 'add', kind: 'cue', parent: 'i-7', data: { id: 'q-R7', dept: 'stage', note: '서버 무대', status: 'tbd' } },
     { op: 'set', id: 'i-k', fields: { text: '서버 본문' } },
   ]);
   let r = merge(base, groupMove(), remote);
   assert.deepEqual(r.conflicts, []);
   assert.deepEqual(find(r.show, 'i-k').cues.map(c => c.id), ['q-5', 'q-6'], '옮긴 큐는 원래 순서대로 새 문단에');
-  assert.equal(find(r.show, 'q-6').memo, '서버 메모');
+  assert.equal(find(r.show, 'q-6').note, '서버 메모');
   assert.equal(find(r.show, 'i-k').text, '서버 본문');
   assert.deepEqual(find(r.show, 'i-7').cues.map(c => c.id), ['q-R7'], '서버가 원래 문단에 단 큐는 그 자리에');
   assert.equal(find(r.show, 'i-7').isCue, true); assert.equal(find(r.show, 'i-k').isCue, true);
@@ -300,7 +300,7 @@ test('코멘트 snapshot(v7): 병합해도 버리지 않는다 — 이 기기·�
   cs.forEach(c => assert.deepEqual(c.snapshot, snapOf(it), c.id + ' snapshot 그대로'));
   assert.equal(find(r.show, it.id).text, it.text + ' (로컬)');
   assert.equal(find(r.show, other.id).text, other.text);
-  assert.equal(r.show.version, 7);
+  assert.equal(r.show.version, 8);
   assert.deepEqual(validateShow(r.show).errors, []);
   assert.deepEqual(migrate(r.show), r.show, '사이트가 다시 읽어도 그대로');
 });
@@ -338,11 +338,11 @@ test('소품(v6): props 항목은 id 단위, preShowProps 는 통째', () => {
     { op: 'set', kind: 'show', fields: { preShowProps: [{ propId: 'pr-table', at: '중앙' }] } },
     { op: 'set', id: 'q-13', fields: { stage: { props: [{ propId: 'pr-hat', action: 'in', at: '' }] } } }
   ]);
-  // 다음 기준: 서버 내용. 이 기기는 소품 메모 + 무대 큐 글, 서버는 소품 이름 + preShowProps 바꿈
+  // 다음 기준: 서버 내용. 이 기기는 소품 메모 + 무대 큐 상세, 서버는 소품 이름 + preShowProps 바꿈
   const base2 = remote;
   const local = plain(base2);
   find(local, 'pr-hat').note = '로컬 메모';
-  find(local, 'q-13').stage.text = '로컬 무대 작업';
+  find(local, 'q-13').note = '로컬 무대 작업';
   local.props.push({ id: 'pr-L', name: '로컬 소품', note: '' });
   local.preShowProps = [{ propId: 'pr-table', at: '왼쪽' }];
   const remote2 = remoteOps(base2, [
@@ -352,7 +352,7 @@ test('소품(v6): props 항목은 id 단위, preShowProps 는 통째', () => {
   const r = merge(base2, local, remote2);
   assert.deepEqual(find(r.show, 'pr-hat'), { id: 'pr-hat', name: '검은 탑햇', note: '로컬 메모' });
   assert.deepEqual(r.show.props.map(p => p.id), ['pr-hat', 'pr-table', 'pr-L']);
-  assert.equal(find(r.show, 'q-13').stage.text, '로컬 무대 작업');
+  assert.equal(find(r.show, 'q-13').note, '로컬 무대 작업');
   assert.deepEqual(find(r.show, 'q-13').stage.props, [{ propId: 'pr-hat', action: 'in', at: '' }]);
   assert.equal(r.conflicts.length, 1); assert.equal(r.conflicts[0].kind, 'show'); assert.deepEqual(r.conflicts[0].fields, ['preShowProps']);
   assert.match(r.conflicts[0].text, /^공연 정보 — 공연 전 무대 소품/);
@@ -426,8 +426,9 @@ test('실제 흐름: backstage-part1 — 서버는 MCP ops, 이 기기는 편집
   assert.deepEqual(validateShow(base).errors, []);
   // 에이전트가 MCP edit_show 로 한 수정
   const ops = [
-    { op: 'add', kind: 'item', parent: 's-1k', after: 'i-1a', data: { id: 'i-mcp1', text: '(테이블 정리)', cues: [{ dept: 'stage', stage: { text: '테이블 치우기' } }] } },
-    { op: 'set', id: 'q-1i', fields: { trigger: '퇴장 직후', memo: '에이전트가 고침' } },
+    { op: 'add', kind: 'prop', data: { id: 'pr-tbl', name: '테이블' } },
+    { op: 'add', kind: 'item', parent: 's-1k', after: 'i-1a', data: { id: 'i-mcp1', text: '(테이블 정리)', cues: [{ dept: 'stage', note: '테이블 치우기', stage: { props: [{ propId: 'pr-tbl', action: 'clean' }] } }] } },
+    { op: 'set', id: 'q-1i', fields: { trigger: '퇴장 직후', note: '에이전트가 고침' } },
     { op: 'add', kind: 'cue', parent: 'i-3n', data: { id: 'q-mcp2', dept: 'sound', sound: { track: 7, action: 'fadeOut', timeSec: 5 } } },
     { op: 'set', id: 'tr-3', fields: { title: '멘탈 BGM' } },
     { op: 'add', kind: 'prop', data: { id: 'pr-mcp', name: '카드 덱' } },
@@ -455,7 +456,7 @@ test('실제 흐름: backstage-part1 — 서버는 MCP ops, 이 기기는 편집
   // 서버 쪽 편집
   assert.equal(find(m, 'i-mcp1').text, '(테이블 정리)');
   assert.equal(ids(find(m, 's-1k'))[ids(find(m, 's-1k')).indexOf('i-1a') + 1], 'i-mcp1');
-  assert.equal(find(m, 'q-1i').memo, '에이전트가 고침');
+  assert.equal(find(m, 'q-1i').note, '에이전트가 고침');
   assert.equal(parentOf(m, 'q-mcp2'), 'i-3n');
   assert.equal(find(m, 'tr-3').title, '멘탈 BGM');
   assert.equal(find(m, 'pr-mcp').name, '카드 덱');
@@ -500,7 +501,7 @@ test('무작위: 양쪽에 MCP 식 편집을 섞어도 항상 병합되고, 충�
       else if (k === 2) { ops.push({ op: 'remove', id: it }); removed.add(it); }
       else if (k === 3) ops.push({ op: 'move', id: it, parent: pick(scs), after: 'first' });
       else if (k === 4) ops.push({ op: 'add', kind: 'cue', parent: it, data: { id: `q-${tag}${n}`, dept: 'cast', cast: { personId: 'p-yejun', move: 'out' } } });
-      else if (k === 5 && cues.length) ops.push({ op: 'set', id: pick(cues), fields: { memo: `${tag} 메모 ${n}` } });
+      else if (k === 5 && cues.length) ops.push({ op: 'set', id: pick(cues), fields: { note: `${tag} 메모 ${n}` } });
       else ops.push({ op: 'move', id: it, after: pick(its.filter(i => !removed.has(i.id) && i.id !== it)).id });
     }
     return ops;

@@ -96,12 +96,14 @@ function fixtureFacts(show) {
   const other = scenes.find(sc => sc !== insert.sc && sc.items.length);
   const usedNos = new Set(items.flatMap(x => x.it.cues).filter(c => c.dept === 'sound' && c.sound).map(c => c.sound.track));
   const track = show.tracks.find(t => usedNos.has(t.no));
-  const stage = items.flatMap(x => x.it.cues).find(c => c.dept === 'stage' && c.stage && c.stage.text.trim().length >= 2);
+  // 무대 큐 글: v7 이하 원본은 stage.text, v8 은 note
+  const stageText = c => String(c.note || (c.stage && c.stage.text) || '').trim();
+  const stage = items.flatMap(x => x.it.cues).find(c => c.dept === 'stage' && stageText(c).length >= 2);
   return {
     firstLabeled, line, speaker: person(line.it.speaker),
     otherPerson: show.people.find(p => p.id !== line.it.speaker),
     insert, other, track, maxNo: Math.max(...show.tracks.map(t => t.no)),
-    stageWord: stage.stage.text.trim().split(/\s+/)[0]
+    stageWord: stageText(stage).split(/\s+/)[0]
   };
 }
 const esc = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -153,7 +155,7 @@ test('e2e: 도구 목록·annotations, list_shows → get_show → search → ed
     assert.ok(r.structuredContent.matches.some(m => m.kind === 'cue' && m.itemId));
 
     // dryRun: 저장 안 함
-    const ops = [{ op: 'add', kind: 'item', parent: F.insert.sc.id, after: F.insert.it.id, data: { text: '(테이블 정리)', cues: [{ dept: 'stage', stage: { text: '테이블 정리' } }] } }];
+    const ops = [{ op: 'add', kind: 'item', parent: F.insert.sc.id, after: F.insert.it.id, data: { text: '(테이블 정리)', cues: [{ dept: 'sound', note: '테이블 정리하는 동안', sound: { track: F.track.no, action: 'play' } }] } }];
     r = await c.callTool({ name: 'edit_show', arguments: { showId: id, ops, dryRun: true } });
     assert.ok(!r.isError, text(r));
     assert.match(text(r), /dry run — nothing saved/);
