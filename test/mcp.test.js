@@ -323,3 +323,36 @@ test('편집 비밀번호: 쓰기 도구(edit_show·restore_revision)는 그 프
     await stop(E);
   }
 });
+
+test('v10 출연 큐: edit_show 가 cast.people(여러 사람)과 옛 한 사람 입력을 모두 받고, 개요·검색은 사이트 머리글("조예준·라태형 IN · 박대훈 OUT")', async () => {
+  const show = backstage(); // v9 배포본 — 출연 큐가 한 사람
+  const cq = show.parts.flatMap(p => p.scenes.flatMap(s => s.items.flatMap(i => i.cues))).find(q => q.dept === 'cast');
+  const { id } = await S.server.store.create(show);
+  const c = await connect(S.base);
+  try {
+    const desc = (await c.listTools()).tools.find(t => t.name === 'edit_show').description;
+    assert.match(desc, /cast\.people/);
+    assert.match(c.getInstructions(), /cast \{people:\[\{personId, move: in\|out\|move\}\]\}/);
+    // 옛 한 사람 입력: 한 사람 큐에서는 그대로 (저장하며 v10 으로)
+    let r = await c.callTool({ name: 'edit_show', arguments: { showId: id, ops: [{ op: 'set', id: cq.id, fields: { cast: { personId: 'p-taehyung', move: 'out' } } }] } });
+    assert.ok(!r.isError, text(r));
+    let g = await S.server.store.get(id);
+    const at = s => s.parts.flatMap(p => p.scenes.flatMap(x => x.items.flatMap(i => i.cues))).find(q => q.id === cq.id);
+    assert.equal(g.show.version, 10);
+    assert.deepEqual(at(g.show).cast, { people: [{ personId: 'p-taehyung', move: 'out' }] });
+    // 여러 사람
+    const people = [{ personId: 'p-yejun', move: 'in' }, { personId: 'p-taehyung', move: 'in' }, { personId: 'p-daehoon', move: 'out' }];
+    r = await c.callTool({ name: 'edit_show', arguments: { showId: id, ops: [{ op: 'set', id: cq.id, fields: { cast: { people } } }] } });
+    assert.ok(!r.isError, text(r));
+    g = await S.server.store.get(id);
+    assert.deepEqual(at(g.show).cast, { people });
+    r = await c.callTool({ name: 'get_show', arguments: { showId: id } });
+    assert.match(text(r), new RegExp(`${cq.id} cast 조예준·라태형 IN · 박대훈 OUT`));
+    r = await c.callTool({ name: 'search_show', arguments: { showId: id, query: '박대훈' } });
+    assert.ok(r.structuredContent.matches.some(m => m.id === cq.id && m.field === 'cast.person'), JSON.stringify(r.structuredContent));
+    // 여러 사람 큐에 옛 입력은 거부 — 고치지 않는다
+    r = await c.callTool({ name: 'edit_show', arguments: { showId: id, ops: [{ op: 'set', id: cq.id, fields: { cast: { move: 'out' } } }] } });
+    assert.equal(r.isError, true);
+    assert.match(text(r), /has 3 people/);
+  } finally { await c.close(); }
+});

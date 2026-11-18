@@ -554,6 +554,11 @@ tr.cmt-hit{animation:none}
 .ch-rows{border-top:1px solid var(--rule)}
 .ch-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:8px;padding:8px 0;border-bottom:1px solid var(--rule);align-items:end}
 .ch-row .wide{grid-column:span 2}
+/* 출연 사람 줄: 사람 · 액션 · 순서/삭제 — 좁으면 액션과 버튼이 아랫줄로 */
+.cast-row{display:grid;grid-template-columns:minmax(140px,1fr) auto auto;gap:4px 16px;padding:8px 0;border-bottom:1px solid var(--rule);align-items:end}
+.cast-ops{display:flex;gap:4px 14px;align-items:center;padding:4px 0}
+.cast-ops .tb{min-width:1.2em;text-align:center}
+@media (max-width:520px){.cast-row{grid-template-columns:minmax(0,1fr) auto}.cast-row>.field:first-child{grid-column:1/-1}}
 /* 큐 모달: 머리글 미리보기(읽기 전용) · 액션 버튼 묶음 · 채널 체크 · 새 소품 등록 */
 .qprev{border-left:2px solid var(--dc,var(--rule-2));padding:4px 0 6px 10px;background:var(--tint-2)}
 .qprev.d-cast{--dc:var(--q-cast)}.qprev.d-light{--dc:var(--q-light)}.qprev.d-sound{--dc:var(--q-sound)}.qprev.d-stage{--dc:var(--q-stage)}
@@ -1035,6 +1040,16 @@ const S_ACT = ['play', 'fadeIn', 'fadeOut', 'stop', 'volume'];
 const L_ACT_L = { on: 'ON', off: 'OFF', fadeIn: 'FADE IN', fadeOut: 'FADE OUT', anim: 'ANIM' };
 const S_ACT_L = { play: 'PLAY', stop: 'STOP', fadeIn: 'FADE IN', fadeOut: 'FADE OUT', volume: 'VOL' };
 const MOVES = { in: 'IN', out: 'OUT', move: 'MOVE' };
+// 출연 큐 내용 → 사람 줄 [{ personId, move }] (v10: 한 큐에 여러 사람, 사람마다 IN/OUT/MOVE).
+// migrate 를 거친 값은 늘 { people: [...] } 이지만, 옛 모양 { personId(또는 name), move } 도 한 줄로 읽는다 — lib/cuehead.js · lib/validate.js 와 같다
+function castRows(b) {
+  if (!b || typeof b !== 'object') return [];
+  if (Array.isArray(b.people)) return b.people.filter(x => x && typeof x === 'object').map(x => ({ personId: x.personId == null || x.personId === '' ? null : x.personId, move: x.move }));
+  const pid = b.personId != null && b.personId !== '' ? b.personId : b.name != null && b.name !== '' ? b.name : null;
+  return pid == null && b.move == null ? [] : [{ personId: pid, move: b.move }];
+}
+// 이 큐에서 그 사람의 액션 (없으면 null)
+function castMove(c, pid) { if (!c || c.dept !== 'cast') return null; const r = castRows(c.cast).find(x => x.personId === pid); return r ? (MOVES[r.move] ? r.move : 'in') : null; }
 // 무대 소품 액션 (v8): 출연 액션 + CLEAN — 흘린 카드 줍기 · 꽃가루 밀대 청소처럼 치우기. 청소 대상도 소품 목록에서 고른다
 const PROP_ACTS = { in: 'IN', out: 'OUT', move: 'MOVE', clean: 'CLEAN' };
 // 객석(house) 채널은 켠다/끈다만 (v8) — 옛 값의 페이드인·애니는 on, 페이드아웃은 off 로 읽는다
@@ -1047,7 +1062,9 @@ const VIEW_L = { script: '대본', cuesheet: '큐시트', run: '런', stage: '�
 // v8: 큐 상세 note 하나(cast.text · stage.text · memo 를 합침), 무대 큐는 소품 필수 + 소품 액션 clean, 객석 채널은 on/off 만
 // v9: 음향 PLAY 큐의 sound.level = 시작 볼륨(그 볼륨으로 바로 재생). 모양은 v8 과 같다 — v8 → v9 는 version 만 바뀐다.
 //     v8 화면은 PLAY 의 level 을 모르고 큐를 저장할 때 지운다(조용한 손실) — 올려서 서버 426 · 새로고침 바로 옛 화면 저장을 막는다
-const SHOW_VER = 9;
+// v10: 출연 큐 하나에 여러 사람 — cast { people: [{ personId, move }] } (사람마다 IN/OUT/MOVE, 순서 그대로).
+//     v9 까지의 { personId, move } 는 migrate 가 한 줄짜리 people 로 옮긴다. v9 화면은 people 을 모르고 저장하면 사람을 잃으므로 올린다
+const SHOW_VER = 10;
 const FADE_DEFAULT = 3; // fadeOut 시간이 비어 있을 때 쓰는 기본 페이드(초)
 const THEMES = ['system', 'light', 'dark'];
 const THEME_L = { system: '시스템', light: '라이트', dark: '다크' };
@@ -1109,7 +1126,7 @@ function sampleShow() {
     { id: PR.hat, name: '탑햇', note: '' },
     { id: PR.rope, name: '로프', note: '박대훈 묶는 용' }
   ];
-  const Ca = (trig, off, personId, move, o) => Q('cast', trig, off, { personId, move }, o);
+  const Ca = (trig, off, personId, move, o) => Q('cast', trig, off, { people: [{ personId, move }] }, o);
   const it = (kind, speaker, text, cues, cms) => ({ id: id('i'), kind, speaker, text, label: null, isCue: !!(cues && cues.length), cues: cues || [], comments: cms || [] });
   const L = (spk, text, cues, cms) => it('line', spk, text, cues, cms);
   const A = (text, cues, cms) => it('action', null, text, cues, cms);
@@ -1288,8 +1305,11 @@ function migrate(raw) {
       // v8: 소품 없는 옛 무대 큐도 지우지 않는다 — 원래 문장은 note 로 옮기고, 화면이 빨간 "소품 미지정" 으로 소품 지정을 이끈다
       out.stage = { props: normPropActs(c.stage && c.stage.props) };
     } else {
-      const k = c.cast || {};
-      out.cast = { personId: ensure(k.personId != null ? k.personId : k.name), move: MOVES[k.move] ? k.move : 'in' };
+      // v10: { people: [{ personId, move }] }. v9 까지의 한 사람 { personId(또는 name), move } 는 한 줄로 — 사람이 비어 있어도
+      // 줄은 남긴다("출연자 미정 OUT" 의 OUT 을 잃지 않게). 객체가 아닌 줄만 버린다
+      const k = c.cast && typeof c.cast === 'object' ? c.cast : {};
+      const rows = Array.isArray(k.people) ? k.people.filter(x => x && typeof x === 'object') : [{ personId: k.personId != null ? k.personId : k.name, move: k.move }];
+      out.cast = { people: rows.map(x => ({ personId: ensure(x.personId), move: MOVES[x.move] ? x.move : 'in' })) };
     }
     return out;
   }
@@ -1407,6 +1427,24 @@ function applySnap(it, snap) {
 // 되살아나고, 삭제 뒤에 이 기기·다른 기기가 바꾼 것은 그대로 남는다. 겹친 곳(지운 것 안을 그 뒤에 또 고침 등)은 삭제 전 것.
 // 병합 모듈이 없으면(M = null — 아티팩트·file://) 삭제 뒤 바뀐 것이 없을 때만 그대로(직전 show) 되돌린다.
 // → { ok, show, conflicts, stale } — stale: 병합 없이 직전 show 로 통째 되돌려야 해서 삭제 뒤의 변경도 사라진다(부르는 쪽이 정한다)
+// 사람 지우기 (사람 탭 · lib/ops.js 의 force 삭제와 같은 규칙): 목록과 씬 출연에서 빼고, 여러 사람 출연 큐(v10)에서는 그 사람의 줄만 뺀다 —
+// 남은 사람의 IN/OUT 은 그대로 뜻이 있으므로. 한 사람뿐인 출연 큐와 대사 화자는 그대로 둬 "(삭제된 사람)" 으로 보인다(큐가 비지 않게).
+// show 를 직접 고치고 뺀 줄 수를 돌려준다. 되돌리기(delRestore)는 병합이 사람 id 로 줄을 맞춰 제자리에 되살린다
+function dropPerson(show, pid) {
+  let rows = 0;
+  show.people = show.people.filter(p => p.id !== pid);
+  show.parts.forEach(p => p.scenes.forEach(s => {
+    s.cast = s.cast.filter(x => x !== pid);
+    s.items.forEach(it => it.cues.forEach(c => {
+      if (c.dept !== 'cast' || !c.cast || !Array.isArray(c.cast.people) || c.cast.people.length < 2) return;
+      const left = c.cast.people.filter(x => x.personId !== pid);
+      if (!left.length || left.length === c.cast.people.length) return;
+      rows += c.cast.people.length - left.length;
+      c.cast.people = left;
+    }));
+  }));
+  return rows;
+}
 function delUnchanged(entry, cur) {
   const a = JSON.parse(entry.after); a.updatedAt = cur.updatedAt; // 수정 시각만 다른 것은 같은 내용
   return JSON.stringify(a) === JSON.stringify(cur);
@@ -3024,7 +3062,8 @@ function sig(show) { return (show || state.show).parts.map(p => p.id + ':' + p.s
 /* ================= 역할 ================= */
 function roleDept() { return ['light', 'sound', 'stage'].includes(state.role) ? state.role : null; }
 function rolePerson() { return state.role.indexOf('p:') === 0 ? state.role.slice(2) : null; }
-function isPersonCue(c, pid) { return c.dept === 'cast' && c.cast && c.cast.personId === pid; }
+// 출연 큐는 그 안의 모든 사람의 것 (v10: 한 큐에 여러 사람)
+function isPersonCue(c, pid) { return castMove(c, pid) != null; }
 function cueMine(c) {
   const d = roleDept(), p = rolePerson();
   if (d) return c.dept === d;
@@ -3057,6 +3096,7 @@ function roleLabel() {
 // 큐 문구 한 벌: cueHead(머리글) + cueDetail(값 · 상세 · 시점 · 메모). 대본 큐 줄 · 패널 · 큐시트 · 런 · 무대 상황 · 점검 · 사용처 · 끌기 표시가 모두 쓴다.
 // 머리글 = 대상 + 고정 액션(영문 대문자)을 시스템이 만든다 — 사용자는 대상·액션을 고르기만 하고 문구는 고치지 못한다. 자유 문장은 상세에만.
 //   출연  {사람} IN/OUT/MOVE                                   조예준 OUT
+//         여러 사람(v10)은 같은 액션끼리 "·", 섞이면 " · "        조예준·라태형 IN   |   조예준 IN · 라태형 OUT
 //   음향  BGM {번호} PLAY/STOP/FADE IN/FADE OUT/VOL                BGM 4 PLAY        값: 트랙 제목 · 시간 · 볼륨
 //   조명  {채널 묶음} ON/OFF/FADE IN/FADE OUT/ANIM               백·탑 FADE IN / 객석 OFF   값: 밝기 · 색 · 시간. 네 채널 모두 OFF 면 BLACKOUT
 //         객석은 ON/OFF 만, 늘 따로 쓴다(밝기·색·페이드는 무대 채널만)
@@ -3091,9 +3131,17 @@ function cueParts(c, look) {
   let head = '', miss = false, val = '';
   switch (c.dept) {
     case 'cast': {
-      const who = b.personId ? (look.person(b.personId) || b.personId) : '';
-      if (!who) miss = true;
-      head = (who || gap('출연자')) + ' ' + (MOVES[b.move] || MOVES.in);
+      // v10: 한 큐에 여러 사람 — 같은 액션끼리 묶어 "조예준·라태형 IN", 섞이면 " · " 로 "조예준 IN · 라태형 OUT" (묶음은 처음 나온 순서)
+      const rows = castRows(b);
+      if (!rows.length) { head = gap('출연자'); miss = true; break; }
+      const gs = [];
+      rows.forEach(x => {
+        const mv = MOVES[x.move] ? x.move : 'in', who = x.personId ? (look.person(x.personId) || x.personId) : '';
+        if (!who) miss = true;
+        const nm = who || gap('출연자'), g = gs.find(y => y.mv === mv);
+        if (!g) gs.push({ mv, names: [nm] }); else if (!g.names.includes(nm)) g.names.push(nm);
+      });
+      head = gs.map(g => g.names.join('·') + ' ' + MOVES[g.mv]).join(' · ');
       break;
     }
     case 'sound': {
@@ -3877,7 +3925,7 @@ function decorateParas(root) {
   $$('.doc > p[data-id]', root || document).forEach(p => {
     const it = ITEMS.get(p.dataset.id); if (!it) return;
     p.classList.toggle('sel', state.selItem === it.id);
-    const cs = myCastCues(it, p0), mv = cs.map(c => MOVES[c.cast.move] + (c.status === 'tbd' ? '?' : '')).join('·');
+    const cs = myCastCues(it, p0), mv = cs.map(c => MOVES[castMove(c, p0)] + (c.status === 'tbd' ? '?' : '')).join('·');
     p.classList.toggle('mine', isMyLine(it, p0));
     p.classList.toggle('mycue', cs.length > 0);
     p.classList.toggle('other', !!p0 && it.kind === 'line' && !!it.speaker && it.speaker !== p0);
@@ -4432,11 +4480,15 @@ function stageStates() {
       const e = IDX.byItem.get(it.id), dC = [], dP = [];
       it.cues.forEach(c => {
         const tbd = c.status === 'tbd';
-        if (c.dept === 'cast' && c.cast && c.cast.personId) {
-          const pid = c.cast.personId, mv = c.cast.move;
-          if (mv === 'in') cast.set(pid, { on: true, tbd, e });
-          else if (mv === 'out') keep(cast, pid, { on: false, tbd, e });
-          dC.push({ pid, move: mv, tbd });
+        if (c.dept === 'cast') {
+          // 한 큐에 여러 사람 — 사람마다 따로 IN/OUT (v10)
+          castRows(c.cast).forEach(x => {
+            if (!x.personId) return;
+            const pid = x.personId, mv = MOVES[x.move] ? x.move : 'in';
+            if (mv === 'in') cast.set(pid, { on: true, tbd, e });
+            else if (mv === 'out') keep(cast, pid, { on: false, tbd, e });
+            dC.push({ pid, move: mv, tbd });
+          });
         } else if (c.dept === 'stage' && c.stage) {
           const note = cueDetail(c).note;
           if (note) texts.push({ e, text: note, tbd });
@@ -4648,7 +4700,7 @@ const CK_GROUPS = [
   { k: 'empty', sev: 'info', t: '문단 없는 액트 씬', short: '빈 액트', note: '코멘트·큐를 달 문단이 없습니다.', depts: ['common'], fold: true },
   { k: 'cmt', sev: 'info', t: '미해결 코멘트', short: '코멘트', note: '', depts: ['common'] }
 ];
-// 모든 항목: { k, key, dept(cast|light|sound|stage|common), person(인/아웃의 사람), who(공통 항목이 걸린 씬의 출연), text, 이동 대상 item | scene(+sp) | track | pv, fix }
+// 모든 항목: { k, key, dept(cast|light|sound|stage|common), person(인/아웃의 사람 — 여러 사람 큐는 첫 사람), people(여러 사람 큐의 모두), who(공통 항목이 걸린 씬의 출연), text, 이동 대상 item | scene(+sp) | track | pv, fix }
 // x = { show, entries: [{ item, scene, q }](문서 순서), sceneTitle(s), pname(id), hasPerson(id), cueText(c), trackByNo(no), hasFile(t), useCount(t), propIssues() → [{ e, prev, text }], fileWhere }
 function checkCollect(x) {
   const S = x.show, out = {};
@@ -4669,20 +4721,24 @@ function checkCollect(x) {
     const id = e.item.id, sid = e.scene.id;
     e.item.cues.forEach(c => {
       const text = `${ref(e)} — ${DEPT_L[c.dept]} ${x.cueText(c)}`;
-      const own = () => ({ dept: c.dept, person: c.dept === 'cast' && c.cast ? c.cast.personId || null : null, sid, item: id, text });
+      // person = 출연 큐의 첫 사람, people = 그 큐의 모든 사람 (공연자 시점 필터 ckMine 이 본다 — v10 한 큐에 여러 사람)
+      const who = c.dept === 'cast' ? castRows(c.cast).map(r => r.personId).filter(Boolean) : [];
+      const own = () => Object.assign({ dept: c.dept, person: who[0] || null, sid, item: id, text }, who.length > 1 ? { people: who.slice() } : {});
       if (c.status === 'tbd') add('tbd', own());
       if (!String(c.trigger || '').trim()) add('trig', own());
       if (c.dept === 'light' && c.status !== 'tbd' && !(c.light && c.light.channels.length) && !(c.light && String(c.light.anim || '').trim())) add('light', own());
       // 소품 미지정: lib/validate.js 의 stage-no-props 와 같은 조건 (확정 무대 큐, 소품 행 없음). 소품 목록이 비면 아래 propsSkip 한 줄로 흡수
       if (c.dept === 'stage' && c.status !== 'tbd' && !(c.stage && Array.isArray(c.stage.props) && c.stage.props.some(r => r && r.propId))) noProps.push(own());
       if (c.dept === 'sound' && c.sound && c.sound.track != null && !x.trackByNo(c.sound.track)) add('track', { dept: 'sound', person: null, sid, item: id, text: `${ref(e)} — BGM ${c.sound.track} 은 트랙 목록에 없음` });
-      if (c.dept === 'cast' && c.cast && c.cast.personId && (c.cast.move === 'in' || c.cast.move === 'out')) {
-        const pid = c.cast.personId, mv = c.cast.move, pr = last.get(pid), M = MOVES[mv];
+      // 인/아웃 연속성 · 출연 명단은 사람마다 따로 (한 큐에 여러 사람이면 그 줄마다)
+      if (c.dept === 'cast') castRows(c.cast).forEach(r => {
+        if (!r.personId || (r.move !== 'in' && r.move !== 'out')) return;
+        const pid = r.personId, mv = r.move, pr = last.get(pid), M = MOVES[mv];
         const base = { dept: 'cast', person: pid, sid, item: id };
         if (pr && pr.move === mv) add('cast', Object.assign(base, { text: `${ref(e)} — ${x.pname(pid)} ${M} 다음 또 ${M} (앞: ${ref(pr.e)})` }));
         if (!e.scene.cast.includes(pid) && !edge(e, mv, pid)) add('castlist', Object.assign({}, base, { fix: x.hasPerson(pid) ? { scene: sid, person: pid } : null, text: `${ref(e)} — ${x.pname(pid)} ${M} 큐가 있지만 씬 출연에 없음` }));
         last.set(pid, { move: mv, e });
-      }
+      });
     });
     // 빈 문단에 붙은 큐: 큐 지점이 아닌 문단인데 본문이 비었다 — 문단 하나에 한 줄, 고치기 [큐 지점으로]
     if (e.item.kind !== 'cue' && e.item.cues.length && !String(e.item.text || '').trim()) add('emptyq', { dept: 'common', person: null, sid, who: e.scene.cast.slice(), item: id, fix: { item: id }, text: `${ref(e)} — 빈 문단에 큐 ${e.item.cues.length}개 (${e.item.cues.map(c => DEPT_L[c.dept]).join('·')})` });
@@ -4714,7 +4770,7 @@ function checkCollect(x) {
 // role: 'all' | 'light' | 'sound' | 'stage' | 'p:<사람 id>'. 공연자는 자기 IN/OUT 과 자기가 나오는 씬의 공통 항목(코멘트·빈 액트)만
 function ckMine(it, role) {
   if (role === 'all') return true;
-  if (role.indexOf('p:') === 0) { const p = role.slice(2); return it.person === p || (it.dept === 'common' && (!it.who || it.who.includes(p))); }
+  if (role.indexOf('p:') === 0) { const p = role.slice(2); return it.person === p || (!!it.people && it.people.includes(p)) || (it.dept === 'common' && (!it.who || it.who.includes(p))); }
   return it.dept === role || it.dept === 'common';
 }
 function ckRelevant(g, role) {
@@ -4884,7 +4940,7 @@ function viewPeople() {
       const on = s.cast.includes(p.id);
       const moves = [];
       let inout = false;
-      s.items.forEach(it => it.cues.forEach(c => { if (isPersonCue(c, p.id)) { moves.push(MOVES[c.cast.move] + (c.status === 'tbd' ? '?' : '')); if (c.cast.move !== 'move') inout = true; } }));
+      s.items.forEach(it => it.cues.forEach(c => { const mv = castMove(c, p.id); if (mv) { moves.push(MOVES[mv] + (c.status === 'tbd' ? '?' : '')); if (mv !== 'move') inout = true; } }));
       // IN/OUT 큐는 있는데 씬 출연에 없음 → 빨간 "IN?" (누르면 출연에 추가)
       let cell = esc(moves.join(' '));
       if (inout && !on) {
@@ -5288,7 +5344,7 @@ function blankCue() {
     light: { rows: [ltRow(['front'])], house: null, anim: '' },
     sound: { track: state.show.tracks.length ? state.show.tracks[0].no : null, action: 'play', timeSec: null, level: null },
     stage: { props: [] },
-    cast: { personId: firstPerf ? firstPerf.id : null, move: 'in' }
+    cast: { people: firstPerf ? [{ personId: firstPerf.id, move: 'in' }] : [] }
   };
 }
 // 저장된 조명 → 편집 행: 무대 채널은 같은 값끼리 한 행, 객석은 on/off 하나
@@ -5318,7 +5374,12 @@ function draftCue(d) {
     cue.sound = { track: x.track, action: x.action, timeSec: x.timeSec, level: x.action === 'volume' ? (x.level == null ? 100 : x.level) : (x.action === 'fadeIn' || x.action === 'play') && x.level != null ? x.level : null };
   }
   else if (d.dept === 'stage') cue.stage = { props: d.stage.props.filter(x => x.propId).map(x => ({ propId: x.propId, action: PROP_ACTS[x.action] ? x.action : 'in', at: String(x.at || '').trim() })) };
-  else cue.cast = { personId: d.cast.personId, move: d.cast.move };
+  else {
+    // 사람 줄 그대로 (순서 유지). 사람을 고르지 않은 줄은 버리되, 그런 줄뿐이면 하나 남긴다 — 미정 큐의 "출연자 미정 OUT" 처럼 액션만 정한 경우
+    const rows = d.cast.people.map(x => ({ personId: x.personId || null, move: MOVES[x.move] ? x.move : 'in' }));
+    const named = rows.filter(x => x.personId);
+    cue.cast = { people: named.length ? named : rows.slice(0, 1) };
+  }
   return cue;
 }
 // extra.newPoint = { sceneId, after(문단 id | null = 씬 처음) } — 큐 지점 새로 만들기. 저장할 때 지점이 생긴다(취소하면 아무것도 안 남는다)
@@ -5333,8 +5394,9 @@ function openCueModal(itemId, cueId, extra) {
     DEPTS.forEach(k => { if (k !== c.dept) draft[k] = blank[k]; });
     if (c.dept === 'light') draft.light = lightDraft(c.light);
     if (!Array.isArray(draft.stage.props)) draft.stage.props = [];
+    if (c.dept === 'cast') draft.cast = { people: castRows(c.cast).map(x => ({ personId: x.personId, move: MOVES[x.move] ? x.move : 'in' })) };
     if (draft.note == null) draft.note = '';
-  } else if (rolePerson()) { draft.dept = 'cast'; draft.cast.personId = rolePerson(); }
+  } else if (rolePerson()) { draft.dept = 'cast'; draft.cast.people = [{ personId: rolePerson(), move: 'in' }]; }
   state.modal = Object.assign({ type: 'cue', itemId, cueId: cueId || null, draft, err: '', newProps: [], prNew: '' }, extra || {});
   renderModal(true);
 }
@@ -5405,8 +5467,21 @@ function cueModalBody() {
     h += `</div><div class="quick" style="padding-top:6px"><button type="button" class="tb" id="m-pr-add" data-act="m-pr-add" ${PS.length ? '' : 'disabled'}>+ 소품 행</button></div>
       <div class="pr-new"><label class="sr-only" for="pr-new-name">새 소품 이름</label><input type="text" id="pr-new-name" data-f="prnew" data-enter="m-pr-new" value="${esc(m.prNew || '')}" placeholder="목록에 없으면 새 소품 이름 (예: 꽃가루)"><button type="button" class="tb" id="m-pr-new" data-act="m-pr-new">소품 등록</button></div></div>`;
   } else {
-    h += `<div class="field"><label for="cast-person">대상 · 사람</label><select id="cast-person" data-f="cast.personId"><option value="">(선택)</option>${state.show.people.map(p => `<option value="${esc(p.id)}" ${p.id === d.cast.personId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></div>
-      <div class="field"><span class="lbl">액션</span>${segHtml('m-cast-act', Object.keys(MOVES), d.cast.move, MOVES)}</div>`;
+    // 사람 줄: 사람 + 액션(IN/OUT/MOVE) — 한 큐에 여러 사람이 함께 들어오고 나가거나, 한 사람이 나가며 다른 사람이 들어온다 (v10)
+    // 줄 순서가 머리글 순서. 다른 줄에서 고른 사람은 목록에서 고를 수 없다(같은 사람 두 번 금지)
+    const PP = state.show.people, rows = d.cast.people, n = rows.length;
+    h += '<div class="field"><span class="lbl">대상 · 사람 — 사람마다 액션</span><div class="ch-rows" id="m-cast-rows">';
+    rows.forEach((x, i) => {
+      const known = !x.personId || PP.some(p => p.id === x.personId), taken = new Set(rows.filter((y, k) => k !== i && y.personId).map(y => y.personId));
+      h += `<div class="cast-row" data-i="${i}">
+        <div class="field"><label for="cast-person-${i}">사람${n > 1 ? ' ' + (i + 1) : ''}</label><select id="cast-person-${i}" data-f="cast.row" data-i="${i}" data-k="personId"><option value="">(선택)</option>${known ? '' : `<option value="${esc(x.personId)}" selected>(삭제된 사람)</option>`}${PP.map(p => `<option value="${esc(p.id)}" ${p.id === x.personId ? 'selected' : ''} ${taken.has(p.id) ? 'disabled' : ''}>${esc(p.name)}${taken.has(p.id) ? ' — 이미 있음' : ''}</option>`).join('')}</select></div>
+        <div class="field"><span class="lbl">액션</span>${segHtml('m-cast-act', Object.keys(MOVES), x.move, MOVES, `data-i="${i}"`, `${i + 1}번째 사람 액션`)}</div>
+        <div class="cast-ops">${n > 1 ? `<button type="button" class="tb" id="cast-up-${i}" data-act="m-cast-up" data-i="${i}" ${i ? '' : 'disabled'} aria-label="${i + 1}번째 사람 위로" title="위로">↑</button><button type="button" class="tb" id="cast-down-${i}" data-act="m-cast-down" data-i="${i}" ${i < n - 1 ? '' : 'disabled'} aria-label="${i + 1}번째 사람 아래로" title="아래로">↓</button>` : ''}<button type="button" class="tb red" id="cast-del-${i}" data-act="m-cast-del" data-i="${i}" aria-label="${i + 1}번째 사람 줄 삭제">삭제</button></div>
+      </div>`;
+    });
+    if (!n) h += `<p class="note pr-none ${d.status === 'tbd' ? '' : 'red'}">출연 큐는 사람이 필요합니다 — 아래에서 사람을 추가하세요</p>`;
+    const free = PP.filter(p => !rows.some(y => y.personId === p.id));
+    h += `</div><div class="quick" style="padding-top:6px"><button type="button" class="tb" id="m-cast-add" data-act="m-cast-add" ${free.length ? '' : 'disabled'}>+ 사람</button>${n ? '<span class="note">함께 들어오면 IN 끼리, 한 사람이 나가며 다른 사람이 들어오면 OUT · IN</span>' : ''}</div></div>`;
   }
   const NOTE_PH = { cast: '예: 마이크 들고 들어와 라태형에게 건넴', light: '예: 리허설 때 밝기 확정', sound: '예: 박수 잦아들면 천천히', stage: '예: 실크 + 실크/릴 + 가부끼 2개 담긴 탑햇' };
   h += `<div class="field"><label for="cue-note">상세 (자유 문장)</label><input type="text" id="cue-note" data-f="note" value="${esc(d.note)}" placeholder="${NOTE_PH[d.dept] || ''}"></div>`;
@@ -5799,9 +5874,6 @@ function modalField(t) {
   else if (f === 'pr') { const x = d.stage.props[Number(t.dataset.i)], k = t.dataset.k; if (x && (k === 'propId' || k === 'action' || k === 'at')) x[k] = v; }
   else if (f === 'pr.name') d.name = v;
   else if (f === 'pr.note') d.note = v;
-  else if (f === 'cast.personId') d.cast.personId = v || null;
-  else if (f === 'cast.move') d.cast.move = v;
-  else if (f === 'cast.text') d.cast.text = v;
   else if (f === 'p.name') d.name = v;
   else if (f === 'p.role') d.role = v;
   else if (f === 'p.note') d.note = v;
@@ -5829,7 +5901,13 @@ function cueField(t) {
   else if (f === 'sound.timeSec') d.sound.timeSec = num(v);
   else if (f === 'pr') { const x = d.stage.props[Number(t.dataset.i)], k = t.dataset.k; if (x && (k === 'propId' || k === 'at')) x[k] = v; }
   else if (f === 'prnew') m.prNew = v;
-  else if (f === 'cast.personId') d.cast.personId = v || null;
+  else if (f === 'cast.row') {
+    // 사람을 바꾸면 다른 줄의 고를 수 있는 사람이 바뀌므로 다시 그린다
+    const x = d.cast.people[Number(t.dataset.i)]; if (!x) return;
+    x.personId = v || null;
+    if (m.err) m.err = '';
+    renderModal(); const el = document.getElementById(t.id); if (el) el.focus();
+  }
   else if (f === 'lt.ch') {
     // 채널은 한 행에만 — 다른 행에서 빼고 이 행에 넣는다. 행 구성이 바뀌므로 다시 그린다
     const i = Number(t.dataset.i), ch = t.dataset.v, rows = d.light.rows;
@@ -5859,7 +5937,21 @@ function cueModalAct(a, el) {
     case 'm-blackout': d.light.rows = [ltRow(STAGE_CH.slice(), 'off')]; d.light.house = 'off'; break;
     case 'm-house': d.light.house = v || null; break;
     case 'm-snd-act': d.sound.action = v; if (v === 'volume' && d.sound.level == null) d.sound.level = 100; break;
-    case 'm-cast-act': d.cast.move = v; break;
+    case 'm-cast-act': { const x = d.cast.people[i]; if (x) x.move = v; break; }
+    case 'm-cast-add': {
+      // 아직 없는 사람 중 처음 — 씬 출연자를 먼저
+      const rows = d.cast.people, e = IDX.byItem.get(m.itemId) || (m.newPoint && IDX.byScene.get(m.newPoint.sceneId));
+      const sc = e ? e.scene.cast : [], free = state.show.people.filter(p => !rows.some(y => y.personId === p.id));
+      const p = free.find(x => sc.includes(x.id)) || free[0];
+      rows.push({ personId: p ? p.id : null, move: rows.length ? rows[rows.length - 1].move : 'in' });
+      break;
+    }
+    case 'm-cast-del': d.cast.people.splice(i, 1); break;
+    case 'm-cast-up': case 'm-cast-down': {
+      const rows = d.cast.people, j = a === 'm-cast-up' ? i - 1 : i + 1;
+      if (rows[i] && rows[j]) { const t = rows[i]; rows[i] = rows[j]; rows[j] = t; }
+      break;
+    }
     case 'm-pr-act': { const x = d.stage.props[i]; if (x) x.action = v; break; }
     case 'm-pr-new': {
       // 새 소품을 모달 안에서 바로 등록 — 같은 이름이 이미 있으면 그것을 쓴다. 소품 목록에는 큐를 저장할 때 들어간다
@@ -5875,6 +5967,10 @@ function cueModalAct(a, el) {
   }
   renderModal();
   if (a === 'm-pr-new') { const f = $('#pr-new-name'); if (f) f.focus(); }
+  // 출연 사람 줄: 다시 그린 뒤에도 키보드 위치를 잃지 않게 — 옮긴 줄의 같은 버튼 · 새 줄의 사람 칸 · 지운 뒤엔 "+ 사람"
+  if (a === 'm-cast-up' || a === 'm-cast-down') { const j = a === 'm-cast-up' ? i - 1 : i + 1, f = $(`#${a === 'm-cast-up' ? 'cast-up' : 'cast-down'}-${j}`); (f && !f.disabled ? f : $(`#cast-person-${j}`) || $('#m-cast-add')).focus(); }
+  if (a === 'm-cast-add') { const f = $(`#cast-person-${d.cast.people.length - 1}`); if (f) f.focus(); }
+  if (a === 'm-cast-del') { const f = $('#m-cast-add'); if (f) f.focus(); }
   return true;
 }
 function saveCue() {
@@ -5888,7 +5984,8 @@ function saveCue() {
     if (d.dept === 'sound' && d.sound.track == null) err = 'BGM 트랙을 고르세요.';
     if (d.dept === 'stage' && !cue.stage.props.length) err = '무대 큐는 소품이 필요합니다 — 소품 행을 추가하거나 새 소품을 등록하세요 (아직 모르면 "미정").';
     else if (d.dept === 'stage' && d.stage.props.some(x => !x.propId)) err = '소품 행에서 소품을 고르거나 그 행을 삭제하세요.';
-    if (d.dept === 'cast' && !d.cast.personId) err = '사람을 선택하세요.';
+    if (d.dept === 'cast' && !d.cast.people.some(x => x.personId)) err = '사람을 선택하세요.';
+    else if (d.dept === 'cast' && d.cast.people.some(x => !x.personId)) err = '사람 줄에서 사람을 고르거나 그 줄을 삭제하세요.';
   }
   if (err) { m.err = err; renderModal(); return; }
   // 모달에서 등록한 소품 중 이 큐가 쓰는 것만 소품 목록에 넣는다
@@ -6400,10 +6497,9 @@ function act(a, el) {
     case 'person-del': {
       const id = el.dataset.person, pp = S.people.find(p => p.id === id); if (!pp) break;
       delSnap('사람 ' + (pp.name || ''));
-      S.people = S.people.filter(p => p.id !== id);
-      S.parts.forEach(p => p.scenes.forEach(s => { s.cast = s.cast.filter(x => x !== id); }));
+      const rows = dropPerson(S, id);
       if (state.role === 'p:' + id) { state.role = 'all'; savePrefs(); }
-      commit(); delToast('삭제했습니다 — 대사·큐의 참조는 "(삭제된 사람)" 으로 표시됩니다'); break;
+      commit(); delToast(`삭제했습니다 — ${rows ? `여러 사람 출연 큐 ${rows}곳에서 빠짐, ` : ''}대사·한 사람 출연 큐의 참조는 "(삭제된 사람)" 으로 표시됩니다`); break;
     }
     case 'person-save': {
       const m = state.modal, name = m.draft.name.trim();
@@ -6502,7 +6598,7 @@ function act(a, el) {
     case 'pl-open': if (state.menuOpen) { state.menuOpen = false; renderTop(); } AU.shown = true; updatePlayer(); break;
     case 'm-dept': state.modal.draft.dept = el.dataset.dept; state.modal.err = ''; renderModal(); break;
     case 'm-quick': state.modal.draft.trigger = '이전 큐 후'; state.modal.draft.offsetSec = Number(el.dataset.n); renderModal(); break;
-    case 'm-lt-act': case 'm-lt-add': case 'm-lt-del': case 'm-blackout': case 'm-house': case 'm-snd-act': case 'm-cast-act': case 'm-pr-act': case 'm-pr-new':
+    case 'm-lt-act': case 'm-lt-add': case 'm-lt-del': case 'm-blackout': case 'm-house': case 'm-snd-act': case 'm-cast-act': case 'm-cast-add': case 'm-cast-del': case 'm-cast-up': case 'm-cast-down': case 'm-pr-act': case 'm-pr-new':
       cueModalAct(a, el); break;
     case 'm-save': saveCue(); break;
     case 'm-del': { const m = state.modal; const ok = deleteCue(m.itemId, m.cueId); closeModal(true); commit(); if (ok) delToast('큐를 삭제했습니다'); break; }

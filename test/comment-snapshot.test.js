@@ -108,7 +108,7 @@ test('v6 → v8: snapshot 의 무대 큐 소품 동작(stage.props)도 보존되
     { version: 6, props: [{ id: 'pr-hat', name: '탑햇', note: '' }], preShowProps: [] });
   raw.parts[0].scenes[0].items[0].cues = plain(it.cues);
   const s = plain(FE.migrate(raw));
-  assert.equal(s.version, 9);
+  assert.equal(s.version, 10);
   assert.deepEqual(s.parts[0].scenes[0].items[0].comments[0].snapshot.cues[1].stage, { props: [{ propId: 'pr-hat', action: 'in', at: '테이블' }] });
   const v = validateShow(s);
   assert.deepEqual(v.errors, []);
@@ -125,7 +125,7 @@ test('v6 → v8: snapshot 이 없는 v6 공연(memo 비어 있음)은 version �
     { id: 'show-x', revision: '', updatedAt: '2026-11-01T00:00:00.000Z', preShowSetup: '', version: 6, props: [], preShowProps: [] });
   raw.parts[0].scenes[0].items[0].cues = [light('q-1', 50), sound('q-2')];
   const once = plain(FE.migrate(raw));
-  assert.equal(once.version, 9);
+  assert.equal(once.version, 10);
   const v6 = Object.assign(plain(once), { version: 6 });
   assert.deepEqual(plain(FE.migrate(v6)), once, 'v6 으로 다시 읽어도 같다');
   assert.equal('snapshot' in once.parts[0].scenes[0].items[0].comments[0], false);

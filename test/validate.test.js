@@ -35,7 +35,7 @@ test('상수가 index.html 과 같다', () => {
   // 프런트가 내보내는 version = 서버 스키마 SHOW_VER (MCP ops 도 이 값으로 저장)
   assert.equal(plain(FE.migrate({ version: 6, parts: [] })).version, SHOW_VER);
   assert.ok(CONST.SHOW_VERS.includes(SHOW_VER) && SHOW_VER === Math.max(...CONST.SHOW_VERS), 'SHOW_VER 는 읽을 수 있는 형식 중 가장 새 것');
-  assert.equal(plain(FE.migrate({ version: 7, parts: [] })).version, 9);
+  assert.equal(plain(FE.migrate({ version: 7, parts: [] })).version, 10);
   assert.equal(FE.ACT_RE.source, CONST.ACT_RE.source);
 });
 
@@ -72,8 +72,8 @@ test('오류: 의미가 바뀌는 값은 경로와 함께', () => {
   sc.items[0].cues[1].offsetSec = '7초';
   sc.items[0].cues[1].sound.action = 'pause';
   sc.items[1].speaker = '조예준';
-  sc.items[1].cues[0].cast.personId = 'p-nobody';
-  sc.items[1].cues[0].cast.move = 'enter';
+  sc.items[1].cues[0].cast.people[0].personId = 'p-nobody';
+  sc.items[1].cues[0].cast.people[0].move = 'enter';
   sc.items[1].kind = 'dialog';
   sc.type = 'magic';
   s.parts[0].scenes[1].cast = ['박대훈'];
@@ -83,12 +83,12 @@ test('오류: 의미가 바뀌는 값은 경로와 함께', () => {
   const P = 'parts[0].scenes[0]';
   assert.deepEqual(paths(v.errors).sort(), [
     `${P}.items[0].cues[0].dept`, `${P}.items[0].cues[1].offsetSec`, `${P}.items[0].cues[1].sound.action`,
-    `${P}.items[1].speaker`, `${P}.items[1].cues[0].cast.personId`, `${P}.items[1].cues[0].cast.move`, `${P}.items[1].kind`,
+    `${P}.items[1].speaker`, `${P}.items[1].cues[0].cast.people[0].personId`, `${P}.items[1].cues[0].cast.people[0].move`, `${P}.items[1].kind`,
     `${P}.type`, 'parts[0].scenes[1].cast[0]', 'parts[0].scenes[1].id', 'tracks[1].no'
   ].sort());
   const sp = v.errors.find(e => e.path === `${P}.items[1].speaker`);
   assert.match(sp.msg, /"조예준" 는 이름입니다 — people\[\]\.id 인 "p-yejun" 를 쓰세요/);
-  assert.match(v.errors.find(e => e.path === `${P}.items[1].cues[0].cast.personId`).msg, /"p-nobody" 가 people 에 없습니다/);
+  assert.match(v.errors.find(e => e.path === `${P}.items[1].cues[0].cast.people[0].personId`).msg, /"p-nobody" 가 people 에 없습니다/);
   assert.match(sp.where, /1부 › 씬 1\(\?\) › #2 "소개합니다 박대훈"/);
 });
 
@@ -164,7 +164,7 @@ test('경고: 지문 표기 규칙 — 괄호 한 쌍 (…)', () => {
 
 test('소품이 있는 정상 문서는 오류·경고 없음, v5 도 경고 없음 · 실데이터(v5)는 소품 없는 무대 큐만 경고', () => {
   const s = docExample();
-  assert.equal(s.version, 9);
+  assert.equal(s.version, 10);
   assert.ok(s.props.length && s.preShowProps.length);
   assert.deepEqual(validateShow(s).warnings, []);
   const v5 = plain(s); v5.version = 5; delete v5.props; delete v5.preShowProps;
@@ -229,7 +229,7 @@ test('action-echo: 정리 전 실데이터(test/fixtures/backstage-part1-v5.json
 
 test('현재 실데이터(cues/backstage-part1.json, 2026-11-18 배포본 rev 85): v9, 오류·경고 없음 — action-echo 지문 22개는 큐 지점, 무대 큐 3개는 소품 지정, 하우스 음악 PLAY 시작 볼륨 50', () => {
   const s = unwrapShow(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cues', 'backstage-part1.json'), 'utf8')));
-  assert.equal(s.version, SHOW_VER, '배포본 사본은 현재 형식(v9) — rev 85 에서 PLAY 시작 볼륨을 넣으며 올라갔다');
+  assert.equal(s.version, 9, '배포본 사본은 v9 — rev 85 에서 PLAY 시작 볼륨을 넣으며 올라갔다. v10(여러 사람 출연 큐)은 불러올 때 옮겨진다');
   assert.ok(CONST.SHOW_VERS.includes(s.version));
   const v = validateShow(s);
   assert.deepEqual(v.errors, []);
@@ -312,7 +312,7 @@ test('v8: 객석(house)에 on/off 외 액션이나 밝기·색·시간이 있으
 test('v8 migrate: memo · text → note, 소품 없는 무대 큐는 남김, 객석은 on/off 로 접고 흔적, 왕복해도 같다', () => {
   const real = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'backstage-part1-v5.json'), 'utf8'));
   const m = plain(FE.migrate(unwrapShow(real)));
-  assert.equal(m.version, 9);
+  assert.equal(m.version, 10);
   const cues = m.parts.flatMap(p => p.scenes.flatMap(s => s.items.flatMap(i => i.cues)));
   const raw = unwrapShow(real).parts.flatMap(p => p.scenes.flatMap(s => s.items.flatMap(i => i.cues)));
   assert.equal(cues.length, raw.length, '큐를 하나도 잃지 않는다');
@@ -332,7 +332,7 @@ test('v8 migrate: memo · text → note, 소품 없는 무대 큐는 남김, 객
   ] }] }] }] });
   const q = plain(both).parts[0].scenes[0].items[0].cues;
   assert.equal(q[0].note, '마이크 들고 / 확인 필요');
-  assert.deepEqual(q[0].cast, { personId: null, move: 'in' });
+  assert.deepEqual(q[0].cast, { people: [{ personId: null, move: 'in' }] });
   assert.equal(q[1].note, '같은 말', '같은 문장은 한 번만');
   assert.deepEqual(q[1].stage, { props: [] });
   assert.deepEqual(q[2].light.channels[0], { ch: 'house', action: 'on', dim: null, color: null, colorName: null, timeSec: null });
@@ -416,4 +416,73 @@ test('빈 문단에 붙은 큐(empty-cued): 본문이 빈 대사·지문에 큐 
   its[1].kind = 'line'; its[1].cues = []; its[1].isCue = false; its[1].label = null;
   v = validateShow(s);
   assert.equal(v.warnings.filter(x => x.code === 'empty-cued').length, 0);
+});
+
+// ---- v10: 출연 큐 하나에 여러 사람 — cast { people: [{ personId, move }] }
+const castShow = (version, cast, extra) => Object.assign({
+  id: 'show-x', version, title: 'x',
+  people: [{ id: 'p-a', name: '조예준', role: 'mc', note: '' }, { id: 'p-b', name: '라태형', role: 'performer', note: '' }, { id: 'p-c', name: '박대훈', role: 'performer', note: '' }],
+  props: [], preShowProps: [], tracks: [],
+  parts: [{ id: 'pt', name: '1부', scenes: [{ id: 's', type: 'act', title: 't', cast: [], durationSec: null, setup: '', comments: [], items: [
+    { id: 'i', kind: 'cue', speaker: null, text: '', label: null, isCue: true, comments: [], cues: [{ id: 'q', dept: 'cast', trigger: '암전 후', offsetSec: null, note: '', status: 'set', cast }] }
+  ] }] }]
+}, extra);
+const castOf = s => s.parts[0].scenes[0].items[0].cues[0].cast;
+
+test('v10 migrate: v9 한 사람 출연 큐 { personId, move } → people 한 줄 (사람·액션 그대로, 빈 사람도 줄은 남김) · 여러 사람은 순서 그대로', () => {
+  const m = plain(FE.migrate(castShow(9, { personId: 'p-a', move: 'out' })));
+  assert.equal(m.version, SHOW_VER);
+  assert.deepEqual(castOf(m), { people: [{ personId: 'p-a', move: 'out' }] });
+  assert.deepEqual(plain(FE.migrate(m)), m, '다시 불러와도 같다');
+  assert.deepEqual(validateShow(m), { errors: [], warnings: [] });
+  // 사람 없는 옛 큐 — "출연자 미정 OUT" 의 OUT 을 잃지 않는다
+  assert.deepEqual(castOf(plain(FE.migrate(castShow(9, { personId: null, move: 'out' })))), { people: [{ personId: null, move: 'out' }] });
+  // 모르는 move 는 기존 규칙 그대로 in
+  assert.deepEqual(castOf(plain(FE.migrate(castShow(9, { personId: 'p-a', move: 'enter' })))), { people: [{ personId: 'p-a', move: 'in' }] });
+  // v10 여러 사람: 순서·액션 그대로, 객체가 아닌 줄만 버린다
+  const rows = [{ personId: 'p-b', move: 'in' }, { personId: 'p-a', move: 'out' }, { personId: 'p-c', move: 'in' }];
+  const m2 = plain(FE.migrate(castShow(10, { people: rows.concat(['x', null]) })));
+  assert.deepEqual(castOf(m2), { people: rows });
+  // 실데이터(v9): 출연 큐 13개가 모두 한 줄 people 로, 사람·액션 그대로
+  const raw = unwrapShow(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cues', 'backstage-part1.json'), 'utf8')));
+  const before = raw.parts.flatMap(p => p.scenes.flatMap(s => s.items.flatMap(i => i.cues))).filter(c => c.dept === 'cast');
+  const after = plain(FE.migrate(raw)).parts.flatMap(p => p.scenes.flatMap(s => s.items.flatMap(i => i.cues))).filter(c => c.dept === 'cast');
+  assert.equal(after.length, 13);
+  assert.deepEqual(after.map(c => c.cast), before.map(c => ({ people: [{ personId: c.cast.personId, move: c.cast.move }] })));
+});
+
+test('v10 검증: people 줄마다 사람 참조·move, 빈 목록·같은 사람 두 번은 경고, v10 의 옛 모양은 legacy-field 경고 (v9 는 정상)', () => {
+  const strip = p => p.replace('parts[0].scenes[0].items[0].cues[0].', '');
+  const W = s => validateShow(s).warnings.map(w => [strip(w.path), w.code || '']);
+  const E = s => validateShow(s).errors.map(w => strip(w.path));
+  // 정상: 둘 IN + 하나 OUT
+  assert.deepEqual(validateShow(castShow(10, { people: [{ personId: 'p-a', move: 'in' }, { personId: 'p-b', move: 'in' }, { personId: 'p-c', move: 'out' }] })), { errors: [], warnings: [] });
+  // 빈 목록 — "출연 대상이 없습니다"
+  assert.deepEqual(W(castShow(10, { people: [] })), [['cast.people', '']]);
+  assert.match(validateShow(castShow(10, { people: [] })).warnings[0].msg, /출연 대상이 없습니다/);
+  // 같은 사람 두 번
+  assert.deepEqual(W(castShow(10, { people: [{ personId: 'p-a', move: 'in' }, { personId: 'p-a', move: 'out' }] })), [['cast.people[1].personId', 'cast-dup']]);
+  // 사람 빈 줄 · move 없음(채워짐) · 모르는 필드
+  assert.deepEqual(W(castShow(10, { people: [{ personId: null, move: 'out' }, { personId: 'p-b' }, { personId: 'p-c', move: 'in', at: '왼쪽' }] })).sort(),
+    [['cast.people[0].personId', ''], ['cast.people[1].move', ''], ['cast.people[2].at', '']].sort());
+  // 오류: 모르는 사람 · 이름을 id 자리에 · 틀린 move · 줄이 객체가 아님 · people 이 배열이 아님
+  assert.deepEqual(E(castShow(10, { people: [{ personId: 'p-x', move: 'in' }, { personId: '라태형', move: 'in' }, { personId: 'p-c', move: 'enter' }, 'p-a'] })),
+    ['cast.people[0].personId', 'cast.people[1].personId', 'cast.people[2].move', 'cast.people[3]']);
+  assert.match(validateShow(castShow(10, { people: [{ personId: '라태형', move: 'in' }] })).errors[0].msg, /"라태형" 는 이름입니다 — people\[\]\.id 인 "p-b"/);
+  assert.deepEqual(E(castShow(10, { people: 'p-a' })), ['cast.people']);
+  // 옛 모양: v9 는 정상, v10 이면 legacy-field 경고(불러올 때 한 줄로) — 사람 참조는 그대로 검사
+  assert.deepEqual(validateShow(castShow(9, { personId: 'p-a', move: 'in' })), { errors: [], warnings: [] });
+  assert.deepEqual(W(castShow(10, { personId: 'p-a', move: 'in' })), [['cast', 'legacy-field']]);
+  assert.deepEqual(E(castShow(9, { personId: 'p-x', move: 'in' })), ['cast.personId']);
+  assert.deepEqual(W(castShow(9, { personId: null, move: 'in' })), [['cast.personId', '']]);
+  // people 과 옛 필드가 함께 있으면 옛 필드는 모르는 필드로 버려진다
+  assert.deepEqual(W(castShow(10, { people: [{ personId: 'p-a', move: 'in' }], personId: 'p-b' })), [['cast.personId', '']]);
+});
+
+test('v10 action-echo: 여러 사람 출연 큐 — 지문이 그 사람들의 이름·액션뿐이면 경고, 큐에 없는 사람이면 아님', () => {
+  const look = { person: id => ({ 'p-a': '조예준', 'p-b': '라태형' })[id] || '', prop: () => '', track: () => '' };
+  const it = text => ({ kind: 'action', text, cues: [{ dept: 'cast', trigger: '', cast: { people: [{ personId: 'p-a', move: 'out' }, { personId: 'p-b', move: 'in' }] } }] });
+  assert.equal(actionEcho(it('(조예준 아웃 라태형 인)'), look), true);
+  assert.equal(actionEcho(it('(예준 퇴장, 태형 등장)'), look), true);
+  assert.equal(actionEcho(it('(박대훈 인)'), look), false);
 });

@@ -327,7 +327,7 @@ test('코멘트 snapshot(v7): 병합해도 버리지 않는다 — 이 기기·�
   cs.forEach(c => assert.deepEqual(c.snapshot, snapOf(it), c.id + ' snapshot 그대로'));
   assert.equal(find(r.show, it.id).text, it.text + ' (로컬)');
   assert.equal(find(r.show, other.id).text, other.text);
-  assert.equal(r.show.version, 9);
+  assert.equal(r.show.version, 10);
   assert.deepEqual(validateShow(r.show).errors, []);
   assert.deepEqual(migrate(r.show), r.show, '사이트가 다시 읽어도 그대로');
 });
@@ -583,4 +583,52 @@ test('무작위: 양쪽에 MCP 식 편집을 섞어도 항상 병합되고, 충�
   }
   assert.ok(clean > 20, `충돌 없는 경우가 너무 적다 (${clean})`);
   assert.ok(conflicted > 3, `충돌 난 경우가 너무 적다 (${conflicted}) — 시드를 바꿨으면 확인`);
+});
+
+// v10: 출연 큐 사람 줄(cast.people)은 사람 id 로 맞춘다
+test('출연 큐 사람 줄(v10): 양쪽이 다른 사람을 더하면 둘 다, 한쪽이 뺀 사람은 빠지고, 같은 사람의 액션을 다르게 고치면 충돌(서버 것)', () => {
+  const base = backstage(); // q-c = 조예준 IN (v5 → migrate 로 people 한 줄)
+  assert.deepEqual(find(base, 'q-c').cast, { people: [{ personId: 'p-yejun', move: 'in' }] });
+  const row = (personId, move) => ({ personId, move });
+  // 서버(에이전트)는 라태형 IN 을, 이 기기는 박대훈 OUT 을 더함 → 둘 다, 서버 순서 + 이 기기 것은 앞 이웃 뒤에
+  let remote = remoteOps(base, [{ op: 'set', id: 'q-c', fields: { cast: { people: [row('p-yejun', 'in'), row('p-taehyung', 'in')] } } }]);
+  let local = plain(base); find(local, 'q-c').cast.people.push(row('p-daehoon', 'out'));
+  let r = merge(base, local, remote);
+  assert.deepEqual(r.conflicts, []);
+  assert.deepEqual(find(r.show, 'q-c').cast.people, [row('p-yejun', 'in'), row('p-daehoon', 'out'), row('p-taehyung', 'in')]);
+  assert.deepEqual(validateShow(r.show).errors, []);
+  // 한쪽이 빼고 다른 쪽은 그대로 → 빠짐, 다른 쪽에서 더한 사람은 남음
+  const base2 = plain(r.show);
+  remote = remoteOps(base2, [{ op: 'set', id: 'q-c', fields: { cast: { people: [row('p-yejun', 'in'), row('p-daehoon', 'out')] } } }]); // 라태형 뺌
+  local = plain(base2); find(local, 'q-c').cast.people[0].move = 'move'; // 조예준 액션만 바꿈
+  r = merge(base2, local, remote);
+  assert.deepEqual(r.conflicts, []);
+  assert.deepEqual(find(r.show, 'q-c').cast.people, [row('p-yejun', 'move'), row('p-daehoon', 'out')]);
+  // 같은 사람의 액션을 양쪽에서 다르게 → 충돌, 서버 것. 다른 줄의 변경은 그대로 합쳐진다
+  remote = remoteOps(base2, [{ op: 'set', id: 'q-c', fields: { cast: { people: [row('p-yejun', 'out'), row('p-daehoon', 'out'), row('p-taehyung', 'in')] } } }]);
+  local = plain(base2); find(local, 'q-c').cast.people[0].move = 'move'; find(local, 'q-c').cast.people[2].move = 'out';
+  r = merge(base2, local, remote);
+  assert.equal(r.conflicts.length, 1);
+  assert.match(r.conflicts[0].text, / — 출연: 양쪽에서 다르게 고침$/);
+  assert.deepEqual(find(r.show, 'q-c').cast.people, [row('p-yejun', 'out'), row('p-daehoon', 'out'), row('p-taehyung', 'out')]);
+  // 한쪽이 빼고 다른 쪽이 그 사람의 액션을 바꿈 → 충돌, 서버 것(서버가 뺐으면 빠진 채)
+  remote = remoteOps(base2, [{ op: 'set', id: 'q-c', fields: { cast: { people: [row('p-yejun', 'in'), row('p-daehoon', 'out')] } } }]);
+  local = plain(base2); find(local, 'q-c').cast.people[2].move = 'out';
+  r = merge(base2, local, remote);
+  assert.equal(r.conflicts.length, 1);
+  assert.deepEqual(find(r.show, 'q-c').cast.people, [row('p-yejun', 'in'), row('p-daehoon', 'out')]);
+  // 순서만 이 기기에서 바꿈 + 서버는 액션만 → 이 기기 순서 + 서버 액션
+  remote = remoteOps(base2, [{ op: 'set', id: 'q-c', fields: { cast: { people: [row('p-yejun', 'in'), row('p-daehoon', 'in'), row('p-taehyung', 'in')] } } }]);
+  local = plain(base2); find(local, 'q-c').cast.people.reverse();
+  r = merge(base2, local, remote);
+  assert.deepEqual(r.conflicts, []);
+  assert.deepEqual(find(r.show, 'q-c').cast.people, [row('p-taehyung', 'in'), row('p-daehoon', 'in'), row('p-yejun', 'in')]);
+  // 사람 id 로 맞출 수 없는 줄(빈 사람)이 있으면 통째 — 다르게 고치면 충돌, 서버 것 (깨지지 않는다)
+  const base3 = plain(base2); find(base3, 'q-c').cast.people.push(row(null, 'out'));
+  remote = plain(base3); find(remote, 'q-c').cast.people[3].personId = 'p-taehyung';
+  local = plain(base3); find(local, 'q-c').cast.people.pop();
+  r = merge(base3, local, remote);
+  assert.equal(r.ok, true);
+  assert.equal(r.conflicts.length, 1);
+  assert.deepEqual(find(r.show, 'q-c').cast, find(remote, 'q-c').cast);
 });

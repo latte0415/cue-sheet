@@ -179,3 +179,31 @@ test('빈 문단에 붙은 큐: 큐 지점이 아닌 문단의 본문이 비었�
   assert.equal(FE.checkFilter(r, 'all').total, 1);
   assert.equal(keys(FE.checkFilter(r, 'stage')).emptyq, 1);
 });
+
+// v10: 한 큐에 여러 사람 — 인/아웃 연속성·출연 명단은 사람마다 따로, 공연자 시점에서는 그 큐의 모든 사람에게 보인다
+test('여러 사람 출연 큐(v10): 인/아웃 반복·출연 명단은 사람마다, 공연자 필터는 큐의 모든 사람', () => {
+  const multi = (rows, extra) => cue('cast', { people: rows.map(([personId, move]) => ({ personId, move })) }, extra);
+  const s = showOf([
+    scene('s1', 'act', ['a', 'b'], [
+      item([multi([['a', 'in'], ['b', 'in']])]), // 둘이 함께 IN
+      item([multi([['a', 'out'], ['b', 'in'], ['c', 'in']])]), // a OUT 은 정상, b 는 IN 다음 또 IN, c 는 씬 출연에 없음
+      item([multi([['a', 'out'], ['c', 'move']])]), // a 는 OUT 다음 또 OUT, MOVE 는 연속성·명단에 안 셈
+      item([castCue('b', 'out')]) // 옛 모양 한 사람도 그대로
+    ])
+  ]);
+  const r = FE.checkCollect(input(s));
+  const cast = plain(r.groups.find(g => g.k === 'cast').list);
+  assert.deepEqual(cast.map(x => [x.person, /다음 또 (IN|OUT)/.exec(x.text)[1]]), [['b', 'IN'], ['a', 'OUT']]);
+  assert.match(cast[0].text, /조예준 IN 다음 또 IN/);
+  assert.match(cast[1].text, /박대훈 OUT 다음 또 OUT/);
+  const cl = plain(r.groups.find(g => g.k === 'castlist').list);
+  assert.deepEqual(cl.map(x => [x.person, x.fix && x.fix.person]), [['c', 'c']], 'c 의 IN 만 — MOVE 는 명단을 보지 않는다');
+  // 미정·트리거 같은 큐 단위 항목은 큐의 모든 사람의 공연자 시점에 보인다
+  const t = showOf([scene('s1', 'act', ['a', 'b'], [item([multi([['a', 'in'], ['b', 'in']], { status: 'tbd', trigger: '' })])])]);
+  const rt = FE.checkCollect(input(t));
+  const tbd = plain(rt.groups.find(g => g.k === 'tbd').list[0]);
+  assert.deepEqual([tbd.person, tbd.people], ['a', ['a', 'b']]);
+  assert.deepEqual(keys(FE.checkFilter(rt, 'p:a')), { tbd: 1, trig: 1 });
+  assert.deepEqual(keys(FE.checkFilter(rt, 'p:b')), { tbd: 1, trig: 1 }, '둘째 사람도 자기 큐로 본다');
+  assert.deepEqual(keys(FE.checkFilter(rt, 'p:c')), {});
+});

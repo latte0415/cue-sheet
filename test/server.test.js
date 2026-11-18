@@ -326,17 +326,33 @@ test('옛 화면 차단: 저장본보다 낮은 version 의 PUT 은 426 client_o
 });
 
 test('옛 화면 차단 (v9): PLAY 시작 볼륨이 있는 v9 저장본에 v8 화면(저장할 때 PLAY 의 level 을 지움)이 저장하면 426, level 은 그대로', async () => {
-  assert.equal(SHOW_VER, 9);
   const sq = level => ({ id: 'q1', dept: 'sound', trigger: '', offsetSec: null, note: '', status: 'set', sound: { track: 1, action: 'play', timeSec: null, level } });
   const v = (title, version, level) => show(title, { version, props: [], preShowProps: [], tracks: [{ id: 'tr1', no: 1, title: '하우스 음악' }],
     parts: [{ id: 'pt1', name: '1부', scenes: [{ id: 's1', items: [{ id: 'i1', kind: 'action', text: '(하우스 오픈)', cues: [sq(level)] }] }] }] });
   const { id } = await (await fetch(S.base + '/api/shows', J('POST', { show: v('하우스 오픈', 9, 50) }))).json();
   let r = await fetch(`${S.base}/api/shows/${id}`, J('PUT', { baseRev: 1, show: v('v8 화면', 8, null) }));
   assert.equal(r.status, 426);
-  assert.deepEqual(await r.json().then(x => [x.error, x.version, x.schema]), ['client_outdated', 9, 9]);
+  assert.deepEqual(await r.json().then(x => [x.error, x.version, x.schema]), ['client_outdated', 9, SHOW_VER]);
   const g = await (await fetch(`${S.base}/api/shows/${id}`)).json();
   assert.equal(g.show.parts[0].scenes[0].items[0].cues[0].sound.level, 50);
   r = await fetch(`${S.base}/api/shows/${id}`, J('PUT', { baseRev: 1, show: v('v9 화면', 9, 60) }));
+  assert.equal(r.status, 200);
+});
+
+test('옛 화면 차단 (v10): 여러 사람 출연 큐가 있는 v10 저장본에 v9 화면(출연 큐가 한 사람)이 저장하면 426, 사람 줄은 그대로', async () => {
+  assert.equal(SHOW_VER, 10);
+  const people = [{ id: 'p-a', name: '조예준', role: 'mc', note: '' }, { id: 'p-b', name: '라태형', role: 'performer', note: '' }];
+  const cq = cast => ({ id: 'q1', dept: 'cast', trigger: '', offsetSec: null, note: '', status: 'set', cast });
+  const v = (title, version, cast) => show(title, { version, people, props: [], preShowProps: [], tracks: [],
+    parts: [{ id: 'pt1', name: '1부', scenes: [{ id: 's1', items: [{ id: 'i1', kind: 'cue', text: '', cues: [cq(cast)] }] }] }] });
+  const two = { people: [{ personId: 'p-a', move: 'out' }, { personId: 'p-b', move: 'in' }] };
+  const { id } = await (await fetch(S.base + '/api/shows', J('POST', { show: v('교대', 10, two) }))).json();
+  let r = await fetch(`${S.base}/api/shows/${id}`, J('PUT', { baseRev: 1, show: v('v9 화면', 9, { personId: 'p-a', move: 'out' }) }));
+  assert.equal(r.status, 426);
+  assert.deepEqual(await r.json().then(x => [x.error, x.version, x.schema]), ['client_outdated', 10, 10]);
+  const g = await (await fetch(`${S.base}/api/shows/${id}`)).json();
+  assert.deepEqual(g.show.parts[0].scenes[0].items[0].cues[0].cast, two);
+  r = await fetch(`${S.base}/api/shows/${id}`, J('PUT', { baseRev: 1, show: v('v10 화면', 10, { people: two.people.slice(0, 1) }) }));
   assert.equal(r.status, 200);
 });
 

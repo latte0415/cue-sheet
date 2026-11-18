@@ -13,7 +13,7 @@ function frontend() {
   const a = html.indexOf('/* ================= 상수'), b = html.indexOf('/* ================= 상태');
   assert.ok(a > 0 && b > a, 'index.html 에서 상수~상태 구간 표시를 찾지 못했습니다 (구간 주석이 바뀌었으면 이 테스트를 고치세요)');
   assert.ok(html.slice(a, b).includes('/* ================= 삭제 되돌리기: 모델'), '삭제 되돌리기 모델 구간이 상수~상태 안에 있어야 합니다');
-  return vm.runInNewContext(html.slice(a, b) + '\n;({ relabel, migrate, pruneCuePoint, delRestore, delUnchanged, histPush, undoPick })', {});
+  return vm.runInNewContext(html.slice(a, b) + '\n;({ relabel, migrate, pruneCuePoint, delRestore, delUnchanged, histPush, undoPick, dropPerson })', {});
 }
 const FE = frontend();
 const plain = o => JSON.parse(JSON.stringify(o));
@@ -33,8 +33,10 @@ const findItem = (s, id) => entries(s).find(e => e.it.id === id);
 
 // 화면이 하는 것과 같이: 직전 JSON → 지우기 → 저장(relabel) → 직후 JSON
 function del(s, fn) {
-  const before = J(s);
-  fn(s);
+  // fn 이 함수를 돌려주면 그 전까지는 준비(지우기 전 상태 만들기), 돌려준 함수가 실제 삭제
+  let before = J(s);
+  const go = fn(s);
+  if (typeof go === 'function') { FE.relabel(s); before = J(s); go(); }
   FE.relabel(s);
   return { before, after: J(s), seq: 1 };
 }
@@ -49,6 +51,13 @@ const OPS = {
   '씬': s => { const p = s.parts[0]; p.scenes.splice(2, 1); },
   '파트': s => { s.parts.splice(0, 1); },
   '사람 (씬 출연자에서도 빠짐)': s => { const id = s.people[0].id; s.people = s.people.filter(p => p.id !== id); scenes(s).forEach(sc => { sc.cast = sc.cast.filter(x => x !== id); }); },
+  '사람 (여러 사람 출연 큐에서는 그 줄만 빠짐 — v10)': s => {
+    // 출연 큐 하나를 3명으로 만들어 두고(지우기 전 상태) 가운데 사람을 지운다
+    const c = entries(s).flatMap(x => x.it.cues).find(q => q.dept === 'cast');
+    const ids = s.people.map(p => p.id);
+    c.cast.people = [{ personId: ids[1], move: 'in' }, { personId: ids[0], move: 'out' }, { personId: ids[2], move: 'in' }];
+    return () => { assert.equal(FE.dropPerson(s, ids[0]), 1 + entries(s).flatMap(x => x.it.cues).filter(q => q !== c && q.dept === 'cast' && q.cast.people.length > 1).length); assert.deepEqual(plain(c.cast.people.map(r => r.personId)), [ids[1], ids[2]]); };
+  },
   '소품 (공연 전 무대 소품에서도 빠짐)': s => { const id = s.preShowProps[0].propId; s.props = s.props.filter(p => p.id !== id); s.preShowProps = s.preShowProps.filter(x => x.propId !== id); },
   '공연 전 무대 소품 한 줄': s => { assert.ok(s.preShowProps.length, '공연 전 소품이 실데이터에 있어야 합니다'); s.preShowProps.splice(0, 1); },
   '트랙': s => { s.tracks.splice(1, 1); }
@@ -162,4 +171,19 @@ test('undoPick: 이동과 삭제 중 순서 번호가 큰 쪽', () => {
   assert.equal(FE.undoPick(null, { seq: 3 }), 'del');
   assert.equal(FE.undoPick({ seq: 3 }, { seq: 5 }), 'del');
   assert.equal(FE.undoPick({ seq: 7 }, { seq: 5 }), 'mv');
+});
+
+test('사람 삭제 뒤 같은 출연 큐의 다른 줄을 고쳐도, 되돌리면 지운 사람의 줄이 제자리에 (v10 여러 사람 출연 큐)', () => {
+  const s = show(), ids = s.people.map(p => p.id);
+  const c = entries(s).flatMap(x => x.it.cues).find(q => q.dept === 'cast');
+  c.cast.people = [{ personId: ids[1], move: 'in' }, { personId: ids[0], move: 'out' }, { personId: ids[2], move: 'in' }];
+  FE.relabel(s);
+  const e = del(s, x => { FE.dropPerson(x, ids[0]); });
+  assert.deepEqual(plain(c.cast.people), [{ personId: ids[1], move: 'in' }, { personId: ids[2], move: 'in' }]);
+  c.cast.people[1].move = 'move'; // 삭제 뒤에 남은 줄을 고침
+  const r = FE.delRestore(e, plain(s), M, FE.relabel);
+  assert.equal(r.ok, true); assert.equal(r.conflicts, 0);
+  const got = entries(r.show).flatMap(x => x.it.cues).find(q => q.id === c.id);
+  assert.deepEqual(plain(got.cast.people), [{ personId: ids[1], move: 'in' }, { personId: ids[0], move: 'out' }, { personId: ids[2], move: 'move' }]);
+  assert.ok(r.show.people.some(p => p.id === ids[0]), '사람도 되살아난다');
 });
