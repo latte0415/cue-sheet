@@ -218,6 +218,40 @@ test('다른 부모로 옮기기는 부모 필드 — 내용 편집과 합쳐지
   assert.deepEqual(find(r.show, 'pt-2').scenes.map(s => [s.id, s.title]), [['s-3o', '로컬 엔딩']]);
 });
 
+test('큐 여러 개의 부모 변경(Q 묶음 통째로 이동): 서버 편집과 합쳐지고, 서버가 그중 하나를 딴 데로 옮겼으면 그 큐만 충돌', () => {
+  const base = backstage();
+  // 이 기기: i-7 의 큐 전부(q-5 음향, q-6 조명)를 본문은 두고 i-k 로 — 브라우저 relocateCueGroup + save 와 같은 결과
+  const groupMove = () => {
+    const l = plain(base), a = find(l, 'i-7'), b = find(l, 'i-k');
+    b.cues.push(...a.cues.splice(0)); a.isCue = false; b.isCue = true;
+    relabel(l);
+    return l;
+  };
+  // 서버: q-6 메모 + 원래 문단 i-7 에 새 큐 + i-k 본문 고침
+  let remote = remoteOps(base, [
+    { op: 'set', id: 'q-6', fields: { memo: '서버 메모' } },
+    { op: 'add', kind: 'cue', parent: 'i-7', data: { id: 'q-R7', dept: 'stage', stage: { text: '서버 무대' } } },
+    { op: 'set', id: 'i-k', fields: { text: '서버 본문' } },
+  ]);
+  let r = merge(base, groupMove(), remote);
+  assert.deepEqual(r.conflicts, []);
+  assert.deepEqual(find(r.show, 'i-k').cues.map(c => c.id), ['q-5', 'q-6'], '옮긴 큐는 원래 순서대로 새 문단에');
+  assert.equal(find(r.show, 'q-6').memo, '서버 메모');
+  assert.equal(find(r.show, 'i-k').text, '서버 본문');
+  assert.deepEqual(find(r.show, 'i-7').cues.map(c => c.id), ['q-R7'], '서버가 원래 문단에 단 큐는 그 자리에');
+  assert.equal(find(r.show, 'i-7').isCue, true); assert.equal(find(r.show, 'i-k').isCue, true);
+  assert.ok(inOrder(r.show), '번호는 1부터 연속');
+  assert.deepEqual(validateShow(r.show).errors, []);
+  // 서버는 q-5 하나만 i-l 로 옮김 → q-5 부모만 충돌(서버 위치), q-6 은 이 기기대로 i-k
+  remote = remoteOps(base, [{ op: 'move', id: 'q-5', parent: 'i-l' }]);
+  r = merge(base, groupMove(), remote);
+  assert.equal(r.conflicts.length, 1); assert.deepEqual(r.conflicts[0].fields, ['parent']);
+  assert.equal(parentOf(r.show, 'q-5'), 'i-l');
+  assert.equal(parentOf(r.show, 'q-6'), 'i-k');
+  assert.equal(find(r.show, 'i-7').isCue, false);
+  assert.ok(inOrder(r.show));
+});
+
 test('큐 번호: 병합 뒤에도 늘 1부터 연속 — 양쪽이 같은 번호를 새로 매겨도 대본 순서대로 다시 매긴다 (충돌 아님)', () => {
   const base = backstage();
   const last = items(base).filter(i => i.label).length;

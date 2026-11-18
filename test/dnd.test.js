@@ -1,4 +1,4 @@
-// 대본 끌어 옮기기의 데이터 변경 (index.html 의 relocateItem / relocateCue / stepSlot / labelMap·restoreLabels)
+// 대본 끌어 옮기기의 데이터 변경 (index.html 의 relocateItem / relocateCue / relocateCueGroup / stepSlot / labelMap·restoreLabels)
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -14,7 +14,7 @@ function frontend() {
     return html.slice(a, b);
   };
   return vm.runInNewContext(cut('큐 번호', '마이그레이션') + cut('끌어 옮기기: 모델', '끌어 옮기기: 화면') +
-    '\n;({ relocateItem, relocateCue, stepSlot, labelMap, restoreLabels, renumberLabels })', {});
+    '\n;({ relocateItem, relocateCue, relocateCueGroup, stepSlot, labelMap, restoreLabels, renumberLabels })', {});
 }
 const FE = frontend();
 const plain = o => JSON.parse(JSON.stringify(o));
@@ -142,4 +142,79 @@ test('큐를 옮겨 큐가 없어진 문단은 되돌린 번호가 없으면 nul
   FE.restoreLabels(s, m);
   assert.equal(find(s, 'a').label, '1');
   assert.equal(find(s, 'b').label, null);
+});
+
+test('Q 묶음: 문단의 큐 전부를 원래 순서대로 — 본문·코멘트는 제자리, isCue 갱신, 기본은 끝', () => {
+  const s = show();
+  const r = FE.relocateCueGroup(s, 'c', 'b', null);
+  assert.deepEqual(plain(r), { ids: ['q2', 'q3'], from: { itemId: 'c', index: 0 }, to: { itemId: 'b', index: 0 }, changed: true });
+  assert.deepEqual(find(s, 'b').cues.map(x => x.id), ['q2', 'q3']);
+  assert.equal(find(s, 'b').isCue, true);
+  assert.deepEqual(find(s, 'c').cues, []);
+  assert.equal(find(s, 'c').isCue, false);
+  assert.equal(find(s, 'c').comments.length, 1, '코멘트는 문단에 남는다');
+  assert.deepEqual(ids(s, 'S1'), ['a', 'b', 'c'], '문단 순서는 그대로');
+});
+
+test('Q 묶음: 큐가 있는 문단이면 그 뒤에 합치고, index 를 주면 그 자리에 (다른 씬으로도)', () => {
+  const s = show();
+  const r = FE.relocateCueGroup(s, 'c', 'd', null);
+  assert.deepEqual(find(s, 'd').cues.map(x => x.id), ['q4', 'q2', 'q3']);
+  assert.equal(r.to.index, 1);
+  const s2 = show();
+  FE.relocateCueGroup(s2, 'c', 'a', 0);
+  assert.deepEqual(find(s2, 'a').cues.map(x => x.id), ['q2', 'q3', 'q1']);
+});
+
+test('Q 묶음: 왕복하면 원래대로 — 합쳤을 때는 ids 로 옮긴 큐만 되돌린다', () => {
+  const s = show(), before = JSON.stringify(s);
+  let r = FE.relocateCueGroup(s, 'c', 'b', null);
+  FE.relocateCueGroup(s, r.to.itemId, r.from.itemId, r.from.index);
+  assert.equal(JSON.stringify(s), before);
+  r = FE.relocateCueGroup(s, 'c', 'd', null);
+  FE.relocateCueGroup(s, r.to.itemId, r.from.itemId, r.from.index, r.ids);
+  assert.equal(JSON.stringify(s), before);
+  // 다시 실행(redo)도 to 와 ids 로
+  FE.relocateCueGroup(s, 'c', r.to.itemId, r.to.index, r.ids);
+  assert.deepEqual(find(s, 'd').cues.map(x => x.id), ['q4', 'q2', 'q3']);
+});
+
+test('Q 묶음: ids 를 주면 그 큐만 — 합친 문단을 지나갈 때 원래 큐는 남는다', () => {
+  const s = show();
+  FE.relocateCueGroup(s, 'c', 'd', null); // d = q4 q2 q3
+  const r = FE.relocateCueGroup(s, 'd', 'b', null, ['q2', 'q3']);
+  assert.deepEqual(r.ids, ['q2', 'q3']);
+  assert.equal(r.from.index, 1);
+  assert.deepEqual(find(s, 'd').cues.map(x => x.id), ['q4']);
+  assert.equal(find(s, 'd').isCue, true);
+  assert.deepEqual(find(s, 'b').cues.map(x => x.id), ['q2', 'q3']);
+});
+
+test('Q 묶음: 같은 문단·큐 없는 문단은 changed=false, 없는 문단은 null — 아무것도 바꾸지 않는다', () => {
+  const s = show(), before = JSON.stringify(s);
+  assert.equal(FE.relocateCueGroup(s, 'c', 'c', null).changed, false);
+  assert.equal(FE.relocateCueGroup(s, 'b', 'a', null).changed, false);
+  assert.equal(FE.relocateCueGroup(s, 'zz', 'a', null), null);
+  assert.equal(FE.relocateCueGroup(s, 'a', 'zz', null), null);
+  assert.equal(JSON.stringify(s), before);
+});
+
+test('Q 묶음: 번호를 다시 매기고, labelMap 으로 적어 둔 번호로 되돌린다', () => {
+  const s = show();
+  assert.deepEqual(['a', 'c', 'd'].map(i => find(s, i).label), ['1', '2', '3']);
+  const m = FE.labelMap(s);
+  // c(Q2) 묶음을 b 로: 번호 자리는 같고 문단만 바뀐다 → a 1, b 2, c 없음, d 3
+  let r = FE.relocateCueGroup(s, 'c', 'b', null);
+  FE.renumberLabels(s);
+  assert.deepEqual(['a', 'b', 'c', 'd'].map(i => find(s, i).label), ['1', '2', null, '3']);
+  FE.relocateCueGroup(s, r.to.itemId, r.from.itemId, r.from.index, r.ids);
+  FE.restoreLabels(s, m);
+  assert.deepEqual(['a', 'b', 'c', 'd'].map(i => find(s, i).label), ['1', null, '2', '3']);
+  // a(Q1) 묶음을 d(Q3) 에 합치면 큐 문단이 둘 → c 1, d 2. 되돌리면 1 2 3
+  r = FE.relocateCueGroup(s, 'a', 'd', null);
+  FE.renumberLabels(s);
+  assert.deepEqual(['a', 'c', 'd'].map(i => find(s, i).label), [null, '1', '2']);
+  FE.relocateCueGroup(s, r.to.itemId, r.from.itemId, r.from.index, r.ids);
+  FE.restoreLabels(s, m);
+  assert.deepEqual(['a', 'c', 'd'].map(i => find(s, i).label), ['1', '2', '3']);
 });
