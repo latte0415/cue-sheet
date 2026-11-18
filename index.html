@@ -127,19 +127,27 @@ input[type=color]{padding:0 2px;width:40px;height:30px;cursor:pointer}
 .nav-check:hover{color:var(--accent)}
 .nav-pre{font-size:12px;color:var(--ink-3);padding:2px 0 8px;border-bottom:1px solid var(--rule);overflow-wrap:anywhere}
 .nav-part{font-size:12px;font-weight:500;color:var(--ink-3);padding:16px 0 6px}
-.nav-scene{display:flex;align-items:baseline;gap:8px;width:100%;text-align:left;padding:6px 0 6px 10px;font-size:13px;color:var(--ink);box-shadow:inset 2px 0 0 transparent}
+.nav-sp{font-weight:400;font-variant-numeric:tabular-nums}
+.nav-sum{font-size:12px;color:var(--ink-3);border-top:1px solid var(--rule);margin-top:14px;padding-top:8px}
+/* 씬: 1줄 제목 · 시작 시각 / 2줄 출연자 · 미정 큐 · 길이 (2줄은 회색 작은 글씨) */
+.nav-scene{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:8px;align-items:baseline;width:100%;text-align:left;padding:5px 0 5px 10px;font-size:13px;line-height:1.4;color:var(--ink);box-shadow:inset 2px 0 0 transparent}
 .nav-scene:hover{background:var(--tint-2)}
 .nav-scene.cur{font-weight:500;background:var(--tint);box-shadow:inset 2px 0 0 var(--accent)}
-.nav-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.nav-k{font-size:11px;color:var(--ink-3);font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%}
-.nav-k b{color:var(--red);font-weight:400}
+.nav-t,.nav-c{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nav-at{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:11px;color:var(--ink-2);font-weight:400;text-align:right;white-space:nowrap}
+.nav-at.approx{color:var(--ink-3)}
+.nav-c,.nav-d{font-size:11px;color:var(--ink-3);font-weight:400}
+.nav-d{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.nav-d b{color:var(--red);font-weight:400;font-size:10px;margin-right:6px}
+/* 출연자 역할: 내가 나오는 씬 제목은 accent, 나머지는 흐리게 */
+.nav-scene.me .nav-t{color:var(--accent)}
+.nav-scene.not-me .nav-t{color:var(--ink-3)}
 /* 진행: 액트 사이를 잇는 작은 연결 줄 — 들여쓰기 + 짧은 세로 점선 */
-.nav-scene.mc{position:relative;padding:2px 0 2px 26px;font-size:12px;color:var(--ink-3);line-height:1.5;box-shadow:none}
+.nav-scene.mc{position:relative;padding:2px 0 2px 26px;font-size:12px;color:var(--ink-3);box-shadow:none}
 .nav-scene.mc::before{content:"";position:absolute;left:15px;top:0;bottom:0;border-left:1px dashed var(--rule-2)}
 .nav-scene.mc:hover{color:var(--ink);background:none}
 .nav-scene.mc.cur{color:var(--accent);background:none;font-weight:400}
 .nav-scene.mc.cur::before{border-left:1px solid var(--accent)}
-.nav-scene.mc .nav-k{font-size:11px}
 
 /* ---------- 대본 (문서 편집기) ---------- */
 .script{max-width:780px;padding:4px 0 0 var(--gut)}
@@ -1323,7 +1331,6 @@ function idbMsg(err) {
 }
 function trackByNo(no) { return no == null ? null : state.show.tracks.find(t => t.no === no) || null; }
 function trackUrl(t) { return t && t.fileKey ? Store.fileUrl(t) : null; }
-function fmtDur(sec) { if (sec == null || !isFinite(sec)) return '—'; sec = Math.max(0, Math.round(sec)); return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'); }
 function probeDuration(url) {
   return new Promise(res => {
     const a = new Audio(); let done = false;
@@ -1408,6 +1415,72 @@ function smBootPick(cache, backup) {
   }
   if (!okC) return null;
   return { show: cache.show, rev: cache.rev, dirty: false, base: cache.base ? cache.show : null };
+}
+
+/* ================= 씬 시간 · 짧은 이름 (순수 함수 — test/timing.test.js) ================= */
+// 시각·길이는 모두 초. 화면 표기는 fmtDur(m:ss — 60분을 넘어도 분으로 센다)
+function fmtDur(sec) { if (sec == null || !isFinite(sec)) return '—'; sec = Math.max(0, Math.round(sec)); return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'); }
+function sceneDur(s) { const d = s && s.durationSec; return typeof d === 'number' && isFinite(d) && d >= 0 ? d : null; }
+// 공연 시간표: 씬 시작 시각 = 공연 시작(0)부터 앞 씬 길이를 더한 것. 길이가 빈 씬은 0으로 세고,
+// 그 뒤 씬의 시작 시각은 approx(실제로는 이보다 늦다). 파트·전체 합계 = 길이가 있는 씬의 합 + 길이 빈 씬 수(missing)
+//   list   씬 순서대로 [{ id, start, approx, dur }] — 인덱스 = buildIndex 의 seq
+//   scenes Map(씬 id → list 의 항목) · parts [{ id, start, approx, sum, missing, count }] · total { sum, missing, count }
+function showTimeline(show) {
+  const list = [], scenes = new Map(), parts = [];
+  let t = 0, approx = false, missing = 0;
+  ((show && show.parts) || []).forEach(p => {
+    const pt = { id: p.id, start: t, approx, sum: 0, missing: 0, count: p.scenes.length };
+    p.scenes.forEach(s => {
+      const dur = sceneDur(s), x = { id: s.id, start: t, approx, dur };
+      list.push(x); scenes.set(s.id, x);
+      if (dur == null) { approx = true; pt.missing++; missing++; } else { t += dur; pt.sum += dur; }
+    });
+    parts.push(pt);
+  });
+  return { list, scenes, parts, total: { sum: t, missing, count: list.length } };
+}
+// list[from] ~ list[to-1] 을 지나가는 데 드는 시간 (to 는 넣지 않음). known = 길이가 있는 씬이 하나라도 있음
+function spanSec(tl, from, to) {
+  let sum = 0, missing = 0, known = false;
+  for (let i = Math.max(0, from); i < Math.min(to, tl.list.length); i++) {
+    const d = tl.list[i].dur;
+    if (d == null) missing++; else { sum += d; known = true; }
+  }
+  return { sum, missing, known };
+}
+// 합계 표기: "12:00" · "12:00 + 미정 8씬" · 다 비었으면 "미정 13씬". 씬이 없으면 "0:00"
+function fmtSpan(sum, missing) {
+  if (!missing) return fmtDur(sum);
+  return (sum > 0 ? fmtDur(sum) + ' + ' : '') + '미정 ' + missing + '씬';
+}
+// 내비용 짧은 이름: 한글 세 글자는 성을 뺀다(박대훈 → 대훈). 띄어 쓴 이름은 한 단어만(한글은 뒤 · 그 밖은 앞: "박 대훈" → 대훈, "Alex Kim" → Alex).
+// 그 밖(두 글자·네 글자 복성 등)은 그대로. 줄인 이름이 다른 사람과 겹치면(김민수·이민수, 민수·김민수) 그 사람들은 원래 이름으로,
+// 원래 이름까지 같으면 뒤에 (1)(2) 순번. 반환 Map(사람 id → 짧은 이름)
+function shortNames(people) {
+  const full = new Map(), short = new Map();
+  (people || []).forEach(p => {
+    const n = String(p.name || '').trim();
+    full.set(p.id, n);
+    const w = n.split(/\s+/).filter(Boolean);
+    let s = n;
+    if (w.length > 1) s = /[가-힣]/.test(n) ? w[w.length - 1] : w[0];
+    else if (/^[가-힣]{3}$/.test(n)) s = n.slice(1);
+    short.set(p.id, s);
+  });
+  const count = m => { const c = new Map(); m.forEach(v => c.set(v, (c.get(v) || 0) + 1)); return c; };
+  const fulls = new Set(full.values()), cs = count(short);
+  short.forEach((s, id) => { if (s !== full.get(id) && (cs.get(s) > 1 || fulls.has(s))) short.set(id, full.get(id)); });
+  const c2 = count(short), k = new Map();
+  short.forEach((s, id) => { if (c2.get(s) > 1) { const i = (k.get(s) || 0) + 1; k.set(s, i); short.set(id, s + '(' + i + ')'); } });
+  return short;
+}
+// 출연자 요약: "대훈·예준", 셋 이상이면 "대훈·예준 +1". first = 맨 앞에 둘 사람(출연자 역할로 볼 때 나), 모르는 id 는 "?"
+function castShort(cast, names, first) {
+  const ids = (cast || []).slice();
+  const i = first ? ids.indexOf(first) : -1;
+  if (i > 0) { ids.splice(i, 1); ids.unshift(first); }
+  const ns = ids.map(id => names.get(id) || '?');
+  return ns.slice(0, 2).join('·') + (ns.length > 2 ? ' +' + (ns.length - 2) : '');
 }
 
 /* ================= 저장 계층: Store ================= */
@@ -2566,10 +2639,10 @@ function propName(id) { if (!id) return ''; const p = IDX.props.get(id); return 
 // 진행(mc) 씬은 제목이 없으면 "진행" 대신 출연자 이름(없으면 MC)
 function mcLabel(s) { return s.cast.length ? s.cast.map(pname).join(', ') : 'MC'; }
 function sceneTitle(s) { return s.title || (s.type === 'mc' ? mcLabel(s) : '(제목 없음)'); }
-// 내비용 진행 씬 요약: 제목 → 첫 문단 앞 14자 → 큐 수
+// 내비용 진행 씬 요약: 제목 → 첫 문단 앞 14자 → 큐 수 (n 을 주면) → 출연자. 큐 지점(kind 'cue', 글 없는 문단)은 건너뛴다
 function mcNavLabel(s, n) {
   if (s.title) return s.title;
-  const f = s.items.find(i => (i.text || '').trim());
+  const f = s.items.find(i => i.kind !== 'cue' && (i.text || '').trim());
   if (f) { const t = f.text.trim().replace(/^[(（*—–\-\s]+/, '').replace(/[)）]\s*$/, '').trim(); if (t) return cut(t, 14); }
   return n ? '큐 ' + n : mcLabel(s);
 }
@@ -3748,12 +3821,8 @@ function gapText(list, i) {
   if (!nx) return '다음 내 큐 없음';
   const from = cur.kind === 'item' ? cur.ord + 1 : cur.kind === 'scene' ? cur.first : 0;
   const paras = Math.max(0, nx.ord - from), scenes = Math.max(0, nx.seq - cur.seq);
-  // 다 지나가는 씬의 소요시간 합 (지금이 씬 시작이면 그 씬도 포함)
-  let sum = 0, known = false;
-  IDX.byScene.forEach(se => {
-    const inRange = cur.kind === 'scene' ? se.seq >= cur.seq && se.seq < nx.seq : se.seq > cur.seq && se.seq < nx.seq;
-    if (inRange && se.scene.durationSec != null) { sum += se.scene.durationSec; known = true; }
-  });
+  // 다 지나가는 씬의 소요시간 합 (지금이 씬 시작이면 그 씬도 포함) — 내비 시작 시각과 같은 시간표(showTimeline)
+  const { sum, known } = spanSec(showTimeline(state.show), cur.kind === 'scene' ? cur.seq : cur.seq + 1, nx.seq);
   return `다음 내 큐${nx.q ? ' Q' + nx.q : ''}까지 문단 ${paras}개 · 씬 ${scenes}개${known && sum > 0 ? ' · 약 ' + fmtMin(sum) : ''}`;
 }
 function ctxLine(e, dir) {
@@ -4410,27 +4479,32 @@ function renderNav() {
   const ck = checkIssues(), nCheck = ck.total; // 막힘 + 확인 (지금 역할 기준). 막힘이 없으면 숫자를 회색으로
   let h = nCheck ? `<button type="button" class="nav-check" id="nav-check" data-act="view" data-view="check">점검<span class="count ${ck.block ? '' : 'soft'}">${nCheck}</span></button>` : '';
   h += S.preShowSetup ? `<div class="nav-pre">공연 전 세팅 · ${esc(S.preShowSetup)}</div>` : '';
+  // 씬 한 줄 = 제목 · 시작 시각(공연 시작 기준) / 출연자(짧은 이름) · 미정 큐 · 씬 길이. 앞에 길이 빈 씬이 있으면 시작 시각에 "~"
+  const tl = showTimeline(S), names = shortNames(S.people), pp = rolePerson();
   h += '<ol>';
-  S.parts.forEach(p => {
-    h += `<li><div class="nav-part">${esc(p.name)}</div><ol>`;
+  S.parts.forEach((p, pi) => {
+    const pt = tl.parts[pi];
+    h += `<li><div class="nav-part">${esc(p.name)}${pt.count ? ` · <span class="nav-sp">${esc(fmtSpan(pt.sum, pt.missing))}</span>` : ''}</div><ol>`;
     p.scenes.forEach(s => {
-      const d = roleDept(), pp = rolePerson();
-      const n = d ? s.items.reduce((a, i) => a + i.cues.filter(c => c.dept === d).length, 0)
-        : pp ? s.items.filter(i => itemMine(i)).length : s.items.filter(i => i.cues.length).length;
+      const x = tl.scenes.get(s.id);
       const tbd = s.items.reduce((a, i) => a + i.cues.filter(c => c.status === 'tbd').length, 0);
-      const cur = state.curScene === s.id ? 'cur' : '';
-      if (s.type === 'mc') {
-        // 진행: 액트 사이의 작은 연결 줄 (반복 문구 없이 첫 문단 요약)
-        const lab = mcNavLabel(s, n), cnt = lab === '큐 ' + n ? '' : (n ? String(n) : '');
-        h += `<li><button type="button" class="nav-scene mc ${cur}" data-act="goto-scene" data-scene="${esc(s.id)}" title="진행 — ${esc(sceneTitle(s))}"><span class="nav-t">${esc(lab)}</span><span class="nav-k">${cnt}${tbd ? `${cnt ? ' · ' : ''}<b>미정 ${tbd}</b>` : ''}</span></button></li>`;
-        return;
-      }
-      const k = [s.cast.length ? esc(s.cast.map(pname).join(', ')) : '', n ? String(n) : '', tbd ? `<b>미정 ${tbd}</b>` : ''].filter(Boolean).join(' · ');
-      h += `<li><button type="button" class="nav-scene ${cur}" data-act="goto-scene" data-scene="${esc(s.id)}"><span class="nav-t">${esc(sceneTitle(s))}</span><span class="nav-k">${k}</span></button></li>`;
+      const mc = s.type === 'mc';
+      // 진행: 액트 사이의 작은 연결 줄 (반복 문구 없이 첫 문단 요약). 요약이 출연자 이름이면 둘째 줄에 다시 쓰지 않는다
+      const lab = mc ? mcNavLabel(s, 0) : sceneTitle(s);
+      const cast = mc && !s.title && lab === mcLabel(s) ? '' : castShort(s.cast, names, pp);
+      const me = pp ? (s.cast.includes(pp) || s.items.some(i => isMyLine(i, pp) || myCastCues(i, pp).length) ? 'me' : 'not-me') : '';
+      const at = (x.approx ? '~' : '') + fmtDur(x.start);
+      const tip = [mc ? '진행 — ' + sceneTitle(s) : '', s.cast.length ? '출연 ' + s.cast.map(pname).join(', ') : '',
+        `시작 ${at}${x.approx ? ' (앞에 길이 빈 씬이 있어 실제로는 더 늦음)' : ''}`, '길이 ' + (x.dur == null ? '미정' : fmtMin(x.dur)), tbd ? `미정 큐 ${tbd}개` : ''].filter(Boolean).join(' · ');
+      h += `<li><button type="button" class="nav-scene ${mc ? 'mc' : ''} ${me} ${state.curScene === s.id ? 'cur' : ''}" data-act="goto-scene" data-scene="${esc(s.id)}" title="${esc(tip)}">`
+        + `<span class="nav-t">${esc(lab)}</span><span class="nav-at ${x.approx ? 'approx' : ''}">${at}</span>`
+        + `<span class="nav-c">${esc(cast)}</span><span class="nav-d">${tbd ? `<b>미정 ${tbd}</b>` : ''}${x.dur == null ? '—' : esc(fmtMin(x.dur))}</span></button></li>`;
     });
     h += '</ol></li>';
   });
-  $('#nav').innerHTML = h + '</ol>';
+  h += '</ol>';
+  if (tl.total.count) h += `<div class="nav-sum">합계 <span class="nav-sp">${esc(fmtSpan(tl.total.sum, tl.total.missing))}</span></div>`;
+  $('#nav').innerHTML = h;
   $('#nav').classList.toggle('open', state.navOpen);
   $('#nav-scrim').hidden = !state.navOpen;
 }
@@ -6007,14 +6081,14 @@ document.addEventListener('change', ev => {
     const se = IDX.byScene.get(t.dataset.scene); if (!se) return;
     const mm = num(($('#sdur-m-' + cssq(t.dataset.scene)) || {}).value), ss = num(($('#sdur-s-' + cssq(t.dataset.scene)) || {}).value);
     se.scene.durationSec = mm == null && ss == null ? null : Math.max(0, (mm || 0) * 60 + (ss || 0));
-    save(); refreshSceneHeads();
+    save(); refreshSceneHeads(); renderNav();
   }
   else if (a === 'scene-setup') { const se = IDX.byScene.get(t.dataset.scene); if (se) { se.scene.setup = t.value.trim(); save(); refreshSceneHeads(); } }
   else if (a === 'cast-toggle') {
     const se = IDX.byScene.get(t.dataset.scene); if (!se) return;
     const pid = t.dataset.person;
     se.scene.cast = t.checked ? Array.from(new Set(se.scene.cast.concat(pid))) : se.scene.cast.filter(x => x !== pid);
-    save(); refreshSceneHeads();
+    save(); refreshSceneHeads(); renderNav();
   }
   else if (a === 'run-mine') { state.runMine = t.checked; savePrefs(); render(); }
   else if (a === 'booth') { state.booth = t.checked; savePrefs(); render(); }
