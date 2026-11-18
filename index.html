@@ -897,6 +897,62 @@ body.has-player .app,body.has-preview .app{padding-bottom:calc(var(--player-h, 0
 .sv-ref div{padding:2px 0}
 .sv-ref .lbl{margin-right:4px}
 
+/* ---------- 도움말: 코멘트 패널과 같은 괘선 문서 모양. 상자·말풍선·뱃지 없이 글자와 괘선만 ---------- */
+.help-btn{font-weight:600;min-width:1.2em;text-align:center}
+.tb.help-a{font-size:11px;color:var(--ink-3);border-bottom:1px dotted var(--rule-2);margin-left:6px;font-weight:400}
+.tb.help-a:hover{color:var(--accent);border-bottom:1px solid var(--accent)}
+.next .tb.help-a{color:var(--ink-3);border-bottom:1px dotted var(--rule-2)}
+.hp-tools{padding:10px 0 4px}
+.hp-tools input{width:100%}
+.hp-role{display:flex;align-items:baseline;gap:8px;font-size:12px;color:var(--ink-3);margin:6px 0 6px}
+.hp-role select,.hp-print select{border:0;border-bottom:1px solid var(--rule-2);padding:1px 2px;background:transparent;font-size:13px}
+.hp-list{list-style:none;margin:0;padding:0;border-top:1px solid var(--rule)}
+.hp-list li{border-bottom:1px solid var(--rule)}
+.hp-i{display:block;width:100%;text-align:left;padding:7px 0 7px 10px;box-shadow:inset 2px 0 0 transparent}
+.hp-i:hover,.hp-i:focus-visible{background:var(--tint-2);box-shadow:inset 2px 0 0 var(--accent)}
+.hp-i b{display:block;font-size:14px;font-weight:600}
+.hp-i .note{display:block}
+.hp-list.other .hp-i b{font-weight:500;color:var(--ink-2)}
+.hp-sub{margin:16px 0 4px;font-size:12px;font-weight:500;color:var(--ink-3)}
+.hp-print{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px;margin-top:18px;padding-top:10px;border-top:1px solid var(--rule-2);font-size:13px}
+.hp-art{padding:8px 0 20px;font-size:14px;line-height:1.65;overflow-wrap:anywhere}
+.hp-art h3{margin:8px 0 2px;font-size:17px;font-weight:600;outline:0}
+.hp-art h4{margin:14px 0 0;font-size:13px;font-weight:600}
+.hp-art p{margin:8px 0}
+.hp-steps{margin:8px 0;padding-left:1.7em}
+.hp-steps>li{padding:3px 0}
+.hp-steps>li::marker{font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+.hp-steps ul{margin:2px 0;padding-left:1.1em;color:var(--ink-2)}
+.hp-l{color:var(--accent);border-bottom:1px solid transparent}
+.hp-l:hover{border-bottom-color:var(--accent)}
+.hp-see{display:block;margin-top:4px;font-size:12px;color:var(--ink-3)}
+.hp-art .hp-see{border-top:1px solid var(--rule);padding-top:8px;margin-top:14px}
+.hp-gl{margin:6px 0 0}
+.hp-gl dt{font-weight:600;font-size:14px;padding:10px 0 2px 10px;border-top:1px solid var(--rule);box-shadow:inset 2px 0 0 transparent;scroll-margin-top:8px}
+.hp-gl dt.on{box-shadow:inset 2px 0 0 var(--accent)}
+.hp-gl dd{margin:0;padding:0 0 10px 10px;font-size:13px;color:var(--ink-2);overflow-wrap:anywhere}
+/* 큐 모달 위에서 연 도움말: 모달 덮개 위 오른쪽에 붙인다 */
+.help-panel{position:relative}
+.help-panel>.pn-h{position:sticky;top:-12px;z-index:2;background:var(--paper);padding-top:4px}
+.help-panel.over{position:fixed;right:0;top:0;bottom:0;z-index:75;width:min(420px,100%);background:var(--paper);border-left:1px solid var(--rule-2);padding:12px 16px 20px}
+@media (max-width:600px){.help-panel{width:100%!important;border-left:0!important}#pwbar .help-a{display:none}}
+/* 큐 모달 한 줄 팁: 포커스가 간 칸 바로 아래, 회색 작은 글자 */
+.m-tip{margin:-6px 0 0;font-size:12px;color:var(--ink-3);overflow-wrap:anywhere}
+.firstbar{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px;padding:4px 10px;font-size:12px;color:var(--ink-3);border-bottom:1px solid var(--rule)}
+.firstbar .tb{font-size:12px}
+.print-guide{display:none}
+@media print{
+  body.printing-guide .app,body.printing-guide #player,body.printing-guide #pv-bar,body.printing-guide #modal-root,body.printing-guide .cd,body.printing-guide #toast,body.printing-guide #gate{display:none!important}
+  body.printing-guide #print-guide{display:block!important;font-size:10.5pt;line-height:1.5;color:#000}
+  .print-guide h1{font-size:14pt;margin:0 0 6pt;padding-bottom:4pt;border-bottom:1.5px solid #000}
+  .print-guide p{margin:0 0 6pt}
+  .print-guide h2{font-size:11.5pt;margin:12pt 0 4pt;padding-bottom:2pt;border-bottom:1px solid #999}
+  .print-guide ul{margin:0;padding-left:1.2em}
+  .print-guide li{margin:2pt 0}
+  .print-guide section{break-inside:avoid}
+}
+@media print{.help-a,.firstbar,.m-tip{display:none!important}}
+
 /* ---------- 반응형 ---------- */
 @media (max-width:1100px){
   /* 패널은 상단 바 아래에서 시작한다 — 열어 둔 채로 탭·편집/보기·코멘트를 누를 수 있게 (--top-h = 상단 바 아래 끝, 상단 바 크기가 바뀌면 다시 잼) */
@@ -1014,6 +1070,7 @@ body.has-player .app,body.has-preview .app{padding-bottom:calc(var(--player-h, 0
         <span class="mode" id="mode-seg" role="group" aria-label="편집·보기 전환"></span>
         <button type="button" class="tb" id="btn-comments" data-act="panel-toggle" aria-controls="panel"></button>
         <button type="button" class="tb on" id="btn-theme" data-act="theme" hidden></button>
+        <button type="button" class="tb help-btn" id="btn-help" data-act="help-toggle" aria-controls="help" aria-expanded="false" aria-keyshortcuts="F1 Shift+Slash" aria-label="도움말 (F1 또는 ?)" title="도움말 (F1 또는 ?)">?</button>
         <div class="menu-wrap">
           <button type="button" class="tb menu-btn" id="btn-data" data-act="menu-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="data-menu" aria-label="메뉴 — 공연 준비 · 파일 · 관리" title="메뉴 — 공연 준비 · 파일 · 관리">⋯</button>
           <div class="menu" id="data-menu" role="menu" hidden>
@@ -1046,13 +1103,17 @@ body.has-player .app,body.has-preview .app{padding-bottom:calc(var(--player-h, 0
   <div class="syncbar" id="pwbar" role="status" hidden></div>
   <div class="syncbar" id="swbar" role="status" hidden></div>
   <div class="namebar" id="namebar" role="status" aria-live="polite" hidden></div>
+  <div class="firstbar" id="firstbar" role="note" hidden>처음이면 → <button type="button" class="tb" id="first-open" data-act="help-first">처음 5분 (도움말)</button><button type="button" class="tb" id="first-close" data-act="first-dismiss" aria-label="처음 안내 닫기">닫기</button></div>
   <div class="body">
     <aside class="nav" id="nav" aria-label="파트·씬 목록"></aside>
     <div class="scrim" id="nav-scrim" data-act="nav-close" hidden></div>
     <main class="main" id="main" tabindex="-1"><div class="ckbar" id="ckbar" role="navigation" aria-label="점검 항목 이동" hidden></div><div id="view"></div></main>
     <aside class="panel" id="panel" aria-label="문단 상세 · 코멘트" hidden></aside>
+    <aside class="panel help-panel" id="help" aria-label="도움말" hidden></aside>
   </div>
 </div>
+<div class="print-guide" id="print-guide" hidden></div>
+<script type="application/json" id="help-data">{"a":[{"id":"start-5min","t":"처음 5분","r":["연출·작성","출연자","조명·음향","무대"],"s":"앱의 구조와 처음 해 볼 일 여섯 가지.","b":"이 앱은 공연 하나를 프로젝트 하나로 다룹니다. 대본을 쓰고, 대본의 문단마다 큐(조명·음향·무대·출연 신호)를 달고, 공연 중에는 런 화면에서 하나씩 넘기며 진행합니다. 크루 모두가 같은 프로젝트를 각자 기기로 봅니다.\n\n1. 주소로 들어가 프로젝트를 고릅니다. 처음이면 \"빈 프로젝트로\" 또는 \"샘플로 시작\"을 누릅니다. 눌러 보며 익히려면 샘플이 낫습니다.\n2. 상단 오른쪽 \"역할: 전체\"를 눌러 나를 고릅니다. 조명·음향·무대 중 하나, 또는 내 이름입니다. 내 것이 강조되고 이 선택은 이 기기에 기억됩니다.\n3. 상단 앞쪽 탭: 대본은 문서, 큐시트는 같은 내용을 표로, 런은 공연 중 진행 화면입니다.\n4. 사람, 소품·조명, 음원, 무대 상황은 괘선 뒤 \"목록\" 묶음에 있습니다(좁은 화면에서는 \"목록 ▾\"). 공연 전 확인은 왼쪽 목차 맨 위 \"점검\" 줄입니다.\n5. 고치려면 \"편집\"을 누릅니다. 새 프로젝트의 편집 비밀번호는 1234입니다. 다른 기기에서는 처음 편집할 때 한 번 묻습니다.\n6. 저장 버튼은 없습니다. 고치면 자동 저장되고, 제목 아래에 \"저장됨\"이 보입니다.\n\n나머지 기능(오프라인 준비, 내보내기, 버전 기록, 비밀번호)은 상단 오른쪽 끝 ⋯ 메뉴에 있습니다. 휴대폰에서는 목차가 상단 \"목차\" 버튼 뒤에 있습니다.\n\n다음: 역할이 연출·작성이면 \"대본 쓰기\", 그 외에는 \"내 파트 보기\"."},{"id":"write-script","t":"대본 쓰기","r":["연출·작성"],"s":"문단 쓰는 규칙, 씬과 파트 만들기, 문단 옮기기.","b":"대본은 파트 > 씬 > 문단으로 이루어집니다. 문단 하나(대사 한 줄 또는 동작 한 줄)가 큐를 다는 단위입니다.\n\n1. 상단 대본 탭 → 편집을 켭니다.\n2. 씬 머리줄에 마우스를 올리면 \"+ 씬\"이, 파트 머리줄에는 \"+ 씬\"과 \"+ 파트\"가 나옵니다. 씬 \"속성\"에서 종류(액트 또는 MC 씬), 소요 시간, 세팅, 출연자를 정합니다. 액트는 공연 코너, MC 씬은 코너 사이의 진행 멘트입니다.\n3. 씬 안에 문단을 입력합니다.\n   - 대사: \"이름: 대사\"\n   - 동작: ( 또는 * 로 시작\n4. Enter는 새 문단, Shift+Enter는 문단 안 줄바꿈입니다. Tab을 누르면 화자 목록이 열립니다.\n5. 사람 목록에 없는 이름을 쓰면 화면 위에 띠가 뜹니다. \"사람에 추가\", 비슷한 이름으로 \"고치기\", \"무시\" 중에서 고릅니다.\n6. 문단 순서는 문단에 커서를 두고 Alt+↑ / Alt+↓로 바꿉니다. 왼쪽 점선 손잡이를 끌어도 됩니다.\n7. 다른 곳에 쓴 대본을 붙여 넣으면 글자만 들어갑니다(서식은 버림). 줄바꿈마다 문단이 나뉘고, \"이름: 대사\" 꼴이면 화자도 알아봅니다.\n\n되돌리기는 Ctrl+Z(Mac은 Cmd+Z)입니다. 지울 때 확인 창은 뜨지 않습니다. 지운 문단도 Ctrl+Z로 되살립니다.\n\n휴대폰에서 패널은 상단 바 아래를 덮습니다. 탭은 그대로 누를 수 있고, 패널은 \"닫기\"로 닫습니다.\n\n다음: \"큐 달기\"."},{"id":"add-cue","t":"큐 달기","r":["연출·작성","조명·음향","무대"],"s":"문단에 큐를 달고, 고치고, 옮기는 방법.","b":"큐는 대본의 어느 문단에서 누가 무엇을 하는지 적은 신호입니다. 부서는 출연, 조명, 음향, 무대 넷입니다.\n\n1. 대본 탭 → 편집 → 큐를 달 문단의 왼쪽 여백에 마우스를 올려 \"+ 큐\"를 누릅니다(휴대폰은 늘 보입니다). 문단에 커서를 두고 Ctrl+K로 패널을 연 뒤 \"+ 이 문단에 큐\"를 눌러도 됩니다.\n2. 부서를 고릅니다. 위쪽 \"이렇게 보입니다\"가 큐의 한 줄 요약입니다. 직접 고치는 칸이 아니고 대상과 액션을 바꾸면 따라 바뀝니다.\n3. 대상과 액션을 고릅니다. 출연은 사람과 IN/OUT/MOVE, 조명은 조명 룩과 ON/OFF, 음향은 트랙과 PLAY/STOP 등, 무대는 소품과 IN/OUT/MOVE/CLEAN입니다.\n4. \"언제\"에 큐를 치는 신호를 적습니다. 예: 대사 끝, 호명 후, 암전 후.\n5. 아직 못 정했으면 \"미정\"을 체크합니다. 대상이 비어 있어도 저장되고 점검에 남습니다.\n6. +N초, 메모, 음향 시간, 무대 위치는 \"더 보기\"를 펼쳐 적습니다. 값이 있는 큐는 펼친 채로 열립니다. 저장을 누릅니다.\n\n대사 없이 큐만 둘 자리는 \"큐만 있는 문단\"으로 만듭니다. 패널의 \"+ 아래에 큐만 있는 문단\", 대본에서 문단 사이에 마우스를 올리면 나오는 \"+ 큐만 있는 문단\", 큐시트 씬 머리의 \"+ 큐만 있는 문단\"(씬 끝에)이 있습니다.\n\n큐는 패널의 \"다른 문단으로 이동\"이나 끌어 놓기로 옮깁니다. 큐를 지울 때도 확인 창은 없고, 알림의 \"되돌리기\"나 ⋯ 메뉴 \"마지막 삭제 되돌리기\"로 되살립니다.\n\n큐 번호(Q1, Q2…)는 대본 순서대로 자동으로 붙습니다.\n\n다음: 조명 큐는 \"조명 룩\"."},{"id":"my-part","t":"내 파트 보기","r":["출연자","조명·음향","무대"],"s":"역할을 고르면 화면마다 내 것이 어떻게 보이는지.","b":"상단 오른쪽 역할 목록에서 나를 고르면, 같은 데이터가 내 중심으로 보입니다. 선택은 이 기기에만 저장됩니다.\n\n1. 조명·음향·무대 담당: 역할에서 부서를 고릅니다.\n   - 대본: 다른 부서의 큐가 흐려집니다.\n   - 큐시트: 내 부서 열이 강조됩니다. 브라우저 인쇄(Ctrl+P)로 내 큐시트를 종이로 뽑을 수 있습니다.\n   - 런: \"내 큐만\"을 체크하면 내 큐가 있는 문단만 남습니다. 역할을 안 골랐으면 그 자리에서 \"역할 고르기\"로 바로 고릅니다.\n2. 출연자: 역할에서 내 이름을 고릅니다. 이름은 \"출연자\" 묶음에 있습니다.\n   - 대본의 \"공연 전 세팅\" 줄 오른쪽 \"내 대사만\"을 체크하면 내 대사와 바로 앞 대사만 보입니다. 인쇄하면 내 대사가 굵게 나옵니다.\n   - 런 화면의 체크는 \"내 대사·인/아웃만\"으로 바뀝니다.\n3. 런에서 \"내 큐만\"을 켜면 \"다음 내 큐까지 문단 n개 · 씬 n개\"가 보입니다. 쉬는 동안 얼마나 남았는지 가늠하는 용도입니다.\n4. 코멘트 버튼에는 아직 풀리지 않은 코멘트 수가 보입니다. 리허설 메모를 확인하세요.\n\n역할을 바꿔도 데이터는 바뀌지 않습니다. 보이는 방식만 달라집니다.\n\n휴대폰 큐시트는 번호 · 언제 · 큐 머리글만 한 화면에 보여 줍니다. 부서별 열은 넓은 화면이나 인쇄에서 봅니다.\n\n다음: 공연 중에는 \"런 진행\"."},{"id":"run-show","t":"런 진행","r":["조명·음향","무대","연출·작성"],"s":"런 화면에서 큐를 하나씩 넘기는 방법과 키.","b":"런은 공연 중 큐를 하나씩 넘기며 보는 화면입니다. 현재 문단, 앞뒤 문단, 이 문단의 큐, 다음 문단이 보입니다.\n\n1. 공연 전에 \"공연 당일 준비\"를 먼저 마칩니다.\n2. 상단 런 탭을 엽니다. 역할을 고르고 \"내 큐만\"을 체크합니다.\n3. 큰 \"다음\" 버튼으로 넘깁니다. 키는 다음이 ↓ → Space, 이전이 ↑ ← 입니다. \"처음으로\"는 한 번 더 눌러야 갑니다.\n4. 음향 큐는 재생 버튼이나 P 키로 실행합니다. 음향 역할이 아니면 3초 안에 P를 한 번 더 눌러야 실행됩니다.\n5. 큐에 +N초가 있으면 \"n초 카운트다운\" 버튼이나 C 키로 화면에 초를 셉니다. 카운트다운은 숫자만 셉니다. 큐를 대신 실행하지 않습니다. Esc로 닫습니다.\n6. \"보기 옵션 ▾\"을 펼치면 부스 모드, \"다음 큐 +N초 자동 카운트다운\", 오프라인 준비 줄이 있습니다. 자동 카운트다운을 켜면 넘어간 문단에 +N초 큐가 있을 때 바로 시작합니다.\n7. 조명 역할이면 \"조명 상태\"에 지금 켜진 조명이 보입니다.\n8. 암전 중 눈부심은 부스 모드로 줄입니다. 화면이 어둡고 대비가 낮아집니다. 켜진 동안 상단 \"부스 모드\"를 누르면 꺼집니다.\n\n런에 있는 동안 화면은 꺼지지 않게 유지됩니다.\n\n하단 플레이어는 음원 플레이어입니다. 플레이어를 누른 뒤 Space 재생, ←→ 5초, ↑↓ 볼륨입니다. 음원 탭의 \"미리듣기\"는 플레이어와 별개이고, 듣는 동안 화면 아래에 \"미리듣기\" 띠가 뜹니다.\n\n휴대폰에서는 재생 중이 아니면 상단에 플레이어 버튼이 없습니다. ⋯ 메뉴 → 공연 준비 → \"음원 플레이어 열기\"를 쓰세요."},{"id":"show-day","t":"공연 당일 준비","r":["조명·음향","무대","연출·작성"],"s":"점검 0건 만들기와 오프라인 준비.","b":"공연 전에 두 가지를 끝냅니다. 점검의 문제를 줄이고, 기기에 음원을 받아 둡니다.\n\n1. 왼쪽 목차 맨 위 \"점검 n\" 줄을 누릅니다(휴대폰은 \"목차\" 버튼 뒤). \"문제 없음\"이 목표입니다. 항목을 누르면 해당 문단·씬·음원으로 이동합니다.\n   - 막힘: 이대로면 공연이 막힙니다. 빨강입니다. 예: 트랙 목록에 없는 BGM 번호, 빈 조명 큐, IN 다음 또 IN.\n   - 확인: 공연 전에 확인할 것입니다. 예: 미정 큐, 언제가 비어 있는 큐, 음원 파일 누락.\n   - 참고: 건수에 세지 않습니다. 예: 풀리지 않은 코멘트.\n2. 역할을 고르면 내 부서 항목만 보입니다. \"전체 n건 보기\"로 넓힙니다.\n3. 런의 \"보기 옵션 ▾\" 또는 ⋯ 메뉴 → 공연 준비의 \"오프라인 준비\"를 누릅니다. 이 기기에 음원 전부와 큐시트 최신본이 저장됩니다.\n4. \"음원 n/n 준비됨\"이 되면 끝입니다. 켜져 있는 동안 런 위쪽에 그 줄이 늘 보입니다. 공연장 네트워크가 끊겨도 재생, 큐 이동, 카운트다운이 됩니다.\n5. 준비 뒤 다른 기기에서 음원이 바뀌면 런 줄에 \"BGM n 바뀜\"이 빨갛게 뜹니다. 그 줄의 \"다시 준비\"를 누릅니다. 바뀐 파일만 받습니다.\n6. 오프라인 준비를 켠 기기는 실수로 새로고침해도 받아 둔 큐시트로 열립니다. 오프라인일 때 고친 내용은 이 브라우저에 백업됐다가 연결되면 서버로 갑니다.\n\n기기마다 따로 준비합니다. 조명, 음향, 무대 기기에서 각각 누르세요. ⋯ 메뉴에서 끄거나 받은 음원을 지울 수 있습니다.\n\n다음: \"런 진행\"."},{"id":"light-looks","t":"조명 룩","r":["조명·음향","연출·작성"],"s":"리허설에서 룩을 정하고 큐에서 켜고 끄는 순서.","b":"조명 룩은 리허설에서 정해 이름을 붙인 조명 상태입니다. 예: \"오프닝 워시\", \"무대 A\". 큐는 채널 숫자를 적는 대신 룩을 켜고 끕니다.\n\n룩 만들기\n1. 소품·조명 탭 → 편집 → \"+ 조명\"을 누릅니다. 좁은 화면에서는 \"목록 ▾\"에서 소품·조명을 엽니다.\n2. 이름과 설명을 적습니다. 설명에는 사람이 알아볼 내용을 적습니다. 예: 프론트 70 + 탑 블루.\n3. 조명 큐를 다는 중에 이름을 적어 바로 등록할 수도 있습니다. 저장할 때 목록에 들어갑니다.\n\n큐에서 쓰기\n1. 큐 달기에서 부서를 \"조명\"으로 고릅니다.\n2. 조명 룩을 고르고 ON 또는 OFF를 고릅니다. 고른 룩의 설명이 아래에 흐리게 나옵니다.\n3. 한 조명을 끄며 다른 조명을 켜면 줄을 둘 둡니다(A OFF, B ON). \"+ 조명\"으로 줄을 더합니다.\n4. 객석은 ON 또는 OFF만 있습니다. \"그대로\"를 두면 건드리지 않습니다.\n5. 채널별 밝기, 색, 페이드가 꼭 필요할 때만 \"채널별 설정\"을 펼칩니다. 룩과 함께 저장됩니다.\n\n점검은 켜진 룩을 또 켜거나, 켜지 않은 룩을 끄는 경우를 \"확인\"으로 알려 줍니다. 공연 시작 때는 모든 룩이 꺼진 상태로 셉니다.\n\n런의 \"조명 상태\"로 지금 켜진 조명을 봅니다.\n\n다음: \"공연 당일 준비\"."},{"id":"collab-safety","t":"함께 쓰기와 안전","r":["연출·작성","출연자","조명·음향","무대"],"s":"자동 저장, 충돌, 비밀번호, 코멘트, 되돌리기.","b":"여러 기기가 같은 프로젝트를 동시에 봅니다. 다른 기기의 변경은 5초 안팎으로 가져옵니다.\n\n1. 자동 저장: 제목 아래에 \"저장 중…\" 다음 \"저장됨\"이 뜹니다. 저장 번호(rev)는 \"저장됨\"에 마우스를 올리면 보입니다. 연결이 끊기면 이 기기에 백업하고 다시 시도합니다.\n2. 같은 때에 고쳤다면: 겹치지 않으면 자동으로 합치고 \"다른 기기의 변경과 합쳤습니다\"가 뜹니다. 같은 곳을 고쳤으면 \"다른 기기에서 수정됨\" 띠가 뜹니다. \"서버 버전 사용\"이면 이 기기의 변경이 버려지고, \"내 것으로 덮어쓰기\"면 다른 기기의 변경이 사라집니다. 확신이 없으면 서버 버전을 쓰세요.\n3. 편집 비밀번호: 처음에는 1234이고, 아는 사람은 누구나 고칠 수 있습니다. 편집을 켤 때 한 번 안내 줄이 뜹니다. ⋯ 메뉴 → 관리 → \"편집 비밀번호 변경\"으로 팀 비밀번호로 바꾸고, 다른 기기는 새 비밀번호를 한 번 다시 넣습니다. 보기만 하는 사람에게는 알릴 필요가 없습니다.\n4. 코멘트: 상단 \"코멘트\" 또는 문단에서 Ctrl+Shift+M. 이름을 적고 등록하면 문단에 붙습니다. 코멘트도 프로젝트에 저장되므로 이 기기에 편집 비밀번호가 있어야 합니다. 없으면 등록할 때 비밀번호를 묻습니다. 해결하면 점검의 \"참고\"에서 빠집니다.\n5. 삭제는 확인 창이 없습니다. Ctrl+Z나 알림의 \"되돌리기\", ⋯ 메뉴의 \"마지막 삭제 되돌리기\"로 되살립니다.\n6. 크게 잘못됐으면 ⋯ 메뉴 → 파일 → \"버전 기록 · 복원\"에서 이전 버전을 고릅니다. 복원도 새 버전으로 저장되므로 다시 되돌릴 수 있습니다.\n7. 제목 아래 \"버전 메모\"에 \"리허설 2차 반영\"처럼 한 줄(40자까지)을 적어 두면 버전을 구분하기 쉽습니다.\n8. 프로젝트를 지우면 휴지통에서 되살립니다(보관 기간 기본 30일).\n\n⋯ 메뉴 맨 아래 빨간 \"샘플로 초기화\"와 \"음원 전체 삭제\"는 한 번 더 눌러야 실행됩니다."}],"g":[{"t":"큐","d":"대본의 어느 문단에서 누가 무엇을 하는지 적은 신호. 부서는 출연, 조명, 음향, 무대 넷입니다. 큐 번호는 대본 순서대로 자동으로 붙습니다.","s":["큐만 있는 문단","언제"]},{"t":"큐만 있는 문단","d":"대사나 동작 없이 큐만 있는 문단. 장면 흐름 안에서 신호만 칠 자리에 씁니다. 패널의 \"+ 아래에 큐만 있는 문단\", 문단 사이의 \"+ 큐만 있는 문단\", 큐시트 씬 머리에서 만듭니다.","s":["문단","큐"]},{"t":"문단","d":"대본의 한 단위(대사 한 줄 또는 동작 한 줄). 큐는 문단에 붙습니다. 문단 안 줄바꿈은 Shift+Enter입니다.","s":["큐만 있는 문단"]},{"t":"언제","d":"큐를 치는 신호. 예: 대사 끝, 호명 후, 암전 후. 오퍼레이터가 이 말을 듣거나 보고 큐를 칩니다. 비어 있으면 점검에서 \"확인\"이 됩니다.","s":["+N초"]},{"t":"+N초","d":"\"언제\" 신호가 나온 뒤 몇 초 기다렸다가 치는지. 큐 창 \"더 보기\"에 있습니다. 런에서 \"n초 카운트다운\" 버튼이나 C 키로 초를 셉니다. 숫자만 셀 뿐 큐를 대신 실행하지 않습니다.","s":["언제","더 보기"]},{"t":"미정","d":"아직 정하지 않은 큐. 대상이 비어 있어도 저장되고 점검의 \"확인\"에 남습니다. 리허설에서 정한 뒤 패널의 \"확정으로\"를 누릅니다.","s":["점검"]},{"t":"더 보기","d":"큐 창에서 접혀 있는 칸: +N초, 이전 큐 후, 메모, 음향 시간, 무대 위치. 대부분의 큐는 대상 · 액션 · 언제만으로 충분합니다. 값이 있으면 펼친 채로 열립니다.","s":["메모"]},{"t":"메모","d":"큐에 붙이는 자유 문장 하나. 큐 줄 뒤에 흐리게 붙습니다. 큐 창 \"더 보기\"에 있습니다.","s":["더 보기"]},{"t":"출연 (부서)","d":"사람의 등장과 퇴장. IN 들어옴, OUT 나감, MOVE 자리를 옮김. 한 큐에 여러 사람을 넣을 수 있고 사람마다 액션이 따로입니다.","s":["부서"]},{"t":"조명 (부서)","d":"조명 룩을 켜거나(ON) 끄는(OFF) 큐. 채널 값은 선택 사항인 \"채널별 설정\"에 둡니다.","s":["조명 룩","객석"]},{"t":"음향 (부서)","d":"트랙을 재생하거나 멈추는 큐. PLAY 재생, STOP 정지, FADE IN/OUT 서서히 커지고 작아짐, VOL 볼륨 변경.","s":["미리듣기"]},{"t":"무대 (부서)","d":"소품을 다루는 큐. IN 무대에 들임, OUT 치움, MOVE 옮김, CLEAN 흘린 것 치우기. 소품은 소품·조명 탭 목록에서 고릅니다.","s":["부서"]},{"t":"부서","d":"큐의 종류. 출연 / 조명 / 음향 / 무대. 큐 창 맨 위에서 고릅니다. 역할로 조명·음향·무대를 고르면 그 부서 큐가 강조됩니다.","s":["역할"]},{"t":"조명 룩","d":"리허설에서 정해 이름을 붙인 조명 상태(예: 오프닝 워시). 이름과 설명을 가지며, 조명 큐는 룩을 켜고 끕니다. 소품·조명 탭에서 관리합니다.","s":["객석","채널별 설정"]},{"t":"채널별 설정","d":"조명 큐에서 백·탑·프론트 채널의 밝기·색·페이드를 직접 적는 칸. 접혀 있고 꼭 필요할 때만 펼칩니다.","s":["조명 룩"]},{"t":"객석","d":"객석 조명. 켠다(ON) 또는 끈다(OFF)만 있습니다. 채널처럼 밝기를 정하지 않습니다.","s":["조명 룩"]},{"t":"역할","d":"지금 이 기기에서 누구 중심으로 볼지. 조명·음향·무대 또는 사람 이름. 대본·큐시트·런이 그 사람 것을 강조합니다. 이 기기에만 저장됩니다. 권한과는 무관합니다.","s":["내 대사만"]},{"t":"내 대사만","d":"출연자 역할에서 대본 \"공연 전 세팅\" 줄 오른쪽에 생기는 체크. 내 대사와 바로 앞 대사만 보여 줍니다.","s":["역할"]},{"t":"런","d":"공연 중 문단을 하나씩 넘기며 보는 화면. 다음은 ↓ → Space, 이전은 ↑ ←, 음향은 P, 카운트다운은 C. \"내 큐만\"을 켜면 \"다음 내 큐까지 문단 n개\"가 보입니다.","s":["보기 옵션"]},{"t":"보기 옵션","d":"런 위쪽 \"보기 옵션 ▾\"에 접어 둔 것: 부스 모드, 다음 큐 +N초 자동 카운트다운, 오프라인 준비 줄.","s":["부스 모드","오프라인 준비"]},{"t":"MC 씬","d":"씬 종류의 하나. 코너 사이의 진행 멘트 씬입니다. 공연 코너 씬은 \"액트\"입니다. 씬 \"속성\"에서 바꿉니다. 사람 역할 \"MC\"와는 별개입니다."},{"t":"버전 메모","d":"제목 아래 작은 줄에 편집 모드에서 직접 적는 짧은 메모(40자까지). 예: 리허설 2차 반영. 공연 버전을 구분하는 용도입니다.","s":["rev"]},{"t":"rev","d":"저장할 때마다 1씩 오르는 저장 번호. \"저장됨\"에 마우스를 올리면 보입니다. 버전 기록에서 복원할 버전을 고를 때 씁니다. 몰라도 쓰는 데 지장 없습니다.","s":["버전 메모"]},{"t":"점검","d":"공연 전에 문제를 한곳에 모은 화면. 왼쪽 목차 맨 위 \"점검 n\" 줄로 엽니다. 막힘(빨강, 이대로면 공연이 막힘) / 확인(공연 전에 볼 것) / 참고(건수에 세지 않음). 항목을 누르면 그 자리로 갑니다.","s":["미정"]},{"t":"오프라인 준비","d":"공연 전에 음원 전부와 큐시트 최신본을 이 기기에 받아 두는 일. 공연장 네트워크가 끊겨도 재생과 진행이 됩니다. 기기마다 따로 하고, 음원이 바뀌면 다시 누릅니다. 런 \"보기 옵션\"과 ⋯ 메뉴에 있습니다.","s":["부스 모드"]},{"t":"부스 모드","d":"런 화면 어두운 보기. 암전 중 부스에서 눈부시지 않게 대비를 낮춥니다. 런 \"보기 옵션 ▾\"에서 켜고, 켜진 동안 상단 \"부스 모드\"를 누르면 꺼집니다.","s":["런"]},{"t":"미리듣기","d":"음원 탭에서 곡을 들어 보는 기능. 하단 공연 플레이어와 별개입니다. 듣는 동안 화면 아래에 \"미리듣기\" 띠가 뜹니다. 공연 플레이어가 재생 중이면 쓸 수 없습니다.","s":["오프라인 준비"]},{"t":"편집 비밀번호","d":"프로젝트를 고치려면 필요한 비밀번호. 코멘트 등록도 저장이라 필요합니다. 처음에는 1234입니다. 아는 사람은 누구나 고칠 수 있으니 팀 비밀번호로 바꾸세요. 보기만 할 때는 필요 없습니다.","s":["코멘트"]},{"t":"코멘트","d":"문단이나 씬에 남기는 메모. 이름을 적어 등록하고(편집 비밀번호가 있는 기기에서), 해결하면 닫습니다. 풀리지 않은 코멘트는 점검의 \"참고\"에 모입니다.","s":["점검"]}],"tip":[{"f":"언제","t":"큐를 치는 신호를 적습니다. 예: 대사 끝, 호명 후. 공연 중 오퍼레이터가 이 말을 듣고 칩니다.","a":"add-cue"},{"f":"+N초","t":"신호 뒤 몇 초 기다릴지 적습니다. 런에서 그 초를 화면에 셉니다.","a":"run-show"},{"f":"미정","t":"리허설에서 정할 큐입니다. 대상이 비어 있어도 저장되고 점검에 남습니다.","a":"add-cue"},{"f":"조명 룩","t":"룩을 고르고 ON 또는 OFF만 정하면 됩니다. 채널은 채널별 설정에서만 다룹니다.","a":"light-looks"},{"f":"더 보기","t":"꼭 필요할 때만 엽니다. 대부분의 큐는 대상, 액션, 언제만으로 충분합니다.","a":"add-cue"},{"f":"객석","t":"객석 조명은 ON 또는 OFF만 있습니다. 그대로를 두면 건드리지 않습니다.","a":"light-looks"},{"f":"출연 (여러 사람)","t":"한 큐에 사람을 여러 명 넣고 사람마다 IN, OUT, MOVE를 고릅니다. 줄 순서가 머리글 순서입니다.","a":"add-cue"}],"crew":{"title":"큐시트 앱 크루 안내","intro":"한 장 인쇄용. 자세한 설명은 앱의 도움말(상단 \"?\")에 있습니다. 모든 역할은 상단 오른쪽 \"역할\"에서 나를 고르는 것으로 시작합니다. 이 선택은 이 기기에만 저장됩니다.","roles":[{"r":"연출·작성","i":["대본 탭 → 편집. \"이름: 대사\", \"(동작)\" 형식으로 문단을 씁니다. 모르는 이름은 위 띠에서 사람에 추가합니다.","큐는 문단 왼쪽 \"+ 큐\" 또는 Ctrl+K. 대사 없이 큐만 둘 자리는 \"큐만 있는 문단\"으로 만듭니다.","아직 못 정한 큐는 \"미정\"으로 둡니다. 리허설에서 정한 뒤 확정합니다.","조명 룩은 리허설에서 정해 소품·조명 탭에 이름과 설명을 적습니다.","공연 전에 왼쪽 목차 맨 위 \"점검\"을 \"문제 없음\"으로 만듭니다. 막힘이 먼저입니다.","편집 비밀번호 1234를 팀 비밀번호로 바꿉니다(⋯ 메뉴 → 관리). 실수는 Ctrl+Z, 크게 잘못되면 ⋯ 메뉴 → \"버전 기록 · 복원\".","제목 아래 \"버전 메모\"에 리허설 차수를 적어 둡니다.","크루에게 이 장과 프로젝트 주소를 나눠 줍니다."]},{"r":"출연자","i":["역할에서 내 이름을 고릅니다. 이름은 \"출연자\" 묶음에 있습니다.","대본 \"공연 전 세팅\" 줄 오른쪽 \"내 대사만\"을 체크하면 내 대사와 바로 앞 대사만 보입니다. Ctrl+P로 인쇄하면 내 대사가 굵게 나옵니다.","내 등장(IN)과 퇴장(OUT)은 큐시트에서 내 행이 강조되어 보입니다.","런에서 \"내 대사·인/아웃만\"을 체크하면 \"다음 내 큐까지 문단 n개\"로 남은 거리를 가늠합니다.","상단 \"코멘트\"에 풀리지 않은 연출 메모가 모입니다. 리허설 전에 확인합니다.","보기만 해도 됩니다. 편집과 코멘트 등록은 편집 비밀번호가 있는 기기에서 합니다.","휴대폰은 상단 \"목차\" 버튼으로 씬을 고릅니다."]},{"r":"조명·음향 오퍼레이터","i":["역할에서 조명 또는 음향을 고릅니다. 큐시트에서 내 열이 강조되고 Ctrl+P로 인쇄됩니다.","런 화면에서 \"내 큐만\"을 체크합니다. 다음은 ↓ → Space, 이전은 ↑ ←.","음향은 재생 버튼 또는 P 키(음향 역할이 아니면 3초 안에 한 번 더). +N초가 있으면 C 키로 카운트다운.","조명은 런의 \"조명 상태\"로 지금 켜진 룩을 봅니다. 룩 설명은 소품·조명 탭에 있습니다.","공연 전날까지 내 기기에서 \"오프라인 준비\"(런 \"보기 옵션 ▾\" 또는 ⋯ 메뉴)를 누르고 \"음원 n/n 준비됨\"을 확인합니다. 기기마다 따로 합니다.","암전 중에는 런 \"보기 옵션 ▾\"의 부스 모드. 음원이 바뀌면 런에 \"BGM n 바뀜\"이 뜨고 \"다시 준비\"를 누릅니다.","목차 맨 위 \"점검\"에서 내 부서 항목을 0건으로 만듭니다. 음원 탭 \"미리듣기\"는 공연 플레이어와 별개입니다.","휴대폰은 재생 중이 아니면 상단에 플레이어 버튼이 없으니 ⋯ 메뉴의 \"음원 플레이어 열기\"를 씁니다."]},{"r":"무대","i":["역할에서 무대를 고릅니다. 큐시트의 무대 열과 런의 \"내 큐만\"에 내 큐가 모입니다.","소품·조명 탭에 소품 목록과 공연 전 무대 소품이 있습니다. 무대 큐는 소품을 목록에서 고릅니다.","소품 동작은 IN 들임, OUT 치움, MOVE 옮김, CLEAN 흘린 것 치우기입니다.","\"무대 상황\"(목록 묶음)에서 공연의 한 순간에 무대에 누가 있고 어떤 소품이 있는지 봅니다. ← → 로 옮깁니다.","점검의 \"소품 연속성\"은 무대에 이미 있는 소품을 또 들이는 실수를 잡습니다.","씬 시작 전 준비물은 씬 \"세팅\"에 적혀 있고 런에서 보입니다. 무대 역할이면 런에서 체크할 수 있습니다.","런에서 \"내 큐만\"을 켜고 다음으로 넘깁니다. 키는 ↓ → Space.","휴대폰에서도 런과 무대 상황이 됩니다. 공연 전에 \"오프라인 준비\"를 누릅니다."]}]}}</script>
 <div class="player" id="player" role="region" aria-label="음원 플레이어" aria-keyshortcuts="Space ArrowLeft ArrowRight ArrowUp ArrowDown" hidden>
   <div class="pl-q" id="pl-q" hidden></div>
   <div class="pl-g pl-tr" role="group" aria-label="재생 제어">
@@ -2099,7 +2160,7 @@ function renderPwBar() {
   const def = pwDefault();
   const on = def && state.edit && state.view !== 'run' && !state.booth && !pwSeen();
   b.hidden = !on;
-  const html = on ? `<span><b>기본 비밀번호(1234) 사용 중</b><span class="pw-l"> — 사이트에 들어오는 누구나 이 프로젝트를 고칠 수 있습니다</span></span><button type="button" class="tb" id="pw-change" data-act="editpw-open" data-help="collab-safety">편집 비밀번호 변경</button><button type="button" class="tb" id="pw-close" data-act="pw-dismiss" aria-label="안내 닫기 — 나중에 ⋯ 메뉴에서 바꿀 수 있습니다">닫기</button>` : '';
+  const html = on ? `<span><b>기본 비밀번호(1234) 사용 중</b><span class="pw-l"> — 사이트에 들어오는 누구나 이 프로젝트를 고칠 수 있습니다</span></span><button type="button" class="tb" id="pw-change" data-act="editpw-open" data-help="collab-safety">편집 비밀번호 변경</button><button type="button" class="tb" id="pw-close" data-act="pw-dismiss" aria-label="안내 닫기 — 나중에 ⋯ 메뉴에서 바꿀 수 있습니다">닫기</button>${helpA('collab-safety')}` : '';
   if (b.innerHTML !== html) b.innerHTML = html;
   const mi = $('#menu-editpw');
   if (mi) { const mh = '편집 비밀번호 변경' + (def ? '<span class="mi-note">기본 1234 — 바꾸세요</span>' : ''); if (mi.innerHTML !== mh) mi.innerHTML = mh; }
@@ -4019,16 +4080,16 @@ function scenePh(s) { return s.type === 'mc' ? mcLabel(s) : '제목 없음'; }
 function scriptOptsHtml() {
   const p = rolePerson(), ml = myLinesOn();
   return (p ? `<label class="chk" for="mylines" data-help="my-part"><input type="checkbox" id="mylines" data-act="mylines" ${state.myLines ? 'checked' : ''}>내 대사만</label>` : '')
-    + (ml ? '' : `<label class="chk" for="hidecues"><input type="checkbox" id="hidecues" data-act="hidecues" ${state.hideCues ? 'checked' : ''}>큐 숨기기</label>`);
+    + (ml ? '' : `<label class="chk" for="hidecues"><input type="checkbox" id="hidecues" data-act="hidecues" ${state.hideCues ? 'checked' : ''}>큐 숨기기</label>`) + helpA(p ? 'my-part' : 'write-script');
 }
 // 빈 화면의 다음 할 일 한 줄 (회색 작은 글자 + 글자 버튼). data-help = 나중에 도움말 글로 잇는 자리
-function nextHtml(help, text, btns) { return `<p class="next" data-help="${esc(help)}">${text}${btns ? ' ' + btns : ''}</p>`; }
+function nextHtml(help, text, btns) { return `<p class="next" data-help="${esc(help)}">${text}${btns ? ' ' + btns : ''} ${helpA(help)}</p>`; }
 function scriptBlank() { return !state.show.parts.some(p => p.scenes.some(s => s.items.some(it => hasText(it) || it.cues.length))); }
 function scriptNextHtml() {
   if (!scriptBlank()) return '';
   if (!state.edit) return nextHtml('start-5min', '대본이 비어 있습니다. 위의 <b>편집</b>을 눌러 쓰기 시작하세요.', '');
   const pp = state.show.people.length;
-  return nextHtml('write-script', '아래 씬에 <b>이름: 대사</b> 또는 <b>(동작)</b>으로 한 줄씩 쓰세요. 다 쓰면 줄 왼쪽 <b>+ 큐</b>로 큐를 답니다.',
+  return nextHtml('write-script', '<b>이름: 대사</b> 또는 <b>(동작)</b>으로 한 줄씩 쓰세요. 다 쓰면 문단 왼쪽 <b>+ 큐</b>로 큐를 답니다.',
     pp ? '' : '<button type="button" class="tb" data-act="view" data-view="people">사람 먼저 등록하기</button>');
 }
 function viewScript() {
@@ -4550,7 +4611,7 @@ function viewRun() {
   // 내 큐만: 역할이 있으면 바로 켜고 끄는 체크, 없으면 그 자리에서 역할을 고른다(고르면 켜진다)
   const mine = canMine
     ? `<label class="chk run-mine" for="run-mine" data-help="my-part"><input type="checkbox" id="run-mine" data-act="run-mine" ${mineOn ? 'checked' : ''}>${p ? '내 대사·인/아웃만' : `내 큐만 (${DEPT_L[d]})`}</label>`
-    : `<span class="run-mine run-role" data-help="my-part"><label for="run-role">내 큐만 보기</label><select id="run-role" class="role-sel" data-act="run-role">${roleOptsHtml('역할 고르기')}</select></span>`;
+    : `<span class="run-mine run-role" data-help="my-part"><label for="run-role">내 큐만 보기</label><select id="run-role" class="role-sel" data-act="run-role">${roleOptsHtml('역할 고르기')}</select>${helpA('my-part')}</span>`;
   // 보기 옵션(부스 · 자동 카운트다운 · 오프라인 준비)은 한 줄로 접는다. 오프라인 준비가 켜졌거나 받는 중·실패면 그 줄은 접지 않고 늘 보인다
   const smH = smLineHtml(), smLoud = !!smH && (smOn() || !!SM.busy || !!SM.err || SM.fail.size > 0);
   const optOn = [state.booth ? '부스 모드' : '', state.autoCd ? '자동 카운트다운' : ''].filter(Boolean);
@@ -4605,7 +4666,7 @@ function viewRun() {
       <button type="button" class="btn" id="run-prev" data-act="run-prev" ${i === 0 ? 'disabled' : ''}>↑ 이전</button>
       <button type="button" class="btn strong" id="run-next" data-act="run-next" ${i === list.length - 1 ? 'disabled' : ''}>다음 ↓</button>
     </div>
-    <div class="run-foot"><button type="button" class="tb" id="run-first" data-act="run-first" data-confirm="처음 → 정말?" ${i === 0 ? 'disabled' : ''}>처음으로</button>
+    <div class="run-foot"><button type="button" class="tb" id="run-first" data-act="run-first" data-confirm="처음 → 정말?" ${i === 0 ? 'disabled' : ''}>처음으로</button>${helpA('run-show')}
       <p class="run-hint"><span class="run-keys"><kbd>↓</kbd> <kbd>→</kbd> <kbd>Space</kbd> 다음 · <kbd>↑</kbd> <kbd>←</kbd> 이전 · <kbd>P</kbd> 음향 큐(누를 때마다 다음) · <kbd>C</kbd> 카운트다운 · <kbd>Esc</kbd> 카운트다운 취소</span></p></div>
   </div>`;
   if (curScene) state.curScene = curScene;
@@ -4872,8 +4933,8 @@ function lookUses(id) {
 // 조명 목록 (소품·조명 탭의 한 구간): 이름 · 설명 · 쓰는 큐 · 순서 · 삭제. 이름·설명은 그 자리에서 고친다(소품과 같다)
 function viewLooks() {
   const S = state.show, ed = state.edit, L = S.lights, n = L.length;
-  let h = `<div class="sec-h" id="looks" data-help="light-looks"><h2>조명</h2><span class="note">${n}개 · 리허설에서 정한 조명의 이름 — 조명 큐가 켜고(ON) 끈다(OFF). 채널·밝기·색은 설명에</span>${ed ? '<button type="button" class="btn" id="btn-look-add" data-act="look-add">+ 조명</button>' : ''}</div>`;
-  if (!n) return h + nextHtml('light-looks', '등록된 조명이 없습니다. 리허설에서 정한 조명에 이름과 설명을 붙이면 조명 큐가 그 조명을 켜고 끕니다 — 조명 큐 창에서 이름을 적어 바로 등록할 수도 있습니다.', ed ? '<button type="button" class="tb" data-act="look-add">+ 조명</button>' : '');
+  let h = `<div class="sec-h" id="looks" data-help="light-looks"><h2>조명</h2><span class="note">${n}개 · 리허설에서 정한 조명의 이름 — 조명 큐가 켜고(ON) 끈다(OFF). 채널·밝기·색은 설명에</span>${ed ? '<button type="button" class="btn" id="btn-look-add" data-act="look-add">+ 조명</button>' : ''}${helpA('light-looks')}</div>`;
+  if (!n) return h + nextHtml('light-looks', '조명 룩은 리허설에서 정해 이름과 설명을 붙입니다. 조명 큐 창에서 바로 등록할 수도 있습니다.', ed ? '<button type="button" class="tb" data-act="look-add">+ 조명</button>' : '');
   h += `<div class="table-wrap"><table class="ltable pr-table lk-table"><thead><tr><th>이름</th><th>설명</th><th class="n">큐</th>${ed ? '<th></th>' : ''}</tr></thead><tbody>`;
   L.forEach((p, i) => {
     const id = esc(p.id), uses = lookUses(p.id), open = state.lookOpen === p.id && uses.length;
@@ -4894,7 +4955,7 @@ function viewProps() {
 }
 function viewPropsOnly(S, ed) {
   let h = `<div class="sec-h"><h2>소품</h2><span class="note">${S.props.length}개 · 무대 큐에 소품별 IN/OUT/MOVE/CLEAN 을 적으면 무대 상황 뷰와 점검에 반영됩니다</span>${ed ? '<button type="button" class="btn" id="btn-prop-add" data-act="prop-add">+ 소품</button>' : ''}</div>`;
-  if (!S.props.length) h += nextHtml('add-cue', '등록된 소품이 없습니다. 무대 큐가 다루는 소품을 여기에 올리면 무대 상황과 점검에 반영됩니다 — 무대 큐 창에서 바로 등록할 수도 있습니다.', ed ? '<button type="button" class="tb" data-act="prop-add">+ 소품</button>' : '');
+  if (!S.props.length) h += nextHtml('add-cue', '등록된 소품이 없습니다. 무대 큐 창에서 이름을 적어 바로 등록할 수도 있습니다.', ed ? '<button type="button" class="tb" data-act="prop-add">+ 소품</button>' : '');
   else {
     h += `<div class="table-wrap"><table class="ltable pr-table"><thead><tr><th>이름</th><th>메모</th><th class="n">큐</th><th>공연 전</th>${ed ? '<th></th>' : ''}</tr></thead><tbody>`;
     S.props.forEach(p => {
@@ -5109,7 +5170,7 @@ function viewCheck() {
     }
     h += '</ol></section>';
   });
-  if (!v.total) h += nextHtml('show-day', '점검할 문제가 없습니다. 공연 전에는 오프라인 준비로 음원과 큐시트를 이 기기에 받아 두세요.', Store.mode === 'server' && Srv.showId && !smOn() ? '<button type="button" class="tb" data-act="sm-prepare">오프라인 준비</button>' : '');
+  if (!v.total) h += nextHtml('show-day', '문제가 없습니다. 공연 전에는 오프라인 준비를 누르세요.', Store.mode === 'server' && Srv.showId && !smOn() ? '<button type="button" class="tb" data-act="sm-prepare">오프라인 준비</button>' : '');
   if (none.length) h += `<p class="ck-none" id="ck-none">문제 없음: ${esc(none.join(', '))}</p>`;
   if (v.propsSkip) h += `<p class="ck-none" id="ck-props-skip">소품 미등록 — 소품 연속성·소품 미지정 검사 안 함</p>`;
   return h;
@@ -5177,7 +5238,7 @@ function personStats(p) {
 function viewPeople() {
   const sel = rolePerson(), ed = state.edit;
   let h = `<div class="sec-h"><h2>사람</h2><span class="note">${state.show.people.length}명 · 액트 = 출연하는 액트 씬 수 (MC 도 액트에 출연하면 같이 셉니다)</span>${ed ? '<button type="button" class="btn" data-act="person-add" id="btn-person-add">+ 사람</button>' : ''}</div>`;
-  if (!state.show.people.length) h += nextHtml('write-script', '등록된 사람이 없습니다. 출연자와 스태프를 등록하면 대본의 화자 이름과 연결되고, 역할로 내 파트만 볼 수 있습니다. 대본에 이름을 먼저 써도 위 띠에서 바로 추가됩니다.', ed ? '<button type="button" class="tb" data-act="person-add">+ 사람</button>' : '');
+  if (!state.show.people.length) h += nextHtml('write-script', '출연자와 스태프를 등록하면 대본의 이름과 연결됩니다. 대본에 이름을 먼저 써도 위 띠에서 바로 추가됩니다.', ed ? '<button type="button" class="tb" data-act="person-add">+ 사람</button>' : '');
   else {
     h += `<div class="table-wrap"><table class="ltable pp-table"><thead><tr><th>이름</th><th>역할</th><th class="n">대사</th><th class="n">액트</th><th class="n">인/아웃</th><th>출연 씬</th><th>메모</th><th></th></tr></thead><tbody>`;
     state.show.people.forEach(p => {
@@ -5229,7 +5290,7 @@ function viewTracks() {
   const ed = state.edit;
   let h = `<div class="sec-h"><h2>음원</h2><span class="note">${state.show.tracks.length}곡 · ${Store.mode === 'server' ? '파일은 서버에 저장 — 모든 기기에서 재생' : '파일은 이 브라우저(IndexedDB)에만 저장'} — JSON 내보내기에는 트랙 정보만 들어갑니다</span>${ed ? '<button type="button" class="btn" id="btn-track-add" data-act="track-add">+ 트랙</button>' : ''}</div>
     ${idbError ? `<p class="err" role="alert">파일 저장소를 쓸 수 없습니다: ${esc(idbError)}</p>` : ''}
-    ${state.show.tracks.length ? '' : nextHtml('show-day', '음원이 없습니다. 오디오 파일을 아래 칸에 끌어다 놓으면 파일명 앞 숫자(03_멘탈.mp3)가 트랙 번호가 됩니다.', '')}
+    ${state.show.tracks.length ? '' : nextHtml('show-day', '오디오 파일을 아래 칸에 끌어다 놓으세요. 파일명 앞 숫자(03_멘탈.mp3)가 트랙 번호가 됩니다.', '')}
     <div class="dropzone" id="track-drop"><p class="note">오디오 파일을 여기에 끌어다 놓으면 파일명 앞 숫자(예: <span class="mono">03_멘탈.mp3</span>)로 트랙 번호를 맞춥니다. 맞는 번호가 없으면 새 트랙을 만듭니다.</p></div>
     <div class="table-wrap"><table class="ltable tr-table"><thead><tr><th class="n">번호</th><th>제목</th><th>파일</th><th class="n">길이</th><th>반복</th><th>사용 큐</th><th>미리듣기</th><th>파일</th><th>메모</th>${ed ? '<th></th>' : ''}</tr></thead><tbody>`;
   const playingNo = audioPlaying() ? AU.trackNo : null;
@@ -5359,7 +5420,7 @@ function renderTop() {
     if (whole) ud.dataset.confirm = '정말? (삭제 이후의 변경도 함께 되돌아감)'; else delete ud.dataset.confirm;
   }
   $('#app').classList.toggle('hide-cues', state.view === 'script' && state.hideCues && !ml);
-  renderRev();
+  renderRev(); renderFirst();
   // 큐 이동 모드 안내 바
   const mb = $('#movebar'), mv = state.moveCue && moveCueInfo();
   mb.hidden = !mv;
@@ -5401,6 +5462,7 @@ function commentLi(x, withRef) {
 function renderPanel() {
   const panel = $('#panel');
   panel.hidden = !state.panel;
+  if (state.panel && HELP.open) { HELP.open = false; renderHelp(); } // 같은 자리 — 코멘트 패널을 열면 도움말은 닫는다
   renderCkBar();
   if (!state.panel) return;
   const all = allComments(), open = all.filter(x => !x.c.resolved).length;
@@ -5441,7 +5503,7 @@ function renderPanel() {
             <button type="button" class="tb red" data-act="cue-del" ${ids}>삭제</button>` : ''}</div></li>`;
       }).join('')}</ol>`;
       else h += '<p class="empty">이 문단에는 큐가 없습니다.</p>';
-      if (state.edit) h += `<div class="pn-adds" data-help="add-cue"><button type="button" class="btn" id="pn-cue-add" data-act="cue-new" data-item="${iid}">+ 이 문단에 큐</button><button type="button" class="tb" id="pn-cuept-add" data-act="cuept-new" data-item="${iid}" title="이 문단 바로 아래에 본문 없이 큐만 있는 문단을 만든다">+ 아래에 큐만 있는 문단</button></div><p class="note pn-adds-n">큐는 보통 대사·동작 문단에 답니다. 대사 없이 신호만 칠 자리(암전, 인/아웃)는 큐만 있는 문단으로.</p>`;
+      if (state.edit) h += `<div class="pn-adds" data-help="add-cue"><button type="button" class="btn" id="pn-cue-add" data-act="cue-new" data-item="${iid}">+ 이 문단에 큐</button><button type="button" class="tb" id="pn-cuept-add" data-act="cuept-new" data-item="${iid}" title="이 문단 바로 아래에 본문 없이 큐만 있는 문단을 만든다">+ 아래에 큐만 있는 문단</button></div><p class="note pn-adds-n">큐는 보통 대사·동작 문단에 답니다. 대사 없이 신호만 칠 자리(암전, 인/아웃)는 큐만 있는 문단으로. ${helpA('add-cue')}</p>`;
       h += '</section>';
       h += `<section class="pn-sec" id="pn-cmts"><h4>코멘트 ${it.comments.length}</h4>`;
       const se0 = IDX.byScene.get(e.scene.id);
@@ -5609,8 +5671,155 @@ function openItem(id, focus) {
   savePrefs(); renderTop(); renderPanel();
 }
 
+/* ================= 도움말 ================= */
+// 상단 "?"(F1 · ?) → 오른쪽 패널(코멘트 패널과 같은 자리·모양): 글 목록(역할 순) · 찾기 · 용어 · 역할별 한 장 안내 인쇄.
+// 내용은 이 파일 안 <script id="help-data"> JSON — 원본은 작업 폴더 help/*.json · crew-guide.md (화면 용어와 같게 맞춘 것)
+// 빈 화면 안내 · 패널 · 런 등에는 그 글로 가는 작은 "도움말" 글자 단추(helpA), 큐 모달은 칸에 포커스가 갈 때만 회색 한 줄 팁
+const HELPD = (() => { try { return JSON.parse(document.getElementById('help-data').textContent || '{}'); } catch (e) { return {}; } })();
+const HROLES = ['연출·작성', '출연자', '조명·음향', '무대'];
+// art = 연 글 id · term = 강조할 용어 번호 · q = 찾기 · role = 고른 역할(null 이면 지금 앱 역할에서) · crew = 인쇄할 역할('' = 넷 다) · over = 큐 모달 위에 띄움
+const HELP = { open: false, tab: 'list', art: null, term: null, q: '', role: null, crew: null, over: false };
+function helpA(id, label) { return `<button type="button" class="tb help-a" data-act="help-open" data-id="${esc(id)}">${esc(label || '도움말')}</button>`; }
+function helpRoleOfApp() {
+  const d = roleDept(); if (d === 'stage') return '무대'; if (d) return '조명·음향';
+  const p = rolePerson(), r = p && IDX && IDX.people.get(p) ? IDX.people.get(p).role : '';
+  return r === 'performer' || r === 'mc' ? '출연자' : r === 'light' || r === 'sound' ? '조명·음향' : r === 'stage' ? '무대' : '';
+}
+function helpRole() { return HELP.role == null ? helpRoleOfApp() : HELP.role; }
+function helpArts() { return HELPD.a || []; }
+function helpArt(id) { return helpArts().find(x => x.id === id) || null; }
+function helpTerms() { return HELPD.g || []; }
+// 글·용어 안의 "따옴표 말"이 글 제목이면 그 글로, 용어면 용어로 잇는다
+function helpInline(s) {
+  return esc(s).replace(/&quot;([^&]{1,24}?)&quot;/g, (m, w) => {
+    const a = helpArts().find(x => x.t === w);
+    if (a) return `"<button type="button" class="hp-l" data-act="help-open" data-id="${esc(a.id)}">${w}</button>"`;
+    const g = helpTerms().findIndex(x => x.t === w);
+    return g >= 0 ? `"<button type="button" class="hp-l" data-act="help-term" data-i="${g}">${w}</button>"` : m;
+  });
+}
+// 글 본문: 빈 줄로 나뉜 덩어리마다 — "1. " 줄은 번호 목록(들여 쓴 "- " 는 그 아래 목록), 번호 목록 바로 위 한 줄은 소제목, 나머지는 문단
+function helpBody(b) {
+  return String(b || '').split(/\n{2,}/).map(block => {
+    const L = block.split('\n'), num = l => /^\d+\.\s/.test(l);
+    let h = '', i = 0;
+    if (!num(L[0]) && L.length > 1 && num(L[1])) { h += `<h4>${helpInline(L[0])}</h4>`; i = 1; }
+    if (!num(L[i] || '')) return h + `<p>${helpInline(L.slice(i).join(' '))}</p>`;
+    const items = [];
+    for (; i < L.length; i++) {
+      const l = L[i];
+      if (num(l)) items.push({ t: l.replace(/^\d+\.\s/, ''), s: [] });
+      else if (/^\s+-\s/.test(l) && items.length) items[items.length - 1].s.push(l.replace(/^\s+-\s/, ''));
+      else if (items.length) items[items.length - 1].t += ' ' + l.trim();
+    }
+    return h + `<ol class="hp-steps">${items.map(x => `<li>${helpInline(x.t)}${x.s.length ? `<ul>${x.s.map(y => `<li>${helpInline(y)}</li>`).join('')}</ul>` : ''}</li>`).join('')}</ol>`;
+  }).join('');
+}
+function helpArtLi(a) { return `<li><button type="button" class="hp-i" id="hp-i-${esc(a.id)}" data-act="help-open" data-id="${esc(a.id)}"><b>${esc(a.t)}</b><span class="note">${esc(a.s)}</span></button></li>`; }
+function helpTermDl(list) {
+  return `<dl class="hp-gl" id="hp-gl">${list.map(i => {
+    const g = helpTerms()[i], base = g.t.replace(/\s*\(.*\)$/, '');
+    const see = (g.s || []).map(t => { const k = helpTerms().findIndex(x => x.t === t); return k >= 0 ? `<button type="button" class="hp-l" data-act="help-term" data-i="${k}">${esc(t)}</button>` : ''; }).filter(Boolean);
+    const arts = helpArts().filter(a => a.b.indexOf(base) >= 0).slice(0, 2).map(a => `<button type="button" class="hp-l" data-act="help-open" data-id="${esc(a.id)}">${esc(a.t)}</button>`);
+    return `<dt id="hg-${i}" class="${HELP.term === i ? 'on' : ''}">${esc(g.t)}</dt><dd>${helpInline(g.d)}${see.length || arts.length ? `<span class="hp-see">${see.length ? '함께 보기 ' + see.join(' · ') : ''}${see.length && arts.length ? ' · ' : ''}${arts.length ? '글 ' + arts.join(' · ') : ''}</span>` : ''}</dd>`;
+  }).join('')}</dl>`;
+}
+// 패널 = 머리(탭 · 닫기) + 찾기 칸 + 본문(#hp-body). 찾기·역할을 바꾸면 본문만 다시 그린다 — 입력 중인 찾기 칸(한글 조합)을 건드리지 않게
+function helpBodyHtml() {
+  const role = helpRole(), q = HELP.q.trim().toLowerCase(), gl = HELP.tab === 'glossary';
+  if (q) {
+    const hit = s => String(s || '').toLowerCase().indexOf(q) >= 0;
+    const as = helpArts().filter(x => hit(x.t) || hit(x.s) || hit(x.b));
+    const gs = helpTerms().map((g, i) => i).filter(i => hit(helpTerms()[i].t) || hit(helpTerms()[i].d));
+    return `<p class="hp-sub" id="hp-res">글 ${as.length} · 용어 ${gs.length}</p>${as.length ? `<ol class="hp-list">${as.map(helpArtLi).join('')}</ol>` : ''}${gs.length ? helpTermDl(gs) : ''}`
+      + (!as.length && !gs.length ? '<p class="empty">찾는 말이 없습니다.</p>' : '');
+  }
+  if (gl) return helpTermDl(helpTerms().map((g, i) => i));
+  const mine = role ? helpArts().filter(x => x.r.includes(role)) : helpArts(), rest = role ? helpArts().filter(x => !x.r.includes(role)) : [];
+  const crew = HELP.crew == null ? role : HELP.crew;
+  return `<p class="hp-role"><label for="help-role">역할</label> <select id="help-role" data-act="help-role"><option value="" ${role ? '' : 'selected'}>모든 역할</option>${HROLES.map(r => `<option ${r === role ? 'selected' : ''}>${r}</option>`).join('')}</select></p>`
+    + `<ol class="hp-list" id="hp-list">${mine.map(helpArtLi).join('')}</ol>`
+    + (rest.length ? `<p class="hp-sub">다른 역할의 글</p><ol class="hp-list other" id="hp-other">${rest.map(helpArtLi).join('')}</ol>` : '')
+    + `<div class="hp-print"><span class="lbl">역할별 한 장 가이드 인쇄</span><label class="sr-only" for="help-crew">인쇄할 역할</label><select id="help-crew" data-act="help-crew"><option value="" ${crew ? '' : 'selected'}>네 역할 모두</option>${HROLES.map(r => `<option ${r === crew ? 'selected' : ''}>${r}</option>`).join('')}</select><button type="button" class="tb" id="help-print" data-act="help-print">인쇄</button></div>`;
+}
+function renderHelpBody() { const b = $('#hp-body'); if (b) b.innerHTML = helpBodyHtml(); }
+function renderHelp() {
+  const el = $('#help'); if (!el) return;
+  el.hidden = !HELP.open;
+  el.classList.toggle('over', HELP.open && HELP.over);
+  const b = $('#btn-help'); if (b) { b.classList.toggle('on', HELP.open); b.setAttribute('aria-expanded', String(HELP.open)); }
+  if (!HELP.open) return;
+  const a = HELP.art && helpArt(HELP.art), gl = HELP.tab === 'glossary' && !a;
+  let h = `<div class="pn-h"><div class="pn-tabs" role="tablist" aria-label="도움말">
+      <button type="button" role="tab" id="htab-list" aria-selected="${!gl}" data-act="help-tab" data-tab="list">도움말</button>
+      <button type="button" role="tab" id="htab-gl" aria-selected="${gl}" data-act="help-tab" data-tab="glossary">용어 ${helpTerms().length}</button>
+    </div><button type="button" class="tb" id="help-close" data-act="help-close">닫기</button></div>`;
+  if (a) {
+    const terms = helpTerms().map((g, i) => [g, i]).filter(([g]) => g.t.length > 1 && a.b.indexOf(g.t.replace(/\s*\(.*\)$/, '')) >= 0 && g.t !== a.t).slice(0, 8);
+    h += `<article class="hp-art" id="hp-art" data-id="${esc(a.id)}"><button type="button" class="tb hp-back" id="help-back" data-act="help-back">← 목록</button>
+      <h3 tabindex="-1">${esc(a.t)}</h3><p class="note">${esc(a.r.join(' · '))} — ${esc(a.s)}</p>${helpBody(a.b)}
+      ${terms.length ? `<p class="hp-see"><span class="lbl">용어</span> ${terms.map(([g, i]) => `<button type="button" class="hp-l" data-act="help-term" data-i="${i}">${esc(g.t)}</button>`).join(' · ')}</p>` : ''}</article>`;
+  } else {
+    h += `<div class="hp-tools"><label class="sr-only" for="help-q">도움말 찾기</label><input type="search" id="help-q" placeholder="찾기 — 예: 미정, 오프라인, 인쇄" value="${esc(HELP.q)}" autocomplete="off"></div>
+      <div id="hp-body">${helpBodyHtml()}</div>`;
+  }
+  el.innerHTML = h;
+  if (gl && HELP.term != null) { const t = document.getElementById('hg-' + HELP.term); if (t) el.scrollTop = Math.max(0, t.offsetTop - el.querySelector('.pn-h').offsetHeight - 8); }
+}
+// 열기: id = 바로 열 글(없으면 목록). 코멘트 패널은 닫는다(같은 자리). 큐 모달이 열려 있으면 모달 위에 띄운다
+function helpOpen(id) {
+  HELP.open = true; HELP.art = id && helpArt(id) ? id : null; HELP.term = null; HELP.over = !!state.modal;
+  if (HELP.art) HELP.tab = 'list';
+  if (state.panel) { state.panel = false; savePrefs(); renderTop(); renderPanel(); }
+  if (state.menuOpen || state.listOpen) { state.menuOpen = false; state.listOpen = false; renderTop(); }
+  renderHelp();
+  const f = HELP.art ? $('#hp-art h3') : $('#help-q'); if (f) f.focus({ preventScroll: true });
+  $('#help').scrollTop = 0;
+}
+function helpClose() { HELP.open = false; HELP.over = false; renderHelp(); const b = $('#btn-help'); if (b && b.offsetParent) b.focus({ preventScroll: true }); }
+function helpTerm(i) { HELP.open = true; HELP.tab = 'glossary'; HELP.art = null; HELP.q = ''; HELP.term = i; renderHelp(); }
+// 역할별 한 장 안내 인쇄: 화면 밖 #print-guide 에 그 역할(또는 넷 다)만 그려 인쇄 — 인쇄 CSS 는 대본·큐시트와 같은 흑백·괘선
+function helpPrint() {
+  const C = HELPD.crew || { roles: [] }, sel = HELP.crew == null ? helpRole() : HELP.crew;
+  const roles = sel ? C.roles.filter(r => r.r.indexOf(sel) === 0) : C.roles;
+  const g = $('#print-guide');
+  g.innerHTML = `<h1>${esc(C.title || '크루 안내')}${state.show ? ' — ' + esc(state.show.title) : ''}${state.show && state.show.revision ? ' · ' + esc(state.show.revision) : ''}</h1><p>${esc(C.intro || '')}</p>`
+    + roles.map(r => `<section><h2>${esc(r.r)}</h2><ul>${r.i.map(x => `<li>${esc(x)}</li>`).join('')}</ul></section>`).join('');
+  document.body.classList.add('printing-guide');
+  const done = () => { document.body.classList.remove('printing-guide'); window.removeEventListener('afterprint', done); };
+  window.addEventListener('afterprint', done);
+  window.print();
+}
+// 처음 온 기기: 상단 아래 회색 한 줄 "처음이면 → 처음 5분 (도움말)". 닫거나 누르면 이 기기에서 다시 안 뜬다
+const FIRST_KEY = 'cueSheet.helpFirst', FIRST = { mem: false };
+function renderFirst() { const b = $('#firstbar'); if (b) b.hidden = !state.show || state.booth || FIRST.mem || lsGet(FIRST_KEY) === '1'; }
+function firstSeen() { FIRST.mem = true; lsSet(FIRST_KEY, '1'); renderFirst(); }
+// 큐 모달 팁: 칸에 포커스가 가면 그 칸 아래 회색 한 줄(+ 도움말). 한 번에 하나, 다른 칸으로 가면 사라진다
+const TIP_SEL = [['#cue-trigger', '언제'], ['#cue-offset', '+N초'], ['#m-tbd', '미정'], ['[id^="lk-look-"]', '조명 룩'], ['#m-more', '더 보기'], ['[data-act="m-house"]', '객석'], ['[id^="cast-person-"], #m-cast-add', '출연 (여러 사람)']];
+// 단추·체크(더 보기 · 미정 · 객석 · + 사람)는 키보드로 왔을 때만. 마우스로 누르는 중에는 놓은 뒤에 넣는다 —
+// 팁 한 줄이 늘면 가운데 정렬된 모달이 움직여, 누른 자리와 놓은 자리가 달라져 클릭이 사라지지 않게
+const TIPP = { down: false, t: null };
+document.addEventListener('pointerdown', () => { TIPP.down = true; }, true);
+document.addEventListener('pointerup', () => { TIPP.down = false; if (TIPP.t) { const t = TIPP.t; TIPP.t = null; setTimeout(() => { if (document.activeElement === t) tipFor(t); }, 0); } }, true);
+document.addEventListener('focusin', ev => {
+  const t = ev.target;
+  if (!t || !t.closest || !state.modal || state.modal.type !== 'cue' || !t.closest('.modal-b') || t.closest('.m-tip')) return;
+  if (TIPP.down) { TIPP.t = t; return; } // 누르는 중에는 넣지도 빼지도 않는다(놓은 뒤 tipFor)
+  tipFor(t);
+});
+function tipFor(t) {
+  const old = $('.modal-b .m-tip'), hit = TIP_SEL.find(x => t.matches(x[0]));
+  const tip = hit && (HELPD.tip || []).find(x => x.f === hit[1]);
+  const quiet = t.matches('button, input[type=checkbox]') && !t.matches(':focus-visible');
+  if (!tip || quiet) { if (old) old.remove(); return; }
+  let c = t; while (c.parentElement && !c.parentElement.matches('.modal-b, .m-more-b')) c = c.parentElement;
+  if (old && old.dataset.tip === tip.f && old.previousElementSibling === c) return;
+  if (old) old.remove();
+  c.insertAdjacentHTML('afterend', `<p class="m-tip" id="m-tip" data-tip="${esc(tip.f)}">${esc(tip.t)} ${helpA(tip.a)}</p>`);
+}
+
 /* ================= 모달 ================= */
-// 큐 편집: 부서 → 대상(사람 · 트랙 · 채널 · 소품)과 액션을 목록·버튼에서 고른다 → 값 → 상세 → 시점 → 미정.
+// 큐 편집: 부서 →대상(사람 · 트랙 · 채널 · 소품)과 액션을 목록·버튼에서 고른다 → 값 → 상세 → 시점 → 미정.
 // 맨 위 머리글은 미리보기일 뿐 입력칸이 아니다 — 대상·액션을 바꾸면 따라 바뀐다 (cueHead 와 같은 함수)
 // 조명은 무대 채널(백·탑·프론트)만 행으로 세밀하게, 객석은 켠다/끈다만. 행 = 같은 액션·밝기·색·시간인 채널 묶음
 // v11: 조명은 이름 붙인 조명 줄(조명 + ON/OFF)이 기본. 채널 편집기는 "상세(채널)" 를 펼쳐야 보인다(adv) — 채널이 있는 큐는 펼친 채로 연다.
@@ -6600,6 +6809,15 @@ function act(a, el) {
   const S = state.show;
   switch (a) {
     case 'view': if (el.dataset.view !== 'check') state.ckNav = null; state.listOpen = false; if (el.closest('#nav')) state.navOpen = false; setView(el.dataset.view); render(); break;
+    case 'help-toggle': if (HELP.open) helpClose(); else helpOpen(null); break;
+    case 'help-open': helpOpen(el.dataset.id); break;
+    case 'help-close': helpClose(); break;
+    case 'help-tab': HELP.tab = el.dataset.tab; HELP.art = null; HELP.term = null; HELP.q = ''; renderHelp(); { const b = document.getElementById(el.id); if (b) b.focus(); } break;
+    case 'help-back': HELP.art = null; renderHelp(); { const b = $('#help-q'); if (b) b.focus({ preventScroll: true }); } break;
+    case 'help-term': helpTerm(Number(el.dataset.i)); break;
+    case 'help-print': helpPrint(); break;
+    case 'help-first': firstSeen(); helpOpen('start-5min'); break;
+    case 'first-dismiss': firstSeen(); break;
     case 'list-toggle': state.listOpen = !state.listOpen; state.menuOpen = false; renderTop(); { const f = state.listOpen && $('#list-menu button'); if (f) f.focus(); } break;
     case 'print': state.menuOpen = false; renderTop(); setTimeout(() => window.print(), 0); break;
     case 'pw-dismiss': pwMarkSeen(); renderPwBar(); break;
@@ -7171,6 +7389,8 @@ document.addEventListener('change', ev => {
     save(); refreshSceneHeads(); renderNav();
   }
   else if (a === 'run-mine') { state.runMine = t.checked; savePrefs(); render(); }
+  else if (a === 'help-role') { HELP.role = t.value; HELP.crew = null; renderHelpBody(); const s = $('#help-role'); if (s) s.focus(); }
+  else if (a === 'help-crew') HELP.crew = t.value;
   else if (a === 'run-role') { state.role = t.value || 'all'; if (state.role !== 'all') state.runMine = true; savePrefs(); render(); $('#main').focus({ preventScroll: true }); } // 고른 뒤 ↓ · Space 가 바로 다음 큐로 가게 (체크·목록에 포커스를 두지 않는다)
   else if (a === 'booth') { state.booth = t.checked; savePrefs(); render(); }
   else if (a === 'autocd') { state.autoCd = t.checked; savePrefs(); }
@@ -7261,6 +7481,7 @@ document.addEventListener('input', ev => {
   if (t.closest('.modal')) { if (t.dataset.f && t.type !== 'checkbox') modalField(t); if (t.id === 'import-text' && state.modal) state.modal.text = t.value; return; }
   if (t.id === 'pl-seek') { const au = audioEl(); if (isFinite(au.duration)) au.currentTime = Number(t.value) / 1000 * au.duration; return; }
   if (t.id === 'pl-vol') { plVolTo(Number(t.value) / 100); return; }
+  if (t.id === 'help-q') { HELP.q = t.value; renderHelpBody(); return; }
   if (t.id === 'comment-text') state.commentDraft = t.value;
   else if (t.id === 'author-name') { state.author = t.value.trim(); savePrefs(); }
 });
@@ -7314,6 +7535,8 @@ document.addEventListener('keydown', ev => {
     return;
   }
   if (state.projOpen && ev.key === 'Escape') { state.projOpen = false; renderProj(); const b = $('#proj-btn'); if (b) b.focus(); return; }
+  // 도움말: F1 (어디서나) · ? (입력 중이 아닐 때). 포커스가 도움말 자리(data-help) 안이면 그 글로 바로
+  { const typing = !!(t.matches && (t.matches('input, textarea, select') || t.isContentEditable)); if (ev.key === 'F1' || (ev.key === '?' && !mod && !ev.altKey && !typing)) { ev.preventDefault(); if (HELP.open) helpClose(); else { const c = t.closest && t.closest('[data-help]'); helpOpen(c ? c.dataset.help : null); } return; } }
   if (ev.key === 'Enter' && t.id === 'pj-new-title') { ev.preventDefault(); act('proj-new', { dataset: { kind: 'blank' } }); return; }
   if (ev.key === 'Enter' && (t.id === 'ag-name' || t.id === 'ag-admin-key') && !ev.isComposing && ev.keyCode !== 229) { ev.preventDefault(); if (t.id === 'ag-name') state.modal.name = t.value; else state.modal.adminKey = t.value; agentIssue(); return; }
   const doc = t.closest && t.closest('.doc');
@@ -7372,7 +7595,9 @@ document.addEventListener('keydown', ev => {
   if (t.id === 'comment-text' && ev.key === 'Enter' && mod) { ev.preventDefault(); act('comment-add', t); return; }
   if (ev.key === 'Escape') {
     if (!$('#cd').hidden) { stopCountdown(); return; }
+    if (HELP.open && HELP.over) { helpClose(); return; }
     if (state.modal) { closeModal(false); return; }
+    if (HELP.open) { helpClose(); return; }
     if (state.menuOpen) { state.menuOpen = false; renderTop(); return; }
     if (state.listOpen) { state.listOpen = false; renderTop(); const b = $('#tab-list'); if (b) b.focus(); return; }
     if (state.navOpen) { state.navOpen = false; renderNav(); return; }
@@ -7432,7 +7657,7 @@ function syncTopH() {
   const v = Math.max(0, Math.round(b.getBoundingClientRect().top)) + 'px';
   if (document.body.style.getPropertyValue('--top-h') !== v) document.body.style.setProperty('--top-h', v);
 }
-if (window.ResizeObserver) { const ro = new ResizeObserver(syncTopH); ['topbar', 'movebar', 'syncbar', 'pwbar', 'swbar', 'namebar'].forEach(id => { const el = document.getElementById(id); if (el) ro.observe(el); }); }
+if (window.ResizeObserver) { const ro = new ResizeObserver(syncTopH); ['topbar', 'movebar', 'syncbar', 'pwbar', 'swbar', 'namebar', 'firstbar'].forEach(id => { const el = document.getElementById(id); if (el) ro.observe(el); }); }
 // 화자 목록: 마우스로 고르기 (포커스는 편집기에 그대로) · 편집 모드에서 화자 이름을 누르면 목록
 (function wireSpk() {
   const el = spkPop();
