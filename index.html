@@ -613,6 +613,7 @@ body.has-player .app,body.has-preview .app{padding-bottom:calc(var(--player-h, 0
 #pl-vol{width:80px}
 .pl-time{font-family:var(--mono);font-size:12px;white-space:nowrap;color:var(--ink-2)}
 .pl-volv{font-family:var(--mono);font-size:12px;min-width:3.4em;color:var(--ink-2);white-space:nowrap}
+.pl-vs{display:none;font-size:15px;min-width:1.4em;text-align:center}
 .pl-mini{font-family:var(--mono);font-size:12px;color:var(--accent)}
 /* 곡 목록: 바 위로 펼침. 괘선만 — 지금 곡은 글자색(--accent) */
 .pl-q{position:absolute;right:max(16px, env(safe-area-inset-right, 0px));bottom:100%;width:min(460px,calc(100vw - 32px));max-height:min(55vh,400px);overflow:auto;background:var(--paper);border:1px solid var(--rule-2);border-bottom:0}
@@ -838,11 +839,16 @@ body.has-player .app,body.has-preview .app{padding-bottom:calc(var(--player-h, 0
   .grid2,.grid3{grid-template-columns:minmax(0,1fr)}
   .run-btns{grid-template-columns:1fr 1fr}
   .rc-sum{font-size:16px}
-  body.has-player{--player-h:76px}
-  .player{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;grid-template-areas:"info info vol end" "tr pos pos pos";gap:6px 14px}
+  body.has-player{--player-h:106px}
+  /* 휴대폰: 볼륨은 세 번째 줄 — 음소거 · − · 슬라이더 · + · % (−/+ 는 10% 단위) */
+  .player{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"info info end" "tr pos pos" "vol vol vol";gap:6px 14px}
   .pl-tr{grid-area:tr}.pl-info{grid-area:info}.pl-pos{grid-area:pos}.pl-vg{grid-area:vol}.pl-end{grid-area:end}
   .pl-end{gap:10px}
-  #pl-vol,.pl-volv,.pl-qh .run-keys,#pl-reopen.pl-idle{display:none}
+  .pl-qh .run-keys,#pl-reopen.pl-idle{display:none}
+  .pl-vs{display:inline-block}
+  .pl-vg{gap:10px}
+  .pl-vg .tb,.pl-volv{flex:none}
+  #pl-vol{flex:1;width:auto;min-width:60px}
 }
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}
@@ -964,8 +970,10 @@ body.has-player .app,body.has-preview .app{padding-bottom:calc(var(--player-h, 0
   </div>
   <div class="pl-g pl-vg">
     <button type="button" class="tb" id="pl-mute" data-act="pl-mute" aria-pressed="false">음소거</button>
+    <button type="button" class="tb pl-vs" id="pl-vdn" data-act="pl-vstep" data-d="-0.1" aria-label="볼륨 10% 내리기">−</button>
     <input type="range" id="pl-vol" min="0" max="100" value="90" aria-label="볼륨">
     <span class="pl-volv" id="pl-volv" aria-live="off">90%</span>
+    <button type="button" class="tb pl-vs" id="pl-vup" data-act="pl-vstep" data-d="0.1" aria-label="볼륨 10% 올리기">+</button>
   </div>
   <div class="pl-g pl-end">
     <button type="button" class="tb" id="pl-list" data-act="pl-list" aria-expanded="false" aria-controls="pl-q">목록</button>
@@ -2534,15 +2542,72 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('mess
 /* ================= 음원: 플레이어 ================= */
 // 공유 <audio> 하나. 페이드는 setInterval 로 audio.volume 을 조절 (실제 볼륨 = 사용자 볼륨 × 페이드 게인)
 // 큐(cuePlay)와 하단 플레이어(목록·이전/다음·재생)가 이 상태를 함께 쓴다. muted 는 저장하지 않는다(새로고침하면 소리 켜짐)
+// 손으로 바꾼 볼륨(슬라이더·↑↓·휴대폰 −/+)은 큐 레벨을 푼다 — AU.gain = 1, AU.vol = 그때의 실제 출력에서 이어서 (plVolTo).
+// 슬라이더·% 는 늘 실제 출력(AU.gain × AU.vol)을 보인다. 큐 레벨이 걸려 있으면 "· 큐 n%" 를 덧붙인다
 const AU = { trackNo: null, gain: 1, vol: 0.9, timer: null, shown: false, muted: false };
 function audioEl() { return document.getElementById('player-audio'); }
-function applyVol() { const a = audioEl(); if (a) { a.volume = Math.max(0, Math.min(1, AU.gain * AU.vol)); a.muted = !!AU.muted; } }
-function cancelRamp() { if (AU.timer) { clearInterval(AU.timer); AU.timer = null; } }
+/* Web Audio: iOS·iPadOS 는 audio.volume 을 무시한다(늘 1). 그래서 소리 크기는 GainNode 로 — 요소 → fade(AU.gain: 큐 레벨·페이드) → vol(AU.vol·음소거) → 출력.
+   AudioContext 는 처음 재생할 때(사용자 동작 안) 한 번 만들고, 요소마다 createMediaElementSource 도 한 번(두 번 부르면 예외).
+   요소의 volume 은 1 로 두고 muted 는 쓰지 않는다. 음원 주소는 같은 출처(/api/…/audio · 공연 모드 blob:)라 소리가 막히지 않는다.
+   AudioContext 가 없거나 만들다 실패하면 예전처럼 audio.volume (데스크톱·안드로이드는 이것도 된다).
+   iOS: navigator.audioSession.type = 'playback' — 무음 스위치를 켜 두어도 소리가 나게. 멈춘(suspended·interrupted) 컨텍스트는 다음 누름·키에서 다시 깨운다 */
+const WA = { ctx: null, failed: false };
+function waInit() {
+  if (WA.ctx || WA.failed) return WA.ctx;
+  const C = typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext);
+  if (!C) { WA.failed = true; return null; }
+  try {
+    if (navigator.audioSession) { try { navigator.audioSession.type = 'playback'; } catch (e) { /* 무시 */ } }
+    const ctx = new C();
+    [audioEl(), previewEl()].forEach(el => {
+      if (!el || el._cueGain) return;
+      try {
+        const src = ctx.createMediaElementSource(el), fade = ctx.createGain(), vol = ctx.createGain();
+        src.connect(fade); fade.connect(vol); vol.connect(ctx.destination);
+        el._cueGain = { fade, vol };
+      } catch (e) { /* 이 요소만 예전 방식 */ }
+    });
+    ctx.addEventListener('statechange', () => { if (ctx.state === 'suspended' || ctx.state === 'interrupted') waResume(); });
+    WA.ctx = ctx;
+  } catch (e) { WA.failed = true; WA.ctx = null; }
+  applyVol();
+  return WA.ctx;
+}
+function waResume() {
+  const c = WA.ctx;
+  if (c && c.state !== 'running' && c.state !== 'closed') { try { const p = c.resume(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* 무시 */ } }
+}
+// 소리를 내기 직전(재생·미리듣기·큐 PLAY — 사용자 동작 안)에 부른다
+function audioReady() { waInit(); waResume(); }
+function waSet(param, v) { param.cancelScheduledValues(WA.ctx.currentTime); param.value = v; }
+function applyVol() {
+  const a = audioEl(), pv = typeof previewEl === 'function' ? previewEl() : null;
+  if (a) {
+    const g = a._cueGain;
+    if (g) { if (a.volume !== 1) a.volume = 1; if (a.muted) a.muted = false; waSet(g.vol.gain, AU.muted ? 0 : AU.vol); if (!AU.timer) waSet(g.fade.gain, AU.gain); }
+    else { a.volume = Math.max(0, Math.min(1, AU.gain * AU.vol)); a.muted = !!AU.muted; }
+  }
+  // 미리듣기도 플레이어 볼륨·음소거를 따른다 (듣는 중에 바꿔도)
+  if (pv) {
+    const g = pv._cueGain;
+    if (g) { if (pv.volume !== 1) pv.volume = 1; if (pv.muted) pv.muted = false; waSet(g.vol.gain, AU.muted ? 0 : AU.vol); }
+    else { pv.volume = AU.vol; pv.muted = !!AU.muted; }
+  }
+}
+// 페이드를 멈추면 GainNode 의 예약도 지우고 지금 값(AU.gain)에 둔다
+function cancelRamp() {
+  if (!AU.timer) return;
+  clearInterval(AU.timer); AU.timer = null;
+  const a = audioEl(), g = a && a._cueGain; if (g) waSet(g.fade.gain, AU.gain);
+}
+// 페이드: GainNode 이면 오디오 스레드가 linearRamp 로(백그라운드에서 타이머가 느려져도 소리는 제때). setInterval 은 AU.gain(표시·상태)과 끝 처리
 function ramp(from, to, sec, done) {
   cancelRamp();
   if (!sec || sec <= 0) { AU.gain = to; applyVol(); if (done) done(); return; }
   const t0 = performance.now();
   AU.gain = from; applyVol();
+  const a = audioEl(), g = a && a._cueGain;
+  if (g) { const p = g.fade.gain, t = WA.ctx.currentTime; p.cancelScheduledValues(t); p.setValueAtTime(from, t); p.linearRampToValueAtTime(to, t + sec); }
   AU.timer = setInterval(() => {
     const k = Math.min(1, (performance.now() - t0) / (sec * 1000));
     AU.gain = from + (to - from) * k; applyVol();
@@ -2564,6 +2629,7 @@ function loadTrack(no) {
 function playTrack(no, fadeSec, target) {
   target = target == null ? 1 : target;
   if (!loadTrack(no)) return;
+  audioReady();
   const a = audioEl();
   AU.shown = true; AU.gain = fadeSec ? 0 : target; applyVol();
   const p = a.play();
@@ -2671,7 +2737,7 @@ function previewToggle(t) {
   const url = trackUrl(t); if (!url) return;
   if (pv.dataset.key !== t.fileKey || pv.getAttribute('src') !== url) { pv.src = url; pv.dataset.key = t.fileKey; }
   try { pv.currentTime = 0; } catch (e) { /* 메타데이터 전 */ }
-  pv.volume = AU.vol; PV.trackId = t.id;
+  PV.trackId = t.id; audioReady(); applyVol();
   const p = pv.play();
   if (p && p.catch) p.catch(err => toast('미리듣기 실패: ' + (err && err.message || err)));
 }
@@ -2702,7 +2768,7 @@ function playBtn(c, it, big) {
   return `<button type="button" class="play ${nofile ? 'nofile' : ''}" ${ids} title="${esc(title)}">${lbl}</button>`;
 }
 /* 하단 플레이어: 음원이 하나라도 있으면 상단 바 "플레이어"로 언제든 연다. 곡 순서는 트랙 번호 */
-const PL = { list: false, sig: '' };
+const PL = { list: false, sig: '', dragVol: false }; // dragVol: 볼륨 슬라이더를 마우스·손가락으로 끄는 중
 function plTracks() { return state.show ? state.show.tracks.filter(t => t.no != null).slice().sort((a, b) => a.no - b.no) : []; }
 function plPlayable() { return plTracks().filter(t => trackUrl(t)); }
 function hasAudioFiles() { return !!state.show && state.show.tracks.some(t => trackUrl(t)); }
@@ -2722,6 +2788,7 @@ function plStep(dir) {
 function plToggle() {
   const a = audioEl();
   if (audioPlaying()) { a.pause(); return; }
+  audioReady();
   const t = trackByNo(AU.trackNo), url = trackUrl(t);
   if (!url || !a.getAttribute('src')) {
     const n = url ? t : plPlayable()[0];
@@ -2741,7 +2808,10 @@ function plSeekBy(sec) {
   a.currentTime = Math.max(0, Math.min(a.duration, a.currentTime + sec));
   updatePlayer();
 }
-function plVolTo(v) { AU.vol = Math.max(0, Math.min(1, Math.round(v * 100) / 100)); AU.muted = false; applyVol(); savePrefs(); updatePlayer(); }
+// 지금 실제 출력 (슬라이더·% 가 보이는 값)
+function plEff() { return Math.max(0, Math.min(1, AU.gain * AU.vol)); }
+// 손으로 바꾼 볼륨 v(실제 출력): 큐 레벨을 풀고(AU.gain = 1) 진행 중인 페이드·볼륨 램프는 멈춘다 — 조작자가 이긴다. 음소거도 풀린다
+function plVolTo(v) { cancelRamp(); AU.gain = 1; AU.vol = Math.max(0, Math.min(1, Math.round(v * 100) / 100)); AU.muted = false; applyVol(); savePrefs(); updatePlayer(); }
 function plListHtml(playing) {
   const ts = plTracks(), a = audioEl();
   const head = '<div class="pl-qh"><span>곡 목록 — 누르면 재생</span><span class="run-keys">플레이어에서 Space · ← → 5초 · ↑ ↓ 볼륨</span></div>';
@@ -2789,13 +2859,13 @@ function updatePlayer() {
   sk.disabled = !okD;
   if (document.activeElement !== sk) sk.value = okD ? Math.round(a.currentTime / d * 1000) : 0;
   $('#pl-time').textContent = okD ? `${fmtDur(Math.floor(a.currentTime))} / -${fmtDur(Math.ceil(d - a.currentTime))}` : '0:00 / -:--';
-  const v = $('#pl-vol'); if (document.activeElement !== v) v.value = Math.round(AU.vol * 100);
-  // 실제 출력 = 기기 볼륨 × 큐 레벨(볼륨 큐·페이드). 큐가 레벨을 낮춰 두었으면 함께 보인다
+  // 슬라이더·% = 실제 출력(볼륨 × 큐 레벨·페이드). 마우스·손가락으로 끄는 동안만 손대지 않는다(키보드로 바꾼 값은 바로 보인다)
+  const v = $('#pl-vol'), eff = Math.round(plEff() * 100); if (!PL.dragVol) v.value = eff;
   const m = $('#pl-mute');
   m.classList.toggle('on', AU.muted); m.setAttribute('aria-pressed', String(AU.muted));
   const cueLv = !AU.timer && AU.gain < 0.995 && src ? ` · 큐 ${Math.round(AU.gain * 100)}%` : '';
-  $('#pl-volv').textContent = AU.muted ? '꺼짐' : Math.round(AU.vol * 100) + '%' + cueLv;
-  $('#pl-volv').title = '실제 출력 = 볼륨 × 큐 레벨';
+  $('#pl-volv').textContent = AU.muted ? '꺼짐' : eff + '%' + cueLv;
+  $('#pl-volv').title = cueLv ? `큐 레벨 ${Math.round(AU.gain * 100)}% 가 걸린 실제 출력 — 손으로 바꾸면 큐 레벨이 풀린다` : '실제 출력';
   $('#pl-fade').hidden = !AU.timer;
   // 종료: 재생 중이면 한 번 더 눌러 확인 (숨기기와 붙어 있어 잘못 누르면 음악이 끊긴다)
   const q = $('#pl-quit');
@@ -2820,13 +2890,14 @@ function plKeydown(ev) {
   if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.isComposing || ev.keyCode === 229) return;
   const k = ev.key, t = ev.target, inList = t.closest && t.closest('#pl-q');
   if (k === ' ' || k === 'Spacebar') plToggle();
+  else if ((k === 'ArrowLeft' || k === 'ArrowRight') && t.id === 'pl-vol') plVolTo(plEff() + (k === 'ArrowLeft' ? -0.05 : 0.05)); // 볼륨 슬라이더에서는 ←→ 도 볼륨
   else if (k === 'ArrowLeft' || k === 'ArrowRight') plSeekBy(k === 'ArrowLeft' ? -5 : 5);
   else if ((k === 'ArrowUp' || k === 'ArrowDown') && inList) {
     const bs = $$('#pl-q li button:not(:disabled)'), i = bs.indexOf(t);
     const n = bs[i < 0 ? 0 : Math.max(0, Math.min(bs.length - 1, i + (k === 'ArrowUp' ? -1 : 1)))];
     if (n) n.focus();
   }
-  else if (k === 'ArrowUp' || k === 'ArrowDown') plVolTo(AU.vol + (k === 'ArrowUp' ? 0.05 : -0.05));
+  else if (k === 'ArrowUp' || k === 'ArrowDown') plVolTo(plEff() + (k === 'ArrowUp' ? 0.05 : -0.05));
   else if (k === 'Escape' && PL.list) { PL.list = false; updatePlayer(); $('#pl-list').focus(); }
   else return;
   ev.preventDefault(); ev.stopPropagation();
@@ -6406,7 +6477,8 @@ function act(a, el) {
     case 'pl-prev': plStep(-1); break;
     case 'pl-next': plStep(1); break;
     case 'pl-pick': playTrack(Number(el.dataset.no), 0); break;
-    case 'pl-mute': AU.muted = !AU.muted; applyVol(); updatePlayer(); break;
+    case 'pl-mute': AU.muted = !AU.muted; applyVol(); updatePlayer(); break; // 음소거만으로는 큐 레벨을 풀지 않는다
+    case 'pl-vstep': plVolTo(Math.round((plEff() + Number(el.dataset.d)) * 10) / 10); break; // 휴대폰 −/+ : 10% 단위로 맞춤
     case 'pl-list': PL.list = !PL.list; updatePlayer(); break;
     case 'pl-close': AU.shown = false; updatePlayer(); break; // 숨기기만 — 재생은 계속
     case 'pl-quit': plStop(); AU.shown = false; updatePlayer(); break; // 종료 — 정지하고 닫기
@@ -6656,7 +6728,7 @@ document.addEventListener('input', ev => {
   }
   if (t.closest('.modal')) { if (t.dataset.f && t.type !== 'checkbox') modalField(t); if (t.id === 'import-text' && state.modal) state.modal.text = t.value; return; }
   if (t.id === 'pl-seek') { const au = audioEl(); if (isFinite(au.duration)) au.currentTime = Number(t.value) / 1000 * au.duration; return; }
-  if (t.id === 'pl-vol') { AU.vol = Number(t.value) / 100; AU.muted = false; applyVol(); savePrefs(); updatePlayer(); return; }
+  if (t.id === 'pl-vol') { plVolTo(Number(t.value) / 100); return; }
   if (t.id === 'comment-text') state.commentDraft = t.value;
   else if (t.id === 'author-name') { state.author = t.value.trim(); savePrefs(); }
 });
@@ -6873,7 +6945,10 @@ document.addEventListener('drop', ev => {
   // 마우스로 누른 버튼·슬라이더는 포커스를 남기지 않는다 — 런 뷰에서 플레이어를 만진 뒤 Space(다음)가 재생/일시정지로 바뀌지 않게.
   // 키보드(Tab)로 들어온 경우에만 플레이어 키가 먹는다
   pl.addEventListener('mousedown', ev => { if (ev.target.closest('button')) ev.preventDefault(); });
-  ['pl-seek', 'pl-vol'].forEach(id => { const r = $('#' + id); r.addEventListener('pointerup', () => setTimeout(() => { if (document.activeElement === r) r.blur(); updatePlayer(); }, 0)); });
+  ['pl-seek', 'pl-vol'].forEach(id => { const r = $('#' + id); r.addEventListener('pointerup', () => setTimeout(() => { if (document.activeElement === r) r.blur(); PL.dragVol = false; updatePlayer(); }, 0)); });
+  { const r = $('#pl-vol'); r.addEventListener('pointerdown', () => { PL.dragVol = true; }); r.addEventListener('pointercancel', () => { PL.dragVol = false; updatePlayer(); }); }
+  // 멈춘 AudioContext(iOS 전화·다른 앱 소리 뒤 등)는 다음 누름·키에서 다시 깨운다 — resume 은 사용자 동작 안에서만 먹는다
+  ['pointerdown', 'keydown', 'touchend'].forEach(n => document.addEventListener(n, waResume, true));
   // 목록 밖을 누르면 목록 닫기 — 캡처 단계에서 본다(곡을 고르면 목록을 다시 그려 눌린 버튼이 문서에서 빠지므로)
   document.addEventListener('click', ev => { if (PL.list && !(ev.target.closest && ev.target.closest('#player'))) { PL.list = false; updatePlayer(); } }, true);
   // 폭에 따라 한 줄·두 줄 — 실제 높이만큼 본문 아래 여백·토스트 위치를 띄운다

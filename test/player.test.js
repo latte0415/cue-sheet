@@ -28,10 +28,10 @@ function player() {
   const ctx = {
     document: { getElementById: id => (id === 'player-audio' ? audio : null) },
     performance: { now: () => 0 }, setInterval: () => 1, clearInterval: () => {}, setTimeout: () => 1, clearTimeout: () => {},
-    toast: m => toasts.push(m), $$: () => [], cssq: s => s,
+    toast: m => toasts.push(m), $$: () => [], cssq: s => s, savePrefs: () => {},
     trackByNo: no => tracks.find(t => t.no === no) || null, trackUrl: t => (t && t.fileKey ? '/f/' + t.fileKey : null)
   };
-  const api = vm.runInNewContext('const FADE_DEFAULT = 3;\n' + cut('음원: 플레이어') + '\n;({ AU, cuePlay, cueRun, cuePlayLabel, playTrack })', ctx);
+  const api = vm.runInNewContext('const FADE_DEFAULT = 3;\n' + cut('음원: 플레이어') + '\n;({ AU, cuePlay, cueRun, cuePlayLabel, playTrack, plVolTo, plEff, ramp })', ctx);
   return Object.assign(api, { audio, toasts });
 }
 const sq = (action, level, x) => Object.assign({ id: 'q', dept: 'sound', sound: { track: 1, action, timeSec: null, level } }, x);
@@ -75,6 +75,28 @@ test('플레이어에서 곡을 직접 고르면(이전/다음·목록 = playTra
   P.playTrack(2, 0);
   assert.equal(P.AU.gain, 1);
   assert.equal(P.audio.volume, 1);
+});
+
+test('손으로 바꾼 볼륨은 큐 레벨을 푼다: 실제 출력에서 이어서(점프 없음) · 진행 중인 페이드는 멈춤 · 뒤 볼륨 큐는 그 볼륨 기준', () => {
+  const P = player();
+  P.AU.vol = 0.9;
+  P.cuePlay(sq('play', 50));
+  assert.ok(Math.abs(P.plEff() - 0.45) < 1e-9, '슬라이더·% 는 실제 출력 45');
+  P.plVolTo(P.plEff() + 0.05); // ↑ 한 번
+  assert.equal(P.AU.gain, 1, '큐 레벨 풀림');
+  assert.equal(P.AU.vol, 0.5, '45 에서 이어서 50');
+  assert.ok(Math.abs(P.audio.volume - 0.5) < 1e-9, '출력 = 슬라이더');
+  // 뒤 볼륨 큐: 조작자 볼륨 기준으로 게인을 바꾼다 (시간 0 → 바로)
+  P.cuePlay(sq('volume', 60));
+  assert.equal(P.AU.gain, 0.6);
+  assert.ok(Math.abs(P.audio.volume - 0.3) < 1e-9);
+  // 페이드 중에 손으로 바꾸면 페이드가 멈춘다
+  P.ramp(0.6, 0, 3, () => { throw new Error('페이드가 끝까지 가면 안 된다'); });
+  assert.ok(P.AU.timer);
+  P.plVolTo(0.7);
+  assert.equal(P.AU.timer, null, '페이드 멈춤');
+  assert.equal(P.AU.gain, 1);
+  assert.ok(Math.abs(P.audio.volume - 0.7) < 1e-9);
 });
 
 test('플레이어 버튼 문구: PLAY 에 시작 볼륨 — 100·비움이면 붙이지 않는다', () => {
