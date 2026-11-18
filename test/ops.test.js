@@ -109,7 +109,7 @@ test('add: 브라우저와 같은 id 접두어·기본값, 자식 포함, 위치
   assert.deepEqual(Object.keys(mid), ['id', 'kind', 'speaker', 'text', 'label', 'isCue', 'cues', 'comments']);
   assert.equal(mid.kind, 'action', '"(" 로 시작하면 action');
   assert.equal(mid.isCue, true);
-  assert.deepEqual(mid.cues[0], { id: mid.cues[0].id, dept: 'stage', trigger: '', offsetSec: null, memo: '', status: 'set', stage: { text: '탑햇테이블에 탑햇' } });
+  assert.deepEqual(mid.cues[0], { id: mid.cues[0].id, dept: 'stage', trigger: '', offsetSec: null, memo: '', status: 'set', stage: { text: '탑햇테이블에 탑햇', props: [] } }); // saveCue 와 같은 v6 모양
   // 번호: 맨 앞 → 0.1, 1 과 2 사이 → 1.1, 기존 1·2 그대로, 새 씬 끝 → 3
   assert.deepEqual(items(r.show).map(i => i.label), ['0.1', '1', '1.1', '2', null, '3', null].slice(0, items(r.show).length));
   assert.deepEqual(r.labels.map(l => l.label).sort(), ['0.1', '1.1', '3']);
@@ -325,4 +325,146 @@ test('지문 판정(isActHead)이 index.html 과 같다', () => {
   for (const t of ['(암전)', '* 조예준 인', '— 암전', '-- x', '（전각）', '대사', '', '  (공백 뒤)', '(첫 줄\n둘째)', '\n(둘째 줄)', '대사\n(괄호)', null]) {
     assert.equal(isActHead(t), fe(t), JSON.stringify(t));
   }
+});
+
+// ---- show v6: 소품 (props · preShowProps · stage.props)
+test('v6: 관계없는 op 를 적용해도 props·preShowProps·stage.props 는 그대로', () => {
+  const s = docExample(), before = JSON.stringify(s);
+  const r = applyOps(s, [
+    { op: 'set', id: 'i-2', fields: { text: '(조대훈 등장 — 천천히)' } },
+    { op: 'set', id: 'q-4', fields: { stage: { text: '탑햇 세팅' }, memo: '확인' } },
+    { op: 'move', id: 'q-4', after: 'first' },
+    { op: 'add', kind: 'person', data: { name: '스태프', role: 'stage' } }
+  ]);
+  assert.equal(JSON.stringify(s), before, '입력은 그대로');
+  assert.equal(r.show.version, 6);
+  assert.deepEqual(r.show.props, s.props);
+  assert.deepEqual(r.show.preShowProps, s.preShowProps);
+  assert.deepEqual(find(r.show, 'q-4').stage, { text: '탑햇 세팅', props: [{ propId: 'pr-tophat', action: 'in', at: '테이블 위' }] });
+  assert.deepEqual(validateShow(r.show).errors, []);
+  assert.deepEqual(r.warnings, []);
+});
+
+test('v6: v5 공연은 migrate 처럼 v6 으로 — 빈 props·preShowProps, 무대 큐 stage.props:[] (다른 값은 그대로)', () => {
+  const s = backstage();
+  assert.equal(s.version, 5);
+  const stageBefore = items(s).flatMap(i => i.cues).filter(c => c.dept === 'stage').map(c => c.stage.text);
+  const r = applyOps(s, [{ op: 'set', kind: 'show', fields: { revision: 'v6 테스트' } }]);
+  assert.equal(r.show.version, 6);
+  assert.deepEqual(r.show.props, []);
+  assert.deepEqual(r.show.preShowProps, []);
+  assert.deepEqual(Object.keys(r.show).slice(Object.keys(r.show).indexOf('people')), ['people', 'props', 'preShowProps', 'tracks', 'parts'], 'migrate 와 같은 키 순서');
+  const st = items(r.show).flatMap(i => i.cues).filter(c => c.dept === 'stage');
+  assert.deepEqual(st.map(c => c.stage.text), stageBefore);
+  assert.ok(st.length && st.every(c => Array.isArray(c.stage.props) && !c.stage.props.length));
+  assert.deepEqual(r.warnings, []);
+});
+
+test('v6: set 으로 stage.props 통째 교체 — 빠진 필드는 기본값, 항목 필드 검증', () => {
+  const s = docExample();
+  let r = applyOps(s, [{ op: 'set', id: 'q-4', fields: { stage: { props: [{ propId: 'pr-table', action: 'out' }, { propId: 'pr-tophat', at: '객석 쪽' }] } } }]);
+  assert.deepEqual(find(r.show, 'q-4').stage, { text: '탑햇테이블에 탑햇 세팅', props: [{ propId: 'pr-table', action: 'out', at: '' }, { propId: 'pr-tophat', action: 'in', at: '객석 쪽' }] });
+  assert.deepEqual(r.warnings, []);
+  // 글을 지워도 소품 동작이 있으면 내용 있는 큐 (index.html saveCue·validateShow 와 같은 기준)
+  r = applyOps(s, [{ op: 'set', id: 'q-4', fields: { stage: { text: '' } } }]);
+  assert.deepEqual(r.warnings, []);
+  // 둘 다 비면 경고 (q-4 는 tbd 라 status 도 set 으로)
+  r = applyOps(s, [{ op: 'set', id: 'q-4', fields: { status: 'set', stage: { text: '', props: [] } } }]);
+  assert.ok(r.warnings.some(w => /stage cue q-4 has no content/.test(w.msg)), JSON.stringify(r.warnings));
+  assert.ok(r.warnings.some(w => /무대 큐가 비어 있습니다/.test(w.msg)), 'validateShow 도 같은 기준');
+  rejects(() => applyOps(s, [{ op: 'set', id: 'q-4', fields: { stage: { props: [{ propId: 'pr-ghost' }] } } }]), 'bad_field', /stage\.props\[0\]\.propId" must be a prop id from props\[\] \(known: pr-tophat=탑햇, pr-table=탑햇테이블\)/);
+  rejects(() => applyOps(s, [{ op: 'set', id: 'q-4', fields: { stage: { props: [{ propId: '탑햇' }] } } }]), 'bad_field', /"탑햇" is a name, use id "pr-tophat"/);
+  rejects(() => applyOps(s, [{ op: 'set', id: 'q-4', fields: { stage: { props: [{ action: 'in' }] } } }]), 'bad_field', /stage\.props\[0\]\.propId" is required/);
+  rejects(() => applyOps(s, [{ op: 'set', id: 'q-4', fields: { stage: { props: [{ propId: 'pr-table', action: 'enter' }] } } }]), 'bad_field', /action" must be one of in\|out\|move/);
+  rejects(() => applyOps(s, [{ op: 'set', id: 'q-4', fields: { stage: { props: [{ propId: 'pr-table', name: 'x' }] } } }]), 'bad_field', /unknown field "stage\.props\[0\]\.name"/);
+  rejects(() => applyOps(s, [{ op: 'set', id: 'q-4', fields: { stage: { props: { propId: 'pr-table' } } } }]), 'bad_field', /"stage\.props" must be an array/);
+  // 새 무대 큐 기본값은 브라우저 saveCue 와 같다
+  r = applyOps(s, [{ op: 'add', kind: 'cue', parent: 'i-1', data: { dept: 'stage', stage: { props: [{ propId: 'pr-table', action: 'move', at: '왼쪽' }] } } }]);
+  const q = find(r.show, 'i-1').cues.at(-1);
+  assert.deepEqual(q.stage, { text: '', props: [{ propId: 'pr-table', action: 'move', at: '왼쪽' }] });
+  assert.deepEqual(r.warnings, []);
+  // 부서를 stage 로 바꾸면 기본값 { text:'', props:[] } 에서 시작
+  r = applyOps(s, [{ op: 'set', id: 'q-3', fields: { dept: 'stage', stage: { text: '의자' } } }]);
+  assert.deepEqual(find(r.show, 'q-3').stage, { text: '의자', props: [] });
+});
+
+test('v6: kind:"prop" add/set/move/remove — 사람과 같은 방식, 같은 호출에서 새 소품을 무대 큐에', () => {
+  const s = docExample();
+  let r = applyOps(s, [
+    { op: 'add', kind: 'prop', data: { id: 'pr-cup', name: '컵', note: '유리' } },
+    { op: 'add', kind: 'prop', data: { name: '카드' } },
+    { op: 'set', id: 'q-4', fields: { stage: { props: [{ propId: 'pr-cup', action: 'in', at: '테이블' }] } } },
+    { op: 'set', kind: 'prop', id: 'pr-tophat', fields: { name: '검은 탑햇' } },
+    { op: 'move', id: 'pr-cup', after: 'first' }
+  ]);
+  assert.deepEqual(r.show.props.map(p => p.name), ['컵', '검은 탑햇', '탑햇테이블', '카드']);
+  assert.match(r.show.props[3].id, /^pr-/);
+  assert.deepEqual(r.show.props[3], { id: r.show.props[3].id, name: '카드', note: '' });
+  assert.deepEqual(validateShow(r.show).errors, []);
+  rejects(() => applyOps(s, [{ op: 'add', kind: 'prop', data: { note: 'x' } }]), 'bad_field', /a new prop needs a "name"/);
+  rejects(() => applyOps(s, [{ op: 'add', kind: 'prop', parent: 's-1', data: { name: 'x' } }]), 'bad_op', /has no parent/);
+  rejects(() => applyOps(s, [{ op: 'set', id: 'pr-table', fields: { role: 'x' } }]), 'bad_field', /unknown field "role" for prop/);
+  rejects(() => applyOps(s, [{ op: 'set', kind: 'show', fields: { props: [] } }]), 'bad_field', /kind:"prop"/);
+
+  // 무대 큐·공연 전 무대가 쓰는 소품은 force 없으면 거부, 사용처를 알려 준다
+  const e = rejects(() => applyOps(s, [{ op: 'remove', id: 'pr-table' }]), 'referenced', /preShowProps\[0\]/);
+  assert.equal(e.references.length, 1);
+  rejects(() => applyOps(s, [{ op: 'remove', id: 'pr-tophat' }]), 'referenced', /stage cue q-4/);
+  // force: 브라우저 prop-del 처럼 preShowProps 에서는 빼고 무대 큐 행은 남긴다 ("(삭제된 소품)" 경고)
+  r = applyOps(s, [{ op: 'remove', id: 'pr-table', force: true }, { op: 'remove', id: 'pr-tophat', force: true }]);
+  assert.deepEqual(r.show.props, []);
+  assert.deepEqual(r.show.preShowProps, []);
+  assert.deepEqual(find(r.show, 'q-4').stage.props, [{ propId: 'pr-tophat', action: 'in', at: '테이블 위' }]);
+  assert.deepEqual(validateShow(r.show).errors, []);
+  assert.ok(r.warnings.some(w => /pr-tophat" 가 props 에 없습니다/.test(w.msg)), JSON.stringify(r.warnings));
+  // 안 쓰는 소품은 그냥 지워진다
+  r = applyOps(s, [{ op: 'add', kind: 'prop', data: { id: 'pr-x', name: 'x' } }, { op: 'remove', id: 'pr-x' }]);
+  assert.deepEqual(r.show.props, s.props);
+});
+
+test('v6: preShowProps 는 set kind:"show" 로 배열 통째 교체', () => {
+  const s = docExample();
+  const r = applyOps(s, [{ op: 'set', kind: 'show', fields: { preShowProps: [{ propId: 'pr-tophat', at: '테이블 위' }, { propId: 'pr-table' }] } }]);
+  assert.deepEqual(r.show.preShowProps, [{ propId: 'pr-tophat', at: '테이블 위' }, { propId: 'pr-table', at: '' }]);
+  assert.deepEqual(r.warnings, []);
+  rejects(() => applyOps(s, [{ op: 'set', kind: 'show', fields: { preShowProps: [{ propId: 'pr-table', action: 'in' }] } }]), 'bad_field', /unknown field "preShowProps\[0\]\.action"/);
+  rejects(() => applyOps(s, [{ op: 'set', kind: 'show', fields: { preShowProps: [{ propId: 'nope' }] } }]), 'bad_field', /preShowProps\[0\]\.propId" must be a prop id/);
+  assert.deepEqual(applyOps(s, [{ op: 'set', kind: 'show', fields: { preShowProps: [] } }]).show.preShowProps, []);
+});
+
+test('v6: 사이트가 불러와도(index.html migrate) 소품 op 결과가 그대로다', () => {
+  const vm = require('vm');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const a = html.indexOf('/* ================= 상수'), b = html.indexOf('/* ================= 상태');
+  const { migrate } = vm.runInNewContext(html.slice(a, b) + '\n;({ migrate })', {});
+  // 실데이터(v5) 에 소품을 처음 붙여 본다
+  const s = backstage();
+  const cues = items(s).flatMap(i => i.cues.map(c => ({ c, i })));
+  const st = cues.find(x => x.c.dept === 'stage'), lt = cues.find(x => x.c.dept === 'light');
+  const r = applyOps(s, [
+    { op: 'add', kind: 'prop', data: { id: 'pr-cup', name: '컵' } },
+    { op: 'set', kind: 'show', fields: { preShowProps: [{ propId: 'pr-cup' }] } },
+    { op: 'set', id: st.c.id, fields: { stage: { props: [{ propId: 'pr-cup', action: 'out', at: '퇴장 쪽' }] } } },
+    { op: 'add', kind: 'cue', parent: st.i.id, data: { dept: 'stage', stage: { props: [{ propId: 'pr-cup', action: 'in' }] } } },
+    { op: 'set', id: lt.c.id, fields: { dept: 'stage', stage: { text: '의자' } } }
+  ]);
+  assert.equal(r.show.version, 6);
+  const strip = x => { x = JSON.parse(JSON.stringify(x)); delete x.updatedAt; return x; };
+  assert.deepEqual(strip(migrate(r.show)), strip(r.show));
+});
+
+test('v6: 개요·검색에 소품', () => {
+  const { outline, search } = require('../lib/view');
+  const s = docExample();
+  const o = outline(s, { rev: 1 });
+  assert.match(o, /^props: pr-tophat=탑햇, pr-table=탑햇테이블$/m);
+  assert.match(o, /^preShowProps: 탑햇테이블 in @무대 중앙$/m);
+  assert.match(o, /q-4 stage 탑햇테이블에 탑햇 세팅 · props: 탑햇 in @테이블 위/);
+  const r = search(s, '탑햇');
+  assert.ok(r.matches.some(m => m.kind === 'prop' && m.id === 'pr-tophat'));
+  assert.ok(r.matches.some(m => m.kind === 'cue' && m.id === 'q-4' && m.field === 'stage.prop'));
+  assert.ok(search(s, '무대 중앙').matches.some(m => m.field === 'preShowProps.at'));
+  // 지운 소품은 "(삭제된 소품 id)"
+  const g = JSON.parse(JSON.stringify(s)); g.props = [];
+  assert.match(outline(g, {}), /props: \(삭제된 소품 pr-tophat\) in/);
 });

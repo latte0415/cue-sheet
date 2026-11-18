@@ -59,8 +59,8 @@ Codex 를 다시 시작한 뒤 `/mcp` 로 `cue-sheet` 와 도구 6개가 보이�
 | 도구 | 하는 일 | 성격 |
 |---|---|---|
 | `list_shows` | 공연 목록 `{ id, title, rev, updatedAt, sceneCount, cueCount }` | 읽기 |
-| `get_show { showId, view?, partId?, sceneId? }` | `outline`(기본): 한 줄에 하나씩 id·큐 번호·화자 이름·잘린 본문·큐 한 줄 요약 + 사람·트랙 목록. `full`: 고른 파트/씬(또는 전체)의 JSON 그대로 | 읽기 |
-| `search_show { showId, query }` | 대본·화자·큐(trigger·memo·무대/출연 내용·트랙 제목)·코멘트·씬 제목/세팅·사람·트랙에서 대소문자 무시 부분 일치. `Q12`/`12` 는 큐 번호. 최대 50개, id·위치·발췌 | 읽기 |
+| `get_show { showId, view?, partId?, sceneId? }` | `outline`(기본): 한 줄에 하나씩 id·큐 번호·화자 이름·잘린 본문·큐 한 줄 요약(무대 큐는 소품 동작 포함) + 사람·소품·트랙 목록. `full`: 고른 파트/씬(또는 전체)의 JSON 그대로 | 읽기 |
+| `search_show { showId, query }` | 대본·화자·큐(trigger·memo·무대/출연 내용·무대 큐 소품 이름·트랙 제목)·코멘트·씬 제목/세팅·사람·소품·공연 전 무대 소품·트랙에서 대소문자 무시 부분 일치. `Q12`/`12` 는 큐 번호. 최대 50개, id·위치·발췌 | 읽기 |
 | `edit_show { showId, ops, dryRun?, expectRev? }` | ops 를 원자적으로 적용 → 새 rev, 바뀐 내용 요약(새로 매긴 큐 번호 포함), 경고 | 쓰기 |
 | `list_revisions { showId }` | 저장 기록, 최신 먼저(맨 앞이 현재) | 읽기 |
 | `restore_revision { showId, rev }` | 그 버전을 새 버전으로 저장(복원도 되돌릴 수 있음). 이미 같은 내용이면 아무것도 안 함 | 쓰기 |
@@ -87,9 +87,9 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
 
 | op | 형식 | 규칙 |
 |---|---|---|
-| set | `{ op:"set", id, kind?, fields }` | 준 필드만 바꾼다. `kind:"show"` 면 id 없이 `title`·`preShowSetup`·`revision`. 모르는 필드, `id`, `label`, `isCue`, 자식 배열(`items` 등), 트랙의 `fileName`/`fileKey` 는 거부 |
-| add | `{ op:"add", kind, parent?, after?, data }` | `kind`: part·scene·item·cue·comment·person·track. `parent`: scene→파트 id, item→씬 id, cue→문단 id, comment→씬 또는 문단 id (part·person·track 은 없음). `after`: 형제 id / `"first"` / 생략·`null` = 맨 뒤. after 가 형제 id 면 parent 생략 가능 |
-| remove | `{ op:"remove", id, kind?, force? }` | 안에 든 것까지 지운다. 화자·출연자·출연 큐가 가리키는 사람, 음향 큐가 쓰는 트랙은 사용처 목록과 함께 거부. `force:true` 면 지운다 |
+| set | `{ op:"set", id, kind?, fields }` | 준 필드만 바꾼다. `kind:"show"` 면 id 없이 `title`·`preShowSetup`·`revision`·`preShowProps`(배열 통째). 모르는 필드, `id`, `label`, `isCue`, 자식 배열(`items` 등), 트랙의 `fileName`/`fileKey` 는 거부 |
+| add | `{ op:"add", kind, parent?, after?, data }` | `kind`: part·scene·item·cue·comment·person·prop·track. `parent`: scene→파트 id, item→씬 id, cue→문단 id, comment→씬 또는 문단 id (part·person·prop·track 은 없음). `after`: 형제 id / `"first"` / 생략·`null` = 맨 뒤. after 가 형제 id 면 parent 생략 가능 |
+| remove | `{ op:"remove", id, kind?, force? }` | 안에 든 것까지 지운다. 화자·출연자·출연 큐가 가리키는 사람, 무대 큐·공연 전 무대가 가리키는 소품, 음향 큐가 쓰는 트랙은 사용처 목록과 함께 거부. `force:true` 면 지운다 |
 | move | `{ op:"move", id, kind?, parent?, after? }` | 같은 단계 안에서 순서 바꾸기 또는 다른 부모로(큐를 다른 문단으로, 씬을 다른 파트로). parent 를 안 주면 지금 부모 안에서(after 가 다른 부모의 형제면 그쪽으로) |
 
 - `kind` 는 서로 다른 종류에 같은 id 가 있을 때만 필요하다(그때는 오류가 알려 준다).
@@ -98,24 +98,30 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
   정확히 같아야 한다(`constructor`·`__proto__` 같은 이름도 모르는 필드로 거부).
   열거형(`type`, `kind`, `dept`, `role`, `ch`, `action`, `move`, `status`)은 `docs/cue-format.md` 의 값만.
   사람 참조(`speaker`, `cast`, `cast.personId`)는 `people[].id` 만 — 이름을 주면 그 사람의 id 를 알려 주며 거부.
+  소품 참조(`stage.props[].propId`, `preShowProps[].propId`)도 같게 `props[].id` 만. 소품 행에 propId 가 없으면 거부(브라우저 `saveCue` 와 같음).
 - **얕은 합치기.** 큐의 `light`·`sound`·`stage`·`cast` 객체는 한 단계만 합친다: `{ sound: { level: 80 } }` 은 track·action·timeSec 을
-  그대로 두고 level 만 바꾼다. 배열(`light.channels`, `scene.cast`)은 통째로 바뀐다. 채널의 빠진 필드는 기본값
-  (`ch:"front", action:"on"`, 나머지 null). `dept` 를 바꾸면 이전 부서 내용은 버리고 새 부서 기본값에서 시작한다.
+  그대로 두고 level 만 바꾼다. 배열(`light.channels`, `stage.props`, `scene.cast`, show 의 `preShowProps`)은 통째로 바뀐다. 채널의 빠진 필드는 기본값
+  (`ch:"front", action:"on"`, 나머지 null), 소품 행은 `action:"in"`, `at:""`. `dept` 를 바꾸면 이전 부서 내용은 버리고 새 부서 기본값에서 시작한다.
 - **브라우저와 같은 정리.** action 문단은 화자를 지우고, 본문 첫 줄이 지문 머리(`(` `*` `—` 등, index.html `isActHead`)로
   시작하지 않으면 괄호를 씌운다(경고). `data.kind` 없이 본문 첫 줄이 `(` 로 시작하면 action.
 - **표기 규칙** (`docs/cue-format.md` "표기 규칙"). 지문은 `(…)` 괄호 한 쌍 — `*`·`—` 시작, `)` 로 안 끝남, 괄호 안 괄호는
   편집기처럼 저장은 하되 `validateShow` 의 `action-format` 경고가 edit_show 결과에 나온다(op 가 새로 만든 경고만). 서버가 `*` 를
   괄호로 바꾸는 등 자동 고침은 하지 않는다 — 브라우저 편집기도 받는 값이고, 뜻을 바꾸지 않게 에이전트가 고치게 둔다. 음향 `level` 은 `volume`(없으면 100)·`fadeIn` 에서만 남긴다(index.html `saveCue`).
   `#rrggbb` 가 아닌 색은 `colorName` 으로 옮긴다(migrate). 큐가 바뀐 문단의 `isCue` 는 큐 유무를 따른다.
-  내용 없는 큐(채널 없는 조명, 트랙 없는 음향 …)는 저장하되 "채우거나 `status:"tbd"`" 경고.
-- **새 항목.** id 는 브라우저 `uid()` 와 같은 접두어(`pt-` `s-` `i-` `q-` `c-` `p-` `tr-`)로 만든다. 같은 호출의 뒤 op 에서
+  내용 없는 큐(채널 없는 조명, 트랙 없는 음향, text 도 소품 동작도 없는 무대 …)는 저장하되 "채우거나 `status:"tbd"`" 경고.
+- **새 항목.** id 는 브라우저 `uid()` 와 같은 접두어(`pt-` `s-` `i-` `q-` `c-` `p-` `pr-` `tr-`)로 만든다. 같은 호출의 뒤 op 에서
   가리키려면 `data.id` 를 직접 줘도 된다(`[A-Za-z0-9_-]{1,64}`, 쓰지 않은 값). 기본값은 브라우저가 새로 만들 때와 같다
-  (씬 `type:"act"`, 사람 `role:"other"`, 코멘트 작성자 `"익명"`, 트랙 `no` = 지금 최댓값 + 1). `data` 에 자식을 함께 넣을 수 있다:
+  (씬 `type:"act"`, 사람 `role:"other"`, 무대 큐 `stage:{text:"", props:[]}`, 코멘트 작성자 `"익명"`, 트랙 `no` = 지금 최댓값 + 1). `data` 에 자식을 함께 넣을 수 있다:
   part.`scenes`, scene.`items`/`comments`, item.`cues`/`comments`.
 - **트랙.** 항상 `no` 순으로 정렬된다(add 에 `after`, move 는 거부). `no` 를 바꾸면 그 번호를 쓰던 음향 큐의 `sound.track` 도
   함께 바뀐다. 겹치는 번호는 거부. 올린 음원이 있던 트랙을 지우면 파일은 서버에 남는다(경고).
 - **사람 force 삭제.** 브라우저의 사람 삭제와 같이 씬 출연자 목록에서는 빼고, 대사 화자·출연 큐는 그대로 둬 사이트에
   "(삭제된 사람)" 으로 보인다(경고 한 줄로 개수를 알려 줌).
+- **소품 (show v6).** `props[]` 는 사람처럼 `kind:"prop"` 의 add/set(name·note)/remove/move 로 고친다. force 삭제는 브라우저 소품
+  삭제와 같이 `preShowProps` 에서는 빼고, 무대 큐의 소품 행은 그대로 둬 "(삭제된 소품)" 으로 보인다(validateShow 경고).
+  `preShowProps` 는 항목 id 가 없어 `set kind:"show"` 의 배열 통째 교체만 된다.
+- **v5 → v6.** v5 공연에 op 를 적용하면 사이트가 불러올 때(migrate)처럼 `version:6`, 빈 `props`·`preShowProps`, 무대 큐의
+  빈 `stage.props` 를 붙여 저장한다. 다른 값은 바꾸지 않는다(v4 이하는 그대로 두고 사이트의 변환에 맡긴다).
 
 ### 큐 번호
 
