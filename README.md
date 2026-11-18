@@ -26,6 +26,7 @@ npm test                               # 서버 API·MCP 테스트 (node --test)
 | `HISTORY_KEEP` | 100 | 프로젝트마다 보관할 이전 버전 수 (웹 자동 저장은 10분에 한 번만 남김, MCP 수정·복원은 매번) |
 | `TRUST_PROXY` | (Railway 에서 자동) | `1` 이면 편집 비밀번호 실패 제한의 IP 를 `X-Forwarded-For` 마지막 값으로 판별 |
 | `TRASH_DAYS` | 30 | 삭제한 프로젝트를 휴지통(`DATA_DIR/trash/`)에 두는 일수. 지나면 서버 시작 때와 6시간마다 영구 삭제 |
+| `BODY_CACHE_MB` | 64 | 큐시트 본문(파일 바이트·gzip)을 메모리에 두는 상한(MB, 오래 안 쓴 것부터 비움). 0 이면 끈다. 폴링 200 응답이 파일을 다시 읽지 않게 한다 |
 | `ADMIN_KEY` | (없음) | 설정하면 관리자 복구 키가 켜진다 — 편집 비밀번호를 `1234` 로 초기화(`POST /api/shows/:id/edit-password/reset`). 없으면 그 기능 자체가 없다(404). 있으면 MCP 토큰 발급·폐기에도 필요 |
 
 `data/` 는 `.gitignore` 에 들어 있다.

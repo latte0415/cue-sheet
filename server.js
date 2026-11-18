@@ -5,7 +5,10 @@
 //   /mcp         원격 MCP 서버 (에이전트용 읽기·부분 수정). docs/mcp.md — 이 경로만 npm 의존성(MCP SDK)을 쓴다
 // 환경변수: PORT, DATA_DIR(기본 ./data), APP_PASSWORD(설정 시 /api·/mcp 에 X-App-Key, Authorization: Bearer 또는 ?key= 필요),
 //          HISTORY_KEEP(프로젝트별 보관할 이전 버전 수, 기본 100), TRUST_PROXY(1 이면 X-Forwarded-For 로 IP 판별. Railway 에서는 자동),
-//          TRASH_DAYS(삭제한 프로젝트를 휴지통에 두는 일수, 기본 30), ADMIN_KEY(설정 시에만 편집 비밀번호 초기화 POST …/edit-password/reset, 그리고 MCP 토큰 발급·폐기에도 필요)
+//          TRASH_DAYS(삭제한 프로젝트를 휴지통에 두는 일수, 기본 30), ADMIN_KEY(설정 시에만 편집 비밀번호 초기화 POST …/edit-password/reset, 그리고 MCP 토큰 발급·폐기에도 필요),
+//          BODY_CACHE_MB(GET 본문을 메모리에 둘 상한, 기본 64 — lib/store.js)
+// 압축: 받는 쪽이 Accept-Encoding 에 gzip 을 실었을 때만. 큐시트 GET 은 본문 캐시의 gzip 본(rev 마다 한 번 만든다), 목록·기록·409 처럼
+//   큰(GZIP_MIN 이상) JSON 은 그때그때. 화면 파일(index.html 등)은 내용이 바뀔 때 한 번 gzip·brotli 해 둔다(staticFile)
 // 권한 두 단계: APP_PASSWORD = 보기(읽기·새 프로젝트), 프로젝트별 편집 비밀번호(X-Edit-Key) = 그 프로젝트를 바꾸는 모든 쓰기 (/mcp 쓰기 도구 포함)
 // 사람별 MCP 토큰(lib/tokens.js, /api/tokens 로 발급): /mcp 의 Bearer 로만, APP_PASSWORD 대신 '보기' 단계 + 이름(기록의 by).
 //   토큰은 편집 비밀번호를 대신하지 않는다 — /mcp 쓰기 도구는 토큰으로 붙어도 그 프로젝트의 편집 비밀번호가 필요하다
@@ -13,13 +16,13 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const zlib = require('zlib');
 const { Store, ID_RE, KEY_RE, invalidShow } = require('./lib/store');
 const { createMcp } = require('./lib/mcp');
 const { hashKey, verifyKey, badNewKey, FailLimiter } = require('./lib/editkey');
 const { Tokens, TokenError } = require('./lib/tokens');
 const { SHOW_VER } = require('./lib/validate');
 
-const INDEX = path.join(__dirname, 'index.html');
 const JSON_LIMIT = 5 * 1024 * 1024;
 const AUDIO_LIMIT = 100 * 1024 * 1024;
 
@@ -30,6 +33,73 @@ function sendJson(res, status, obj, headers) {
   const body = JSON.stringify(obj);
   res.writeHead(status, Object.assign({ 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body) }, headers));
   res.end(body);
+}
+// 이보다 작은 JSON 은 압축하지 않는다(압축 비용이 아끼는 바이트보다 크다). 큐시트 본문은 rev 마다 한 번만 압축하므로 더 작아도 한다
+const GZIP_MIN = 8 * 1024, GZIP_MIN_CACHED = 1024;
+// Accept-Encoding 이 coding(gzip·br)을 받나. q=0 은 거절, 명시가 없으면 * 를 본다. 헤더가 없으면(테스트·MCP·curl) 받지 않는 것으로
+function accepts(req, coding) {
+  const h = req.headers['accept-encoding'];
+  if (!h) return false;
+  let star = null;
+  for (const part of String(h).toLowerCase().split(',')) {
+    const [name, ...params] = part.split(';').map(x => x.trim());
+    const q = params.map(x => /^q=([\d.]+)$/.exec(x)).find(Boolean);
+    const ok = !q || Number(q[1]) > 0;
+    if (name === coding || (coding === 'gzip' && name === 'x-gzip')) return ok;
+    if (name === '*') star = ok;
+  }
+  return star === true;
+}
+const gzipAsync = buf => new Promise((res, rej) => zlib.gzip(buf, (e, out) => (e ? rej(e) : res(out))));
+const brotliAsync = buf => new Promise((res, rej) => zlib.brotliCompress(buf, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 9, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: buf.length } }, (e, out) => (e ? rej(e) : res(out))));
+// 이미 만든 JSON 바이트를 보낸다. gz = 그 gzip 본(있으면 Content-Encoding: gzip 으로)
+function sendBytes(res, status, raw, gz, headers) {
+  const body = gz || raw;
+  res.writeHead(status, Object.assign({ 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': body.length }, gz ? { 'Content-Encoding': 'gzip' } : null, headers));
+  res.end(body);
+}
+// 큰 JSON 응답(목록·기록·409 의 큐시트 전체): GZIP_MIN 이상이고 받는 쪽이 gzip 을 받으면 압축해서. 작으면 sendJson 과 같다
+async function sendJsonZ(req, res, status, obj, headers) {
+  const raw = Buffer.from(JSON.stringify(obj));
+  if (raw.length < GZIP_MIN) return sendBytes(res, status, raw, null, headers);
+  headers = Object.assign({ Vary: 'Accept-Encoding' }, headers);
+  let gz = null;
+  if (accepts(req, 'gzip')) { try { gz = await gzipAsync(raw); } catch (e) { gz = null; } }
+  sendBytes(res, status, raw, gz, headers);
+}
+// 화면 파일(index.html·lib/merge.js·sw.js): 메모리에 두고 내용 해시를 약한 ETag 로(gzip·brotli·원본이 같은 ETag — 같은 내용의 다른 인코딩),
+// If-None-Match 가 맞으면 304. 인코딩은 br > gzip > 원본. Cache-Control 은 예전처럼 no-cache(쓸 때마다 확인).
+// 요청마다 stat 해서 (mtime·크기·inode) 가 바뀌었으면 다시 읽는다 — 서버를 끄지 않고 index.html 을 고쳐도 다음 새로고침에 반영(stat 은 싸다)
+function staticFile(file, type) {
+  let cur = null, loading = null; // cur = { sig, etag, raw, gz, br }, loading = { sig, p }
+  const sigOf = st => `${st.size}-${st.mtimeMs}-${st.ino}`;
+  async function load(sig) {
+    const raw = await fs.promises.readFile(file);
+    const [gz, br] = await Promise.all([gzipAsync(raw), brotliAsync(raw)]);
+    const etag = 'W/"' + crypto.createHash('sha256').update(raw).digest('base64url').slice(0, 27) + '"';
+    return { sig, etag, raw, gz, br };
+  }
+  async function get() {
+    const sig = sigOf(await fs.promises.stat(file));
+    if (cur && cur.sig === sig) return cur;
+    if (!loading || loading.sig !== sig) {
+      const l = { sig, p: load(sig) };
+      loading = l;
+      l.p.then(v => { if (loading === l) { cur = v; loading = null; } }, () => { if (loading === l) loading = null; });
+    }
+    return loading.p;
+  }
+  return async function serve(req, res) {
+    const f = await get();
+    const headers = { 'Content-Type': type, 'Cache-Control': 'no-cache', ETag: f.etag, Vary: 'Accept-Encoding' };
+    if (etagMatch(req.headers['if-none-match'], f.etag.slice(3, -1))) { res.writeHead(304, headers); return res.end(); }
+    const enc = accepts(req, 'br') ? 'br' : accepts(req, 'gzip') ? 'gzip' : null;
+    const body = enc === 'br' ? f.br : enc === 'gzip' ? f.gz : f.raw;
+    if (enc) headers['Content-Encoding'] = enc;
+    headers['Content-Length'] = body.length;
+    res.writeHead(200, headers);
+    res.end(req.method === 'HEAD' ? undefined : body);
+  };
 }
 // 한도를 넘으면 나머지를 버리면서 끝까지 받은 뒤 413 (도중에 끊으면 클라이언트가 응답을 못 받는다)
 function readJson(req, limit) {
@@ -73,7 +143,12 @@ function parseRange(h, size) {
 
 function createServer(opts) {
   opts = opts || {};
-  const store = new Store(opts.dataDir || process.env.DATA_DIR || './data', { historyKeep: opts.historyKeep, putSnapshotMs: opts.putSnapshotMs, trashDays: opts.trashDays });
+  const store = new Store(opts.dataDir || process.env.DATA_DIR || './data', { historyKeep: opts.historyKeep, putSnapshotMs: opts.putSnapshotMs, trashDays: opts.trashDays, bodyCacheBytes: opts.bodyCacheBytes });
+  // 화면 파일 위치 (테스트는 임시 사본 폴더를 준다)
+  const staticDir = opts.staticDir || __dirname;
+  const serveIndex = staticFile(path.join(staticDir, 'index.html'), 'text/html; charset=utf-8');
+  const serveMerge = staticFile(path.join(staticDir, 'lib', 'merge.js'), 'text/javascript; charset=utf-8');
+  const serveSw = staticFile(path.join(staticDir, 'sw.js'), 'text/javascript; charset=utf-8');
   const password = opts.password !== undefined ? opts.password : (process.env.APP_PASSWORD || '');
   const pwDigest = password ? digest(password) : null;
   const log = opts.log !== undefined ? opts.log : (msg => console.log(msg));
@@ -125,11 +200,11 @@ function createServer(opts) {
     const t = m ? tokens.lookup(m[1]) : null;
     return t ? { kind: 'token', id: t.id, name: t.name } : null;
   }
+  // 프로젝트가 있는지만 (없으면 404) — 레코드를 읽지 않는다(rev 캐시 또는 stat). 내용이 필요한 쓰기는 store 가 큐 안에서 다시 읽으므로
+  // 여기서 읽으면 같은 파일을 두 번 읽는다. 404 를 편집 비밀번호(403)·본문(413·400)보다 먼저 답하는 순서는 예전 그대로
   async function needShow(id) {
     if (!ID_RE.test(id)) throw new HttpError(400, 'bad_id');
-    const rec = await store.get(id);
-    if (!rec) throw new HttpError(404, 'not_found');
-    return rec;
+    if (!(await store.exists(id))) throw new HttpError(404, 'not_found');
   }
   // 프록시 뒤면 X-Forwarded-For 의 마지막 값(가장 가까운 프록시가 본 주소). 클라이언트가 앞에 끼워 넣은 값은 무시된다
   function clientIp(req) {
@@ -216,7 +291,7 @@ function createServer(opts) {
     if (extra !== undefined) throw new HttpError(404, 'not_found');
 
     if (id === undefined) {
-      if (M === 'GET') return sendJson(res, 200, await store.list());
+      if (M === 'GET') return sendJsonZ(req, res, 200, await store.list());
       if (M === 'POST') {
         const body = await readJson(req, JSON_LIMIT);
         checkShow(body && body.show);
@@ -233,10 +308,13 @@ function createServer(opts) {
         const inm = req.headers['if-none-match'];
         const known = inm ? store.cachedRev(id) : undefined;
         if (known !== undefined && etagMatch(inm, known)) { res.writeHead(304, { ETag: `"${known}"` }); return res.end(); }
-        const rec = await needShow(id);
-        const tag = `"${rec.rev}"`;
-        if (etagMatch(req.headers['if-none-match'], rec.rev)) { res.writeHead(304, { ETag: tag }); return res.end(); }
-        return sendJson(res, 200, rec, { ETag: tag });
+        // 200: 메모리의 본문(레코드 파일 바이트 그대로 = 예전 JSON.stringify(rec) 와 같은 JSON)을 보낸다. 없으면 파일을 읽어 채운다(store.loadBody)
+        const b = store.cachedBody(id) || await store.loadBody(id);
+        if (!b) throw new HttpError(404, 'not_found');
+        const tag = `"${b.rev}"`;
+        if (etagMatch(inm, b.rev)) { res.writeHead(304, { ETag: tag }); return res.end(); }
+        const gz = b.raw.length >= GZIP_MIN_CACHED && accepts(req, 'gzip') ? await store.bodyGzip(id, b).catch(() => null) : null;
+        return sendBytes(res, 200, b.raw, gz, { ETag: tag, Vary: 'Accept-Encoding' });
       }
       if (M === 'PUT') {
         await needShow(id);
@@ -247,7 +325,7 @@ function createServer(opts) {
         if (!r) throw new HttpError(404, 'not_found');
         // 옛 화면(옛 index.html)의 저장: 409 가 아닌 426 — 옛 화면은 409 에만 "내 버전으로 덮어쓰기"를 띄우고, 그 밖의 코드는 백업하고 재시도한다
         if (r.outdated) return sendJson(res, 426, { error: 'client_outdated', version: r.outdated.show.version, schema: SHOW_VER, message: `저장본(version ${r.outdated.show.version})보다 옛 형식(version ${body.show.version})이라 저장하지 않았습니다 — 화면을 새로고침하세요` });
-        if (r.conflict) return sendJson(res, 409, { error: 'conflict', rev: r.conflict.rev, updatedAt: r.conflict.updatedAt, show: r.conflict.show }, { ETag: `"${r.conflict.rev}"` });
+        if (r.conflict) return sendJsonZ(req, res, 409, { error: 'conflict', rev: r.conflict.rev, updatedAt: r.conflict.updatedAt, show: r.conflict.show }, { ETag: `"${r.conflict.rev}"` });
         return sendJson(res, 200, r, { ETag: `"${r.rev}"` });
       }
       if (M === 'DELETE') {
@@ -296,11 +374,11 @@ function createServer(opts) {
     if (sub === 'history') {
       if (M !== 'GET') throw new HttpError(405, 'method_not_allowed');
       await needShow(id);
-      if (key === undefined) return sendJson(res, 200, await store.revisions(id));
+      if (key === undefined) return sendJsonZ(req, res, 200, await store.revisions(id));
       await needEdit(req, id);
       const rec = /^\d{1,12}$/.test(key) ? await store.getRevision(id, Number(key)) : null;
       if (!rec) throw new HttpError(404, 'not_found');
-      return sendJson(res, 200, rec);
+      return sendJsonZ(req, res, 200, rec);
     }
     if (sub === 'restore' && key === undefined) {
       if (M !== 'POST') throw new HttpError(405, 'method_not_allowed');
@@ -310,7 +388,7 @@ function createServer(opts) {
       const r = await store.restore(id, Number(body && body.rev), body && body.baseRev, { by: BROWSER.by, via: 'restore' });
       if (!r) throw new HttpError(404, 'not_found');
       if (r.missing) throw new HttpError(404, 'rev_not_found');
-      if (r.conflict) return sendJson(res, 409, { error: 'conflict', rev: r.conflict.rev, updatedAt: r.conflict.updatedAt, show: r.conflict.show }, { ETag: `"${r.conflict.rev}"` });
+      if (r.conflict) return sendJsonZ(req, res, 409, { error: 'conflict', rev: r.conflict.rev, updatedAt: r.conflict.updatedAt, show: r.conflict.show }, { ETag: `"${r.conflict.rev}"` });
       return sendJson(res, 200, r, { ETag: `"${r.rev}"` });
     }
     if (sub !== 'audio') throw new HttpError(404, 'not_found');
@@ -390,8 +468,18 @@ function createServer(opts) {
       'Accept-Ranges': 'bytes',
       'Content-Disposition': `${disp}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(meta.name || key)}`
     };
-    const range = req.headers.range ? parseRange(req.headers.range, size) : null;
-    if (range === 'bad') { res.writeHead(416, Object.assign(headers, { 'Content-Range': `bytes */${size}`, 'Content-Type': 'application/json' })); return res.end(JSON.stringify({ error: 'range_not_satisfiable' })); }
+    // 캐시: 화면은 올릴 때마다 새 fileKey 를 쓰지만 API 는 같은 키에 다시 PUT(덮어쓰기)을 받는다 — 그래서 immutable 이 아니라
+    // private, no-cache + 강한 ETag(크기·mtime·inode — 덮어쓰기는 임시 파일 rename 이라 inode 가 바뀐다). 같으면 304, 다르면 새로 받는다
+    const tag = `"${size.toString(36)}-${Math.round(st.mtimeMs * 1000).toString(36)}-${st.ino.toString(36)}"`;
+    const cache = { ETag: tag, 'Cache-Control': 'private, no-cache' };
+    if (etagMatch(req.headers['if-none-match'], tag.slice(1, -1))) { res.writeHead(304, cache); return res.end(); }
+    // If-Range(이어 받기): 가진 조각의 ETag 가 지금과 다르면(덮어썼으면) Range 를 무시하고 전체 200 — 옛 조각과 새 조각을 섞지 않게.
+    // Last-Modified 는 보내지 않으므로 날짜 If-Range 도 다른 것으로 본다
+    const ifRange = req.headers['if-range'];
+    const useRange = req.headers.range && (!ifRange || String(ifRange).trim() === tag);
+    Object.assign(headers, cache);
+    const range = useRange ? parseRange(req.headers.range, size) : null;
+    if (range === 'bad') { res.writeHead(416, Object.assign(headers, { 'Content-Range': `bytes */${size}`, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })); return res.end(JSON.stringify({ error: 'range_not_satisfiable' })); }
     let status = 200, start = 0, end = size - 1;
     if (range) { status = 206; start = range.start; end = range.end; headers['Content-Range'] = `bytes ${start}-${end}/${size}`; }
     headers['Content-Length'] = size ? end - start + 1 : 0;
@@ -455,29 +543,13 @@ function createServer(opts) {
     }
     if (!['GET', 'HEAD'].includes(req.method)) return text(404, 'not found');
     if (pathname === '/healthz') return text(200, 'ok');
-    if (pathname === '/' || pathname === '/index.html') {
-      return fs.readFile(INDEX, (err, data) => {
-        if (err) return text(500, 'error');
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
-        res.end(req.method === 'HEAD' ? undefined : data);
-      });
-    }
+    // 화면 파일은 staticFile(메모리 + ETag + gzip·br, 위 설명)
+    const serveStatic = serve => serve(req, res).catch(() => { if (!res.headersSent) text(500, 'error'); else res.destroy(); });
+    if (pathname === '/' || pathname === '/index.html') return serveStatic(serveIndex);
     // 브라우저 409 자동 병합 (index.html 이 서버 모드일 때만 이 경로를 <script> 로 동적으로 읽는다 — 같은 파일을 Node 테스트도 require)
-    if (pathname === '/lib/merge.js') {
-      return fs.readFile(path.join(__dirname, 'lib', 'merge.js'), (err, data) => {
-        if (err) return text(500, 'error');
-        res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache' });
-        res.end(req.method === 'HEAD' ? undefined : data);
-      });
-    }
+    if (pathname === '/lib/merge.js') return serveStatic(serveMerge);
     // 공연 모드 Service Worker (index.html 이 서버 모드 + 공연 모드일 때만 등록). no-cache — 브라우저가 늘 새 워커가 있는지 확인하게
-    if (pathname === '/sw.js') {
-      return fs.readFile(path.join(__dirname, 'sw.js'), (err, data) => {
-        if (err) return text(500, 'error');
-        res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache' });
-        res.end(req.method === 'HEAD' ? undefined : data);
-      });
-    }
+    if (pathname === '/sw.js') return serveStatic(serveSw);
     text(404, 'not found');
   });
   // 프록시(Railway 등)의 유휴 연결 시간보다 길게 — 서버가 먼저 닫아 재사용 중인 연결이 끊기는 경쟁을 줄인다
