@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { validateShow, basicInvalid, unwrapShow, fillIds, CONST, SHOW_VER } = require('../lib/validate');
+const { validateShow, basicInvalid, unwrapShow, fillIds, actionEcho, CONST, SHOW_VER } = require('../lib/validate');
 
 // index.html 의 "상수" ~ "상태" 구간(상수·유틸·샘플·라벨·migrate)만 떼어 Node 에서 돌린다
 function frontend() {
@@ -43,9 +43,9 @@ test('프런트 샘플(migrate 결과)은 오류·경고 없이 통과하고 서
   const s = plain(FE.migrate(FE.sampleShow()));
   const v = validateShow(s);
   assert.deepEqual(v.errors, []);
-  // 지문 표기 경고('action-format')는 뺀다 — sampleShow 가 아직 "* …" 지문을 쓰고, index.html 은 이 변경의 범위 밖이다.
-  // 다른 경고는 그대로 0 이어야 하므로 코드로 거른다. sampleShow 를 괄호 지문으로 고치면 이 필터를 지운다.
-  assert.deepEqual(v.warnings.filter(w => w.code !== 'action-format'), []);
+  // 지문 표기 경고('action-format')·큐를 다시 적은 지문('action-echo')은 뺀다 — sampleShow 는 실데이터 초안을 그대로 옮긴 것이라
+  // 아직 "* …" 지문과 "(조예준 인)" 같은 중복 지문이 있다. 다른 경고는 그대로 0 이어야 하므로 코드로 거른다.
+  assert.deepEqual(v.warnings.filter(w => w.code !== 'action-format' && w.code !== 'action-echo'), []);
   assert.equal(basicInvalid(s), null);
 });
 
@@ -155,7 +155,51 @@ test('소품이 있는 정상 문서는 오류·경고 없음, v5 도 경고 없
   const rr = validateShow(unwrapShow(real));
   assert.equal(unwrapShow(real).version, 5);
   assert.deepEqual(rr.errors, []);
-  assert.deepEqual(rr.warnings.map(w => w.code), ['stage-no-props', 'stage-no-props', 'stage-no-props']);
+  assert.deepEqual(rr.warnings.filter(w => w.code !== 'action-echo').map(w => w.code), ['stage-no-props', 'stage-no-props', 'stage-no-props']);
+});
+
+test('action-echo: 큐의 대상·액션·트리거만 다시 적은 지문은 "지우세요" 경고 (보수적)', () => {
+  const look = { person: id => ({ 'p-yejun': '조예준', 'p-daehoon': '박대훈' })[id] || '', track: () => '', prop: id => ({ 'pr-card': '카드' })[id] || '' };
+  const ch = (c, action) => ({ ch: c, action, dim: null, color: null, colorName: null, timeSec: null });
+  const cue = (dept, body, extra) => Object.assign({ dept, trigger: '', offsetSec: null, note: '', status: 'set', [dept]: body }, extra);
+  const it = (text, cues, kind) => ({ kind: kind || 'action', text, cues });
+  const yjIn = cue('cast', { personId: 'p-yejun', move: 'in' }, { trigger: '암전 후' });
+  const black = cue('light', { channels: ['back', 'top', 'front', 'house'].map(c => ch(c, 'off')), anim: '' });
+  const play = cue('sound', { track: 2, action: 'play', timeSec: null, level: null }, { trigger: '예준 스냅 주면' });
+  const clean = cue('stage', { props: [{ propId: 'pr-card', action: 'clean', at: '' }] });
+  assert.equal(actionEcho(it('(조예준 인)', [yjIn]), look), true);
+  assert.equal(actionEcho(it('(암전)', [black]), look), true);
+  assert.equal(actionEcho(it('(예준 스냅 주면 노래 시작)', [play]), look), true, '트리거 + 액션');
+  assert.equal(actionEcho(it('(카드 청소)', [clean]), look), true);
+  assert.equal(actionEcho(it('(조예준 인 — 마이크 들고 들어와 라태형에게 건넴)', [yjIn]), look), false, '보충이 있으면 아님');
+  assert.equal(actionEcho(it('(조예준 아웃)', [yjIn]), look), false, '액션이 다르면 아님');
+  assert.equal(actionEcho(it('(박대훈 인)', [yjIn]), look), false, '대상이 다르면 아님');
+  assert.equal(actionEcho(it('(조예준 인)', []), look), false, '큐가 없으면 아님');
+  assert.equal(actionEcho(it('(조예준 인)', [yjIn], 'line'), look), false, '대사는 보지 않는다');
+  assert.equal(actionEcho(it('', [yjIn]), look), false, '이미 비운 지문은 아님');
+  // validateShow 경고: 경로 · 코드 · 안내
+  const e = docExample();
+  const i1 = e.parts[0].scenes[0].items[0];
+  i1.text = '(암전)';
+  const v = validateShow(e);
+  assert.deepEqual(v.errors, []);
+  assert.deepEqual(v.warnings.map(w => [w.path, w.code]), [['parts[0].scenes[0].items[0].text', 'action-echo']]);
+  assert.match(v.warnings[0].msg, /큐를 다시 적은 지문 — .*지우세요/);
+});
+
+test('action-echo: 실데이터(cues/backstage-part1.json)에서 걸리는 지문 15개 — 데이터 정리 목록', () => {
+  const s = unwrapShow(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cues', 'backstage-part1.json'), 'utf8')));
+  const its = s.parts.flatMap(p => p.scenes.flatMap(sc => sc.items));
+  const byPath = w => { const m = /parts\[(\d+)\]\.scenes\[(\d+)\]\.items\[(\d+)\]/.exec(w.path); return s.parts[+m[1]].scenes[+m[2]].items[+m[3]]; };
+  const got = validateShow(s).warnings.filter(w => w.code === 'action-echo').map(w => { const i = byPath(w); return `${i.id} ${i.text}`; });
+  assert.deepEqual(got, [
+    'i-7 (하우스 음악 커지면서 관객석 조명 Off)', 'i-b (암전)', 'i-d (조예준 인)', 'i-h (예준 스냅 주면 노래 시작)', 'i-p (조예준 아웃)',
+    'i-s (멘트 끝나자마자 음원 시작)', 'i-u (박대훈 인)', 'i-z (조예준 인)', 'i-19 (박대훈 아웃)', 'i-1c (암전)', 'i-1e (조예준 아웃)',
+    'i-1j (라태형 인)', 'i-2i (라태형 아웃)', 'i-2n (라태형 인)', 'i-2t (조예준 절레절레하며 퇴장)'
+  ]);
+  // 정보가 더 있는 지문은 걸리지 않는다
+  ['(조예준 인 — 마이크 들고 들어와 라태형에게 건넴)', '(소개팅 2명 불러오기)', '(조예준 인 — 고개 절레절레 하며)'].forEach(t => assert.ok(!got.some(g => g.endsWith(' ' + t)), t));
+  assert.equal(its.filter(i => i.kind === 'action' && i.cues.length).length > got.length, true);
 });
 
 test('소품 검사 — 모르는 propId 경고, 잘못된 action 오류, clean 허용, 레지스트리 id 중복 오류', () => {
@@ -258,7 +302,7 @@ test('v8 migrate: memo · text → note, 소품 없는 무대 큐는 남김, 객
   assert.deepEqual(again, m2);
   const v = validateShow(m);
   assert.deepEqual(v.errors, []);
-  assert.deepEqual(v.warnings.map(w => w.code), ['stage-no-props', 'stage-no-props', 'stage-no-props']);
+  assert.deepEqual(v.warnings.filter(w => w.code !== 'action-echo').map(w => w.code), ['stage-no-props', 'stage-no-props', 'stage-no-props']);
   const b2 = plain(FE.migrate(plain(both)));
   assert.deepEqual(b2.parts[0].scenes[0].items[0].cues, q, 'note 흔적이 두 번 붙지 않는다');
 });

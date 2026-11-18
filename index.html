@@ -218,7 +218,9 @@ input[type=color]{padding:0 2px;width:40px;height:30px;cursor:pointer}
 .qv{font-weight:400;color:var(--ink);margin-left:8px}
 .qdt{font-size:.93em;color:var(--ink-2);margin-left:8px}
 .ql .qm{font-size:12px;color:var(--ink-3);margin-left:8px}
-.doc p.echo{color:var(--ink-3);font-size:.875em}
+/* 큐가 달린 지문 = 굵은 큐 머리글 아래에 붙는 보충 디테일 → 흐리게. 큐가 없는 지문·대사는 보통, 큐를 숨기면 보통 */
+.doc p.k-action.has-qb{color:var(--ink-3);font-size:.875em}
+.hide-cues .doc p.k-action.has-qb{color:var(--ink-2);font-size:inherit}
 .ql .qn{font-family:var(--mono);font-size:11px;color:var(--accent);white-space:nowrap}
 .ql.other .qt{font-weight:400;color:var(--ink-3)}
 .ql.other .qd{color:var(--ink-3);font-weight:400}
@@ -2673,47 +2675,6 @@ function cueText(c, look) {
   const H = cueHead(c, look), D = cueDetail(c, look);
   return H.head + (D.val ? ' ' + D.val : '') + (D.note ? ' — ' + D.note : '');
 }
-// 큐를 다시 적기만 한 지문 — 대본에서 흐리게 보인다. 보수적으로: 지문(action) 이고 큐가 있고, 괄호를 벗긴 본문의 낱말이 전부
-// 그 문단 큐의 대상(사람·트랙·채널·소품 이름) · 액션(인/아웃/재생/암전 …) · 트리거 · 지연(7초) 낱말일 때만. " — " 보충이 있으면 정보가 더 있는 것
-const ECHO_SPLIT = /[\s()（）,·+/'"“”‘’.…:!?~]+/;
-const ECHO_ACT = {
-  cast: { in: ['인', '등장', 'in'], out: ['아웃', '퇴장', 'out'], move: ['이동', 'move'] },
-  sound: { play: ['재생', '시작', 'play', '틀기'], stop: ['정지', '멈춤', 'stop'], fadeIn: ['페이드인', '페이드', '인', 'fade', 'in'], fadeOut: ['페이드아웃', '페이드', '아웃', 'fade', 'out'], volume: ['볼륨', '올림', '내림', 'vol'] },
-  light: { on: ['on', '켬', '온'], off: ['off', '끔', '오프'], fadeIn: ['페이드인', '페이드', '인', 'fade', 'in'], fadeOut: ['페이드아웃', '페이드', '아웃', 'fade', 'out'], anim: ['애니', 'anim'] },
-  stage: { in: ['인', '반입', '세팅', 'in'], out: ['아웃', '빼기', '반출', 'out'], move: ['이동', 'move'] }
-};
-function actionEcho(it, look) {
-  look = look || CUE_LOOK;
-  if (!it || it.kind !== 'action' || !(it.cues || []).length) return false;
-  const text = String(it.text || '').trim();
-  if (!text || text.includes('\n') || /[—–]|\s-\s/.test(text)) return false;
-  const words = text.toLowerCase().split(ECHO_SPLIT).filter(Boolean);
-  if (!words.length) return false;
-  const voc = new Set(['후', '뒤']);
-  const add = s => String(s || '').toLowerCase().split(ECHO_SPLIT).filter(Boolean).forEach(w => voc.add(w));
-  it.cues.forEach(c => {
-    const b = c[c.dept] || {};
-    add(c.trigger);
-    if (c.offsetSec != null) voc.add(c.offsetSec + '초');
-    const acts = (ECHO_ACT[c.dept] || {});
-    if (c.dept === 'cast') {
-      const n = b.personId ? look.person(b.personId) : '';
-      add(n); if (n && n.length === 3) voc.add(n.slice(1)); // 조예준 → 예준
-      (acts[b.move] || []).forEach(w => voc.add(w));
-    } else if (c.dept === 'sound') {
-      ['bgm', '음악', '음원', '노래'].forEach(w => voc.add(w));
-      if (b.track != null) { voc.add(String(b.track)); if (look.track) add(look.track(b.track)); }
-      (acts[b.action] || []).forEach(w => voc.add(w));
-    } else if (c.dept === 'light') {
-      voc.add('조명');
-      if (isBlackout(b)) voc.add('암전');
-      (b.channels || []).forEach(x => { add(CH_L[x.ch]); if (x.ch === 'house') voc.add('관객석'); (acts[x.action] || []).forEach(w => voc.add(w)); });
-    } else if (c.dept === 'stage') {
-      (b.props || []).forEach(x => { if (x && x.propId && look.prop) add(look.prop(x.propId)); (acts[x && x.action] || []).forEach(w => voc.add(w)); });
-    }
-  });
-  return words.every(w => voc.has(w));
-}
 function trigLabel(c) { const a = []; if (c.trigger) a.push(c.trigger); if (c.offsetSec != null) a.push('+' + c.offsetSec + 's'); return a.join(' '); }
 function trigLabels(cues) { return Array.from(new Set(cues.map(trigLabel).filter(Boolean))); }
 function itemRefText(e, n) {
@@ -2782,7 +2743,7 @@ function newItem(kind) { return { id: uid('i'), kind: kind || 'line', speaker: n
 // 문단 원문. \n 은 Shift+Enter 로 넣은 문단 안 줄바꿈 (.doc p 는 pre-wrap, <br> 은 textContent 에 안 잡힌다)
 function textOf(p) { return p.textContent.replace(/\u00a0/g, ' ').replace(/\r\n?/g, '\n'); }
 function kindClass(raw) { return splitHead(raw).kind === 'action' && raw ? 'k-action' : ''; }
-function styleP(p, raw) { const k = kindClass(raw); p.classList.toggle('k-action', k === 'k-action'); p.classList.remove('echo'); p.removeAttribute('title'); }
+function styleP(p, raw) { const k = kindClass(raw); p.classList.toggle('k-action', k === 'k-action'); }
 function mkP(raw) { const p = document.createElement('p'); p.innerHTML = rawToHtml(raw); styleP(p, raw); return p; }
 function paraOf(node, doc) {
   if (!node) return null;
@@ -3272,10 +3233,9 @@ function movePara(doc, d) {
 
 /* ================= 뷰: 대본 ================= */
 function ceAttr() { return `contenteditable="${state.edit ? 'true' : 'false'}"`; }
-// 큐를 다시 적기만 한 지문(actionEcho)은 흐리게(.echo) — 편집하면 styleP 가 걷어 내고 다음 렌더에서 다시 판정한다
 function paraHtml(it) {
-  const raw = itemToRaw(it), echo = actionEcho(it);
-  return `<p data-id="${esc(it.id)}" class="${kindClass(raw)}${echo ? ' echo' : ''}"${echo ? ' title="큐가 이미 말하는 내용을 다시 적은 지문"' : ''}>${rawToHtml(raw)}</p>`;
+  const raw = itemToRaw(it);
+  return `<p data-id="${esc(it.id)}" class="${kindClass(raw)}">${rawToHtml(raw)}</p>`;
 }
 function partRest(p, pi) {
   if (!state.edit) return '';

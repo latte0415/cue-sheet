@@ -1,5 +1,5 @@
 // 큐 문구 한 벌 (index.html 의 cueHead · cueDetail) — 머리글 = 대상 + 고정 액션(영문 대문자), 값 · 상세 · 시점 · 메모는 따로
-// 그리고 큐를 다시 적기만 한 지문(actionEcho) 판정
+// (큐를 다시 적은 지문 판정 actionEcho 는 lib/validate.js 의 action-echo 경고 — test/validate.test.js)
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -14,7 +14,7 @@ function frontend() {
     assert.ok(a > 0 && b > a, `index.html 에서 ${from}~${to} 구간 표시를 찾지 못했습니다 (구간 주석이 바뀌었으면 이 테스트를 고치세요)`);
     return html.slice(a, b);
   };
-  return vm.runInNewContext(cut('상수', '유틸') + cut('큐 요약', '문단 문법') + '\n;({ cueHead, cueDetail, cueText, isBlackout, actionEcho })', {});
+  return vm.runInNewContext(cut('상수', '유틸') + cut('큐 요약', '문단 문법') + '\n;({ cueHead, cueDetail, cueText, isBlackout })', {});
 }
 const FE = frontend();
 const plain = o => JSON.parse(JSON.stringify(o)); // vm 쪽 객체는 프로토타입이 달라 deepEqual 전에 평범한 객체로
@@ -104,37 +104,4 @@ test('상세(note)가 있으면 그것이 상세 — 같은 문장은 한 번만
   assert.equal(FE.cueDetail(c, look).note, '마이크 들고');
   const tbd = cue('light', { channels: [], anim: '' }, { status: 'tbd', note: '조명 상세 미정' });
   assert.equal(FE.cueDetail(tbd, look).note, '', '미정만 다시 적은 상세도 거른다');
-});
-
-test('중복 지문: 큐의 대상·액션·트리거만 다시 적은 지문만 흐리게 (보수적)', () => {
-  const it = (text, cues, kind) => ({ kind: kind || 'action', text, cues });
-  const yjIn = cue('cast', { personId: 'p-yejun', move: 'in', text: '' }, { trigger: '암전 후' });
-  const black = cue('light', { channels: ['back', 'top', 'front', 'house'].map(c => ch(c, 'off')), anim: '' }, { trigger: "'라태형' 호명 후" });
-  const play = cue('sound', { track: 2, action: 'play', timeSec: null, level: null }, { trigger: '예준 스냅 주면' });
-  assert.equal(FE.actionEcho(it('(조예준 인)', [yjIn]), look), true);
-  assert.equal(FE.actionEcho(it('(암전)', [black]), look), true);
-  assert.equal(FE.actionEcho(it('(예준 스냅 주면 노래 시작)', [play]), look), true, '트리거 + 액션');
-  assert.equal(FE.actionEcho(it('(조예준 인 — 마이크 들고 들어와 라태형에게 건넴)', [yjIn]), look), false, '보충이 있으면 보통');
-  assert.equal(FE.actionEcho(it('(조예준 인 — 고개 절레절레 하며)', [yjIn]), look), false);
-  assert.equal(FE.actionEcho(it('(조예준 아웃)', [yjIn]), look), false, '액션이 다르면 보통');
-  assert.equal(FE.actionEcho(it('(박대훈 인)', [yjIn]), look), false, '대상이 다르면 보통');
-  assert.equal(FE.actionEcho(it('(조예준 인)', []), look), false, '큐가 없으면 보통');
-  assert.equal(FE.actionEcho(it('(조예준 인)', [yjIn], 'line'), look), false, '대사는 보지 않는다');
-  assert.equal(FE.actionEcho(it('(3명이 전부 관객석으로 간다)', [cue('light', { channels: [ch('house', 'on')], anim: '' }, { trigger: '3명이 관객석으로 갈 때' })]), look), false);
-});
-
-test('중복 지문: 실제 데이터(cues/backstage-part1.json)에서 흐려지는 지문', () => {
-  const show = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cues', 'backstage-part1.json'), 'utf8'));
-  const s = show.show || show;
-  const P = new Map(s.people.map(p => [p.id, p.name])), T = new Map((s.tracks || []).map(t => [t.no, t.title])), R = new Map((s.props || []).map(p => [p.id, p.name]));
-  const lk = { person: id => P.get(id) || '', track: no => T.get(no) || '', prop: id => R.get(id) || '' };
-  const items = s.parts.flatMap(p => p.scenes.flatMap(sc => sc.items));
-  const dim = items.filter(i => FE.actionEcho(i, lk)).map(i => i.text);
-  assert.deepEqual(dim, [
-    '(하우스 음악 커지면서 관객석 조명 Off)', '(암전)', '(조예준 인)', '(예준 스냅 주면 노래 시작)', '(조예준 아웃)',
-    '(멘트 끝나자마자 음원 시작)', '(박대훈 인)', '(조예준 인)', '(박대훈 아웃)', '(암전)', '(조예준 아웃)', '(라태형 인)',
-    '(라태형 아웃)', '(라태형 인)', '(조예준 절레절레하며 퇴장)'
-  ]);
-  // 정보가 더 있는 지문은 보통
-  ['(조예준 인 — 마이크 들고 들어와 라태형에게 건넴)', '(소개팅 2명 불러오기)', '(조예준 인 — 고개 절레절레 하며)'].forEach(t => assert.ok(!dim.includes(t), t));
 });

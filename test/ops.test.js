@@ -119,7 +119,7 @@ test('add: 브라우저와 같은 id 접두어·기본값, 자식 포함, 위치
     { op: 'add', kind: 'comment', parent: 'i-1', data: { author: '조명', text: '페이드 시간 확인' } }
   ]);
   const sc = r.show.parts[0].scenes[0];
-  assert.deepEqual(sc.items.map(i => i.text), ['(하우스 오픈)', '(암전)', '(탑햇 세팅)', '소개합니다 박대훈'], 'first/after 위치, action 은 괄호');
+  assert.deepEqual(sc.items.map(i => i.text), ['(하우스 오픈)', '(공연 시작)', '(탑햇 세팅)', '소개합니다 박대훈'], 'first/after 위치, action 은 괄호');
   const [opened, , mid] = sc.items;
   assert.match(opened.id, /^i-[a-z0-9]+$/); assert.match(opened.cues[0].id, /^q-/);
   assert.deepEqual(Object.keys(mid), ['id', 'kind', 'speaker', 'text', 'label', 'isCue', 'cues', 'comments']);
@@ -158,7 +158,7 @@ test('add: 같은 호출 안에서 data.id 로 만든 항목을 이어서 가리
   rejects(() => applyOps(docExample(), [{ op: 'add', kind: 'item', parent: 's-1', after: 'i-zz', data: {} }]), 'not_found', /after "i-zz"/);
   // after 가 형제면 parent 생략 가능
   const r2 = applyOps(docExample(), [{ op: 'add', kind: 'item', after: 'i-1', data: { kind: 'line', speaker: 'p-yejun', text: '자!' } }]);
-  assert.deepEqual(r2.show.parts[0].scenes[0].items.map(i => i.text), ['(암전)', '자!', '소개합니다 박대훈']);
+  assert.deepEqual(r2.show.parts[0].scenes[0].items.map(i => i.text), ['(공연 시작)', '자!', '소개합니다 박대훈']);
 });
 
 test('원자성: 뒤 op 가 실패하면 앞 op 도 반영되지 않는다 (검증 오류 포함)', () => {
@@ -267,7 +267,7 @@ test('큰 공연(backstage-part1) 전체에 여러 op — 결과 검증 통과, 
   const line = all.find(x => x.it.kind === 'line' && x.it.speaker);
   const r = applyOps(s, [
     { op: 'add', kind: 'prop', data: { id: 'pr-table', name: '테이블' } },
-    { op: 'add', kind: 'item', parent: at.sc.id, after: at.it.id, data: { text: '(테이블 세팅)', cues: [{ dept: 'stage', stage: { props: [{ propId: 'pr-table' }] } }] } },
+    { op: 'add', kind: 'item', parent: at.sc.id, after: at.it.id, data: { text: '(관객이 박수 치는 동안)', cues: [{ dept: 'stage', stage: { props: [{ propId: 'pr-table' }] } }] } },
     { op: 'set', id: line.it.id, fields: { text: line.it.text + '!' } },
     { op: 'add', kind: 'comment', parent: at.sc.id, data: { author: '연출', text: '전환 시간 확인' } }
   ]);
