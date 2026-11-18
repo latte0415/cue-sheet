@@ -66,7 +66,7 @@ test('심각도: 막힘 → 확인 → 참고 순, 건수는 막힘+확인(참�
   assert.deepEqual(sev, [...sev].sort((x, y) => ['block', 'check', 'info'].indexOf(x) - ['block', 'check', 'info'].indexOf(y)));
   const bySev = k => FE.CK_GROUPS.find(g => g.k === k).sev;
   assert.deepEqual(plain(['track', 'light', 'cast', 'props'].map(bySev)), ['block', 'block', 'block', 'block']);
-  assert.deepEqual(['tbd', 'trig', 'files'].map(bySev), ['check', 'check', 'check']);
+  assert.deepEqual(['tbd', 'trig', 'noprops', 'files'].map(bySev), ['check', 'check', 'check', 'check']);
   assert.deepEqual(['empty', 'cmt'].map(bySev), ['info', 'info']);
   const s = showOf([
     scene('s1', 'act', [], [item([cue('light', { channels: [], anim: '' }), cue('sound', { track: 9, action: 'play' }, { status: 'tbd' })], [{ id: 'c', author: 'x', text: 'y', resolved: false }])]),
@@ -134,8 +134,30 @@ test('실제 공연 데이터(backstage-part1): 씬 경계 IN 3건이 빠지고 
   assert.equal(all.total, 7);
   assert.equal(all.info, 5);
   assert.equal(r.propsSkip, true);
+  // 무대 큐 3개는 소품이 없지만(v8 stage-no-props) 소품 목록이 비어 propsSkip 한 줄에 흡수 — 건수는 그대로
+  assert.deepEqual(plain(r.groups.find(g => g.k === 'noprops').list), []);
   assert.equal(FE.checkFilter(r, 'light').total, 6);
   assert.equal(FE.checkFilter(r, 'sound').total, 1);
   assert.equal(FE.checkFilter(r, 'stage').total, 0);
   assert.equal(FE.checkFilter(r, 'p:p-daehoon').total, 0);
+});
+
+test('소품 미지정 무대 큐(v8): 확정 무대 큐에 소품이 없으면 "확인" 항목, 미정·소품 있는 큐는 아님, 소품 목록이 비면 propsSkip 에 흡수', () => {
+  const stage = (props, extra) => cue('stage', { props }, extra);
+  const sc = [scene('s', 'mc', [], [
+    item([stage([], { note: '컵 빼고' })]),
+    item([stage([], { status: 'tbd' })]),
+    item([stage([{ propId: 'x', action: 'clean', at: '' }])])
+  ])];
+  const r = FE.checkCollect(input(showOf(sc, { props: [{ id: 'x', name: '카드' }] })));
+  assert.equal(r.propsSkip, false);
+  const g = r.groups.find(x => x.k === 'noprops');
+  assert.equal(g.sev, 'check');
+  assert.deepEqual(plain(g.list.map(x => [x.dept, x.item])), [['stage', sc[0].items[0].id]], '클릭하면 그 문단(item)으로');
+  assert.equal(FE.checkFilter(r, 'stage').total, 2, '소품 미지정 1 + 미정 1');
+  assert.equal(FE.checkFilter(r, 'light').total, 0);
+  // 소품 목록이 비면 그 한 줄로 흡수
+  const r2 = FE.checkCollect(input(showOf(sc)));
+  assert.equal(r2.propsSkip, true);
+  assert.deepEqual(plain(r2.groups.find(x => x.k === 'noprops').list), []);
 });

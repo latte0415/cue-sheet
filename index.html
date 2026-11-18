@@ -4045,6 +4045,7 @@ const CK_GROUPS = [
   { k: 'tbd', sev: 'check', t: '미정 큐', short: '미정', note: '공연 전에 확정하거나 리허설에서 정한 내용을 적어 두세요.', depts: 'any' },
   { k: 'trig', sev: 'check', t: '트리거가 비어 있는 큐', short: '트리거', note: '언제 칠지 적혀 있지 않습니다.', depts: 'any' },
   { k: 'castlist', sev: 'check', t: '씬 출연에 없는 사람의 IN/OUT', short: '출연 명단', note: '씬 마지막 큐의 IN(다음 씬 등장)과 첫 큐의 OUT(앞 씬 퇴장)은 뺍니다.', depts: ['cast'] },
+  { k: 'noprops', sev: 'check', t: '소품 미지정 무대 큐', short: '소품 미지정', note: '확정 무대 큐인데 소품이 없습니다 — 소품을 등록하고 대상으로 고르세요(v8: 무대 큐는 소품 필수). 원래 문장은 상세에 있습니다.', depts: ['stage'] },
   { k: 'files', sev: 'check', t: '음원 파일', short: '음원 파일', note: '', depts: ['sound'] },
   { k: 'empty', sev: 'info', t: '문단 없는 액트 씬', short: '빈 액트', note: '코멘트·큐를 달 문단이 없습니다.', depts: ['common'], fold: true },
   { k: 'cmt', sev: 'info', t: '미해결 코멘트', short: '코멘트', note: '', depts: ['common'] }
@@ -4065,7 +4066,7 @@ function checkCollect(x) {
     if (mv === 'in') { const nx = scenes[si + 1]; return !!nx && nx.cast.includes(pid) && noCues(its.slice(ii + 1)); }
     const pv = scenes[si - 1]; return !!pv && pv.cast.includes(pid) && noCues(its.slice(0, ii));
   };
-  const last = new Map();
+  const last = new Map(), noProps = [];
   x.entries.forEach(e => {
     const id = e.item.id, sid = e.scene.id;
     e.item.cues.forEach(c => {
@@ -4074,6 +4075,8 @@ function checkCollect(x) {
       if (c.status === 'tbd') add('tbd', own());
       if (!String(c.trigger || '').trim()) add('trig', own());
       if (c.dept === 'light' && c.status !== 'tbd' && !(c.light && c.light.channels.length) && !(c.light && String(c.light.anim || '').trim())) add('light', own());
+      // 소품 미지정: lib/validate.js 의 stage-no-props 와 같은 조건 (확정 무대 큐, 소품 행 없음). 소품 목록이 비면 아래 propsSkip 한 줄로 흡수
+      if (c.dept === 'stage' && c.status !== 'tbd' && !(c.stage && Array.isArray(c.stage.props) && c.stage.props.some(r => r && r.propId))) noProps.push(own());
       if (c.dept === 'sound' && c.sound && c.sound.track != null && !x.trackByNo(c.sound.track)) add('track', { dept: 'sound', person: null, sid, item: id, text: `${ref(e)} — BGM ${c.sound.track} 은 트랙 목록에 없음` });
       if (c.dept === 'cast' && c.cast && c.cast.personId && (c.cast.move === 'in' || c.cast.move === 'out')) {
         const pid = c.cast.personId, mv = c.cast.move, pr = last.get(pid), M = MOVES[mv];
@@ -4097,6 +4100,7 @@ function checkCollect(x) {
   // 소품: 소품 목록이 비어 있는데 무대 큐가 있으면 검사하지 않는다 (소품을 안 쓰는 공연에서 전부 "목록에 없음" 이 되지 않게)
   const hasStage = x.entries.some(e => e.item.cues.some(c => c.dept === 'stage'));
   const propsSkip = !(S.props || []).length && hasStage;
+  if (!propsSkip) noProps.forEach(o => add('noprops', o));
   if (!propsSkip) x.propIssues().forEach(p => add('props', p.e
     ? { dept: 'stage', person: null, sid: p.e.scene.id, item: p.e.item.id, text: `${ref(p.e)} — ${p.text}${p.prev ? ` (앞: ${ref(p.prev)})` : ''}` }
     : { dept: 'stage', person: null, pv: true, text: `공연 전 무대 — ${p.text}` }));
@@ -4169,7 +4173,7 @@ function viewCheck() {
   let sev = '';
   const none = [];
   v.groups.forEach(g => {
-    if (!g.list.length) { if (g.rel && !(g.k === 'props' && v.propsSkip)) none.push(g.short); return; }
+    if (!g.list.length) { if (g.rel && !((g.k === 'props' || g.k === 'noprops') && v.propsSkip)) none.push(g.short); return; }
     if (g.sev !== sev) { sev = g.sev; h += `<h3 class="ck-sev ${sev}">${CK_SEV_L[sev]}</h3>`; }
     const n = g.list.length, open = g.fold ? !!state.ckOpen[g.k] : true;
     const title = g.fold ? `<button type="button" class="ck-fold" data-act="ck-fold" data-k="${g.k}" aria-expanded="${open}">${esc(g.t)}</button>` : esc(g.t);
@@ -4186,7 +4190,7 @@ function viewCheck() {
     h += '</ol></section>';
   });
   if (none.length) h += `<p class="ck-none" id="ck-none">문제 없음: ${esc(none.join(', '))}</p>`;
-  if (v.propsSkip) h += `<p class="ck-none" id="ck-props-skip">소품 미등록 — 검사 안 함</p>`;
+  if (v.propsSkip) h += `<p class="ck-none" id="ck-props-skip">소품 미등록 — 소품 연속성·소품 미지정 검사 안 함</p>`;
   return h;
 }
 // 점검에서 이동: 마지막으로 누른 항목·순번을 기억하고, 패널(또는 본문 위) 머리에 "← 점검 (n/N) · 다음 →"
