@@ -19,6 +19,8 @@
   --rule:#e4e4e7; --rule-2:#d4d4d8;
   --accent:#2563eb; --accent-tint:#eef3fe; --on-accent:#ffffff;
   --red:#dc2626;
+  /* 부서 글자색: 대본 큐 블록의 부서 열. 색만으로 구분하지 않고 부서 이름을 항상 같이 쓴다 */
+  --q-cast:#7a4bc2; --q-light:#a85d0b; --q-sound:#0d7a6f; --q-stage:#57606d;
   --overlay:rgba(9,9,11,.28);
   --sans:Pretendard,"Pretendard Variable","Noto Sans KR",-apple-system,BlinkMacSystemFont,system-ui,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,Pretendard,"Pretendard Variable","Noto Sans KR",monospace;
@@ -32,6 +34,7 @@
     --rule:#232327; --rule-2:#38383e;
     --accent:#5b9bff; --accent-tint:#13203a; --on-accent:#0b0b0c;
     --red:#f87171;
+    --q-cast:#b49cf0; --q-light:#e0a45a; --q-sound:#52c2b4; --q-stage:#9ea7b3;
     --overlay:rgba(0,0,0,.6);
     color-scheme:dark;
   }
@@ -42,6 +45,7 @@
   --rule:#232327; --rule-2:#38383e;
   --accent:#5b9bff; --accent-tint:#13203a; --on-accent:#0b0b0c;
   --red:#f87171;
+  --q-cast:#b49cf0; --q-light:#e0a45a; --q-sound:#52c2b4; --q-stage:#9ea7b3;
   --overlay:rgba(0,0,0,.6);
   color-scheme:dark;
 }
@@ -52,6 +56,7 @@
   --rule:#18181b; --rule-2:#2a2a2f;
   --accent:#4f86e0; --accent-tint:#0c1628; --on-accent:#000000;
   --red:#d55c5c;
+  --q-cast:#9282c2; --q-light:#b98a4f; --q-sound:#449c91; --q-stage:#7f8792;
 }
 *,*::before,*::after{box-sizing:border-box;border-radius:0}
 html,body{height:100%;margin:0}
@@ -177,7 +182,6 @@ input[type=color]{padding:0 2px;width:40px;height:30px;cursor:pointer}
 .g.other{opacity:.35}
 .g-open{display:flex;flex-direction:column;align-items:flex-end;font-family:var(--mono);font-size:11px;line-height:1.3;color:var(--ink-3);padding-top:6px;text-align:right;width:100%;white-space:nowrap}
 .g.has-q .gq{color:var(--accent);font-weight:500}
-.g .gt{color:var(--red)}
 .g .gc.open{color:var(--red)}
 .g.sel .g-open{text-decoration:underline}
 .g:hover,.g:focus-within{z-index:2}
@@ -196,6 +200,25 @@ input[type=color]{padding:0 2px;width:40px;height:30px;cursor:pointer}
 .ro .g-open{font-size:10px;padding-top:7px}
 .doc[data-empty]::before{content:attr(data-empty);position:absolute;left:0;top:2px;color:var(--ink-3);pointer-events:none}
 .ro .g{padding-right:5px}
+/* 큐 블록: 큐가 달린 문단 위에 한 큐 한 줄 — [부서 열] 내용(진하게) 미정 시점 · 메모(작게 회색). 그 아래 문단 본문은 보통 굵기 */
+.qlayer{position:absolute;left:0;right:0;top:0;height:0;z-index:1}
+.qb{position:absolute;left:0;right:4px;display:block;padding:2px 0 2px;text-align:left}
+.doc p.has-qb{padding-top:calc(var(--qh, 0px) + 1px);margin-top:10px}
+.ql{display:grid;grid-template-columns:2.4em minmax(0,1fr);column-gap:10px;align-items:baseline;font-size:14px;line-height:1.5;color:var(--ink)}
+.ql .qd{font-size:12px;font-weight:600;white-space:nowrap;color:var(--ink-2)}
+.ql.d-cast .qd{color:var(--q-cast)}
+.ql.d-light .qd{color:var(--q-light)}
+.ql.d-sound .qd{color:var(--q-sound)}
+.ql.d-stage .qd{color:var(--q-stage)}
+.ql .qx{min-width:0;overflow-wrap:anywhere}
+.ql .qt{font-weight:600}
+.ql .qs{font-size:12px;font-weight:600;color:var(--red);margin-left:8px;white-space:nowrap}
+.ql .qt.tbd{color:var(--red)}
+.ql .qm{font-size:12px;color:var(--ink-3);margin-left:8px}
+.ql .qn{font-family:var(--mono);font-size:11px;color:var(--accent);white-space:nowrap}
+.ql.other .qt{font-weight:400;color:var(--ink-3)}
+.ql.other .qd{color:var(--ink-3);font-weight:400}
+.qb:hover .qt{text-decoration:underline;text-decoration-color:var(--rule-2);text-underline-offset:3px}
 
 /* ---------- 큐시트 ---------- */
 .cs-top{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px;padding:18px 0 10px}
@@ -531,8 +554,9 @@ body.has-player .app{padding-bottom:calc(var(--player-h) + env(safe-area-inset-b
 .ml-me .spk{font-weight:600;font-size:14px;margin-right:6px}
 .ml-me .paren{color:var(--ink-3)}
 .ml-me.mv{border-left-style:dashed;font-size:14px;color:var(--ink-2)}
-.ml-mv{font-family:var(--mono);font-size:11px;color:var(--accent);margin-left:8px;white-space:nowrap}
-.ml-tr{font-size:12px;color:var(--ink-3);margin-left:6px}
+.ml-q{display:block;padding:1px 0 3px}
+.ml-q .ql{grid-template-columns:2.6em 2.4em minmax(0,1fr)}
+.ml-tx{display:block}
 /* 사람 뷰: 대사 목록 펼침 */
 .pp-lines>td{padding:0 0 10px}
 .pl-box{position:sticky;left:0;width:min(720px,calc(100vw - 32px))}
@@ -616,7 +640,6 @@ body.has-player .app{padding-bottom:calc(var(--player-h) + env(safe-area-inset-b
 @media (max-width:600px){
   :root{--gut:50px}
   .ro{--gut:40px}
-  .g2.both .gt{display:none}
   .doc{font-size:16px}
   .g-open{font-size:10px}
   .brand{flex-basis:100%;padding-bottom:2px}
@@ -662,6 +685,8 @@ body.has-player .app{padding-bottom:calc(var(--player-h) + env(safe-area-inset-b
   .doc p.mine::before{border-left:2px solid #000}
   .doc p.mycue::before{border-left-color:#000}
   .doc p.other{color:#555}
+  .ql .qd,.ql.other .qd{color:#000}
+  .ql .qs{color:#000;text-decoration:underline}
   .ml-top{padding-top:0}
   .ml-it{break-inside:avoid;padding:4px 0}
   .ml-it.sel{background:none}
@@ -2099,6 +2124,65 @@ function cueSummary(c) {
 // 소품 동작 요약: in "+탑햇" · out "−컵" · move "→탑햇"
 const PROP_SIGN = { in: '+', out: '−', move: '→' };
 function propActsText(a) { return (a || []).map(x => (PROP_SIGN[x.action] || '') + propName(x.propId)).join(' '); }
+// 대본에 큐 내용을 먼저 보이는 한 줄: { dept, text, when, memo, tbd }. 순수 함수 — 사람 이름·트랙 제목은 look 으로 받는다 (test/cue-line.test.js)
+// look = { person(id) → 이름, track(no) → 제목, prop(id) → 소품 이름 (없으면 id) }
+const Q_MOVE = { in: '인', out: '아웃', move: '이동' };
+const Q_LACT = { on: 'On', off: 'Off', fadeIn: '페이드인', fadeOut: '페이드아웃', anim: '애니' };
+const Q_SACT = { play: '재생', fadeIn: '페이드인', fadeOut: '페이드아웃', stop: '정지', volume: '볼륨' };
+// 암전 = 네 채널 모두 off (다른 동작이 섞이면 암전이 아니다)
+function isBlackout(l) {
+  const chs = (l && l.channels) || [];
+  return chs.length > 0 && chs.every(x => x.action === 'off') && CH.every(ch => chs.some(x => x.ch === ch));
+}
+function lightLine(l, tbd) {
+  l = l || { channels: [], anim: '' };
+  const chs = l.channels || [];
+  if (!chs.length) return l.anim ? `애니 "${l.anim}"` : (tbd ? '상세 미정' : '(채널 없음)');
+  if (isBlackout(l)) {
+    const ts = Array.from(new Set(chs.map(x => x.timeSec)));
+    return '암전 (전체 Off' + (ts.length === 1 && ts[0] ? ' ' + ts[0] + 's' : '') + ')';
+  }
+  return lightGroups(l).map(g => {
+    const c = g.c, all = CH.every(ch => g.chs.includes(ch));
+    let s = (all ? '전체' : g.chs.map(x => CH_L[x] || x).join('·')) + ' ' + (Q_LACT[c.action] || c.action);
+    if (c.action === 'anim' && l.anim) s += ` "${l.anim}"`;
+    if (c.dim != null && c.action !== 'off') s += ' ' + c.dim + '%';
+    const cl = colorLabel(c); if (cl) s += ' ' + cl;
+    if (c.timeSec) s += ' ' + c.timeSec + 's';
+    return s;
+  }).join(', ');
+}
+function soundLine(s, title) {
+  s = s || {};
+  const name = s.track == null ? '음원' : '#' + s.track + (title ? ' ' + title : '');
+  let a = Q_SACT[s.action] || s.action || '';
+  if (s.action === 'volume') a += ' ' + (s.level == null ? 100 : s.level) + '%' + (s.timeSec ? ' ' + s.timeSec + 's' : '');
+  else if (s.action === 'fadeOut') a += ' ' + (s.timeSec || FADE_DEFAULT) + 's';
+  else if (s.timeSec) a += ' ' + s.timeSec + 's';
+  if (s.action === 'fadeIn' && s.level != null && s.level !== 100) a += ' → ' + s.level + '%';
+  return name + ' — ' + a;
+}
+function cueLine(c, look) {
+  const tbd = c.status === 'tbd';
+  let text = '';
+  switch (c.dept) {
+    case 'light': text = lightLine(c.light, tbd); break;
+    case 'sound': { const s = c.sound || {}; text = soundLine(s, s.track == null ? '' : look.track(s.track)); break; }
+    case 'stage': {
+      // v6: 무대 큐는 설명(text)과 소품 동작(stage.props) 둘 중 하나만 있어도 된다
+      const x = c.stage || {}, pn = look.prop || (id => id);
+      const ops = (x.props || []).map(p => (PROP_SIGN[p.action] || '') + (pn(p.propId) || p.propId)).join(' ');
+      text = [(x.text || '').trim(), ops].filter(Boolean).join(' · ') || (tbd ? '상세 미정' : '(내용 없음)');
+      break;
+    }
+    case 'cast': {
+      const x = c.cast || {}, who = (x.personId && look.person(x.personId)) || (tbd ? '(사람 미정)' : '(사람 미지정)');
+      text = who + ' ' + (Q_MOVE[x.move] || '') + (x.text ? ' — ' + x.text : '');
+      break;
+    }
+  }
+  return { dept: DEPT_L[c.dept] || c.dept, text, when: trigLabel(c), memo: (c.memo || '').trim(), tbd };
+}
 function trigLabel(c) { const a = []; if (c.trigger) a.push(c.trigger); if (c.offsetSec != null) a.push('+' + c.offsetSec + 's'); return a.join(' '); }
 function trigLabels(cues) { return Array.from(new Set(cues.map(trigLabel).filter(Boolean))); }
 function itemRefText(e, n) {
@@ -2527,7 +2611,8 @@ function spkBtnPlace() {
   if (!c || !c.p.isConnected || document.activeElement !== c.doc) { b.hidden = true; return; }
   const sheet = c.doc.closest('.sheet'); if (!sheet) { b.hidden = true; return; }
   if (b.parentNode !== sheet) sheet.appendChild(b);
-  b.style.top = c.p.offsetTop + 'px'; b._p = c.p; b._doc = c.doc; b.hidden = false;
+  // 큐 블록이 위에 있으면 그 아래 본문 첫 줄 옆에
+  b.style.top = c.p.offsetTop + (parseFloat(c.p.style.getPropertyValue('--qh')) || 0) + 'px'; b._p = c.p; b._doc = c.doc; b.hidden = false;
 }
 
 /* ===== 되돌리기 (편집기 전용 — 브라우저 기본 undo 는 프로그램이 바꾼 DOM 과 섞이면 깨진다) ===== */
@@ -2728,13 +2813,46 @@ function viewScript() {
       h += `<section class="scene ${s.type === 'mc' ? 'mc' : ''}" id="sc-${id}" data-scene="${id}">
         <header class="sc-head"><h3 class="sc-title ce" data-ce="scene" data-scene="${id}" ${ceAttr()} data-ph="${esc(scenePh(s))}">${escT(s.title)}</h3><span class="rest sc-rest">${sceneRest(s)}</span></header>
         <div class="sc-setup-w">${sceneSetup(s)}</div><div class="sc-props-w">${sceneProps(s)}</div>
-        <div class="sheet"><div class="gutter"></div><div class="doc" data-scene="${id}" ${ceAttr()} spellcheck="false" role="textbox" aria-multiline="true" aria-label="${esc(sceneTitle(s))} 대본">${s.items.map(paraHtml).join('') || '<p><br></p>'}</div></div>
+        <div class="sheet"><div class="gutter"></div><div class="qlayer"></div><div class="doc" data-scene="${id}" ${ceAttr()} spellcheck="false" role="textbox" aria-multiline="true" aria-label="${esc(sceneTitle(s))} 대본">${s.items.map(paraHtml).join('') || '<p><br></p>'}</div></div>
       </section>`;
     });
     if (!p.scenes.length) h += `<p class="empty">씬이 없습니다. ${state.edit ? `<button type="button" class="tb" data-act="scene-add" data-part="${pid}">+ 씬</button>` : ''}</p>`;
     h += '</section>';
   });
   return h + '</div>';
+}
+/* 큐 블록: 큐가 달린 문단 위에 "큐 내용(진하게) → 문단(보통)" 순서로. 한 큐 한 줄 = [부서] 내용 미정 시점 · 메모
+   편집 문서(contenteditable) 밖의 .qlayer 에 그리고, 문단은 그 높이만큼 위 여백(--qh)을 비운다 — 원문·캐럿은 건드리지 않는다 */
+const CUE_LOOK = { person: pname, prop: propName, track: no => { const t = trackByNo(no); return t ? (t.title || t.fileName || '') : ''; } };
+function cueLinesHtml(cues, q) {
+  return cues.map((c, i) => {
+    const L = cueLine(c, CUE_LOOK), meta = [L.when, L.memo].filter(Boolean).join(' · ');
+    const other = !cueMine(c), bare = L.tbd && L.text === '상세 미정'; // 내용이 비어 "상세 미정" 이면 그 글자를 빨갛게 — "미정" 을 두 번 쓰지 않는다
+    return `<span class="ql d-${esc(c.dept)}${other ? ' other' : ''}">${q != null ? `<span class="qn">${i ? '' : 'Q' + esc(q)}</span>` : ''}<span class="qd">${esc(L.dept)}</span><span class="qx"><span class="qt${bare ? ' tbd' : ''}">${esc(L.text)}</span>${L.tbd && !bare ? '<span class="qs">미정</span>' : ''}${meta ? `<span class="qm">${esc(meta)}</span>` : ''}</span></span>`;
+  }).join('');
+}
+function cueBlocksHtml(s) {
+  return s.items.map(it => {
+    if (!it.cues.length) return '';
+    const id = esc(it.id);
+    return `<button type="button" class="qb" data-for="${id}" data-act="open-item" data-item="${id}" hidden>${cueLinesHtml(it.cues, null)}</button>`;
+  }).join('');
+}
+// 블록 높이만큼 문단 위 여백을 비우고, 블록을 문단 맨 위에 붙인다
+function layoutCues(sheet) {
+  const L = sheet.querySelector('.qlayer'), doc = sheet.querySelector('.doc'); if (!L || !doc) return;
+  const want = new Map();
+  Array.from(L.children).forEach(b => {
+    const p = doc.querySelector(`p[data-id="${cssq(b.dataset.for)}"]`);
+    b.hidden = !p; if (p) want.set(p, b);
+  });
+  Array.from(doc.children).forEach(p => {
+    const b = want.get(p), v = b ? b.offsetHeight + 'px' : '';
+    if (p.style.getPropertyValue('--qh') !== v) { if (v) p.style.setProperty('--qh', v); else p.style.removeProperty('--qh'); }
+    if (!v && p.getAttribute('style') === '') p.removeAttribute('style');
+    p.classList.toggle('has-qb', !!b);
+  });
+  want.forEach((b, p) => { b.style.top = p.offsetTop + 'px'; });
 }
 function cueSumLine(it) {
   const cs = it.cues.filter(cueMine);
@@ -2777,10 +2895,9 @@ function gutterHtml(s) {
     const other = (d || pp) && !itemMine(it) && !open;
     const cls = ['g', it.cues.length ? 'has-q' : '', tbd ? 'tbd' : '', other ? 'other' : '', state.selItem === it.id ? 'sel' : ''].join(' ');
     let inner = '';
-    if (it.cues.length) inner += `<span class="gq">Q${esc(e.q)}${it.cues.length > 1 ? '·' + it.cues.length : ''}</span>`;
-    // 둘째 줄: 미정 · 코멘트 수 (한 줄 문단 높이 안에 들어가게 두 줄까지만)
-    const l2 = (tbd ? '<span class="gt">미정</span>' : '') + (tbd && nC ? ' ' : '') + (nC ? `<span class="gc ${open ? 'open' : ''}">※${nC}</span>` : '');
-    if (l2) inner += `<span class="g2 ${tbd && nC ? 'both' : ''}">${l2}</span>`;
+    if (it.cues.length) inner += `<span class="gq">Q${esc(e.q)}</span>`;
+    // 둘째 줄: 코멘트 수. 큐 내용·미정은 문단 위 큐 블록에 줄마다 나온다
+    if (nC) inner += `<span class="g2"><span class="gc ${open ? 'open' : ''}">※${nC}</span></span>`;
     const empty = !(it.text || '').trim() && !(it.kind === 'line' && it.speaker);
     const label = `큐 ${it.cues.length}개${tbd ? ' (미정 포함)' : ''}, 코멘트 ${nC}개 — 상세 열기`;
     return `<div class="${cls}" data-for="${id}"><button type="button" class="g-open" data-act="open-item" data-item="${id}" aria-label="${label}" title="${label}">${inner}</button>${empty && state.edit ? `<button type="button" class="g-del" data-act="item-del" data-item="${id}" data-confirm="정말?" title="큐 ${it.cues.length}·코멘트 ${nC}개와 함께 삭제">삭제</button>` : ''}</div>`;
@@ -2799,12 +2916,15 @@ function paintGutters() {
     const se = IDX.byScene.get(sec.dataset.scene); if (!se) return;
     const g = $('.gutter', sec), html = gutterHtml(se.scene);
     if (g._html !== html) { g.innerHTML = html; g._html = html; }
+    const ql = $('.qlayer', sec), qh = cueBlocksHtml(se.scene);
+    if (ql._html !== qh) { ql.innerHTML = qh; ql._html = qh; }
+    layoutCues($('.sheet', sec));
     layoutGutter($('.sheet', sec));
   });
 }
 let paintRaf = 0;
 function queuePaint() { if (paintRaf) return; paintRaf = requestAnimationFrame(() => { paintRaf = 0; if (mountedView === 'script') paintGutters(); }); }
-const RO = typeof ResizeObserver === 'function' ? new ResizeObserver(ents => { ents.forEach(en => { const sh = en.target.closest('.sheet'); if (sh) layoutGutter(sh); }); }) : null;
+const RO = typeof ResizeObserver === 'function' ? new ResizeObserver(ents => { ents.forEach(en => { const sh = en.target.closest('.sheet'); if (sh) { layoutCues(sh); layoutGutter(sh); } }); }) : null;
 function markEmpty(doc) {
   const e = doc.children.length === 1 && !textOf(doc.firstElementChild) && state.edit;
   if (e) doc.setAttribute('data-empty', '비어 있음 — 여기에 입력 (이름: 대사 / (동작) · Tab 화자 목록 · Shift+Enter 문단 안 줄바꿈)'); else doc.removeAttribute('data-empty');
@@ -2854,7 +2974,7 @@ function refreshScript() {
   refreshSceneHeads();
   decorateParas(); paintPrintHead();
   $$('#script .doc').forEach(markEmpty);
-  $$('#script .gutter').forEach(g => { g._html = null; });
+  $$('#script .gutter, #script .qlayer').forEach(g => { g._html = null; });
   paintGutters();
 }
 
@@ -2880,11 +3000,11 @@ function viewMyLines() {
         let k = ii - 1; while (k >= 0 && !hasText(s.items[k])) k--;
         const cue = k > last ? s.items[k] : null;
         last = ii;
-        const mv = cs.map(c => MOVES[c.cast.move] + (c.status === 'tbd' ? '?' : '')).join(' · ');
-        const tr = line ? '' : trigLabels(cs).join(' / ');
         const cueH = cue ? `<span class="ml-cue">${cue.kind === 'line' && cue.speaker ? `<span class="spk">${esc(pname(cue.speaker))}</span>` : ''}${escT(cut(cue.text, 90))}</span>` : '';
         const meH = line ? `<span class="spk">${me}</span>${parenHtml(it.text)}` : escT(itemToRaw(it) || '(빈 문단)');
-        body += `<li><button type="button" class="ml-it ${state.selItem === it.id ? 'sel' : ''}" id="ml-${esc(it.id)}" data-act="ml-goto" data-item="${esc(it.id)}">${cueH}<span class="ml-me ${line ? '' : 'mv'}">${meH}${mv ? `<span class="ml-mv">${esc(mv)}</span>` : ''}${tr ? `<span class="ml-tr">↳ ${esc(tr)}</span>` : ''}</span></button></li>`;
+        // 내 인/아웃 큐: 큐 내용(진하게) → 그 문단
+        const qH = cs.length ? `<span class="ml-q">${cueLinesHtml(cs, it.label)}</span>` : '';
+        body += `<li><button type="button" class="ml-it ${state.selItem === it.id ? 'sel' : ''}" id="ml-${esc(it.id)}" data-act="ml-goto" data-item="${esc(it.id)}">${cueH}<span class="ml-me ${line ? '' : 'mv'}">${qH}<span class="ml-tx">${meH}</span></span></button></li>`;
       });
       body += '</ol></section>';
     });
@@ -4876,7 +4996,7 @@ document.addEventListener('click', ev => {
   if (!state.moveCue || state.modal) return;
   const t = ev.target; if (!t || !t.closest) return;
   if (t.closest('#movebar, .topbar, .nav, .panel, .player, .toast')) return;
-  const p = t.closest('.doc > p[data-id], .g[data-for], tr.row[data-item]');
+  const p = t.closest('.doc > p[data-id], .g[data-for], .qb[data-for], tr.row[data-item]');
   if (!p) return;
   ev.preventDefault(); ev.stopPropagation();
   moveCueTo(p.dataset.id || p.dataset.for || p.dataset.item);
