@@ -30,6 +30,7 @@ test('상수가 index.html 과 같다', () => {
   assert.deepEqual(plain(FE.S_ACT), CONST.S_ACT);
   assert.deepEqual(Object.keys(FE.MOVES), CONST.MOVES);
   assert.deepEqual(Object.keys(FE.ROLES), CONST.ROLES);
+  assert.ok(CONST.SHOW_VERS.includes(plain(FE.migrate({ version: 5, parts: [] })).version), '프런트가 내보내는 version 은 읽을 수 있는 형식이어야 한다');
   assert.equal(FE.ACT_RE.source, CONST.ACT_RE.source);
 });
 
@@ -130,6 +131,47 @@ test('경고: 지문 표기 규칙 — 괄호 한 쌍 (…)', () => {
   assert.equal(v.warnings.length, warned.length, '다른 경고는 없어야 한다');
   // 큰 틀: 경고일 뿐 오류가 아니다 (사이트 편집기는 * 와 — 시작을 허용)
   assert.equal(CONST.ACT_RE.test('* x') && CONST.ACT_RE.test('— x'), true);
+});
+
+test('v6: 소품이 있는 정상 문서는 오류·경고 없음, v5 도 경고 없음', () => {
+  const s = docExample();
+  assert.equal(s.version, 6);
+  assert.ok(s.props.length && s.preShowProps.length);
+  assert.deepEqual(validateShow(s).warnings, []);
+  const v5 = plain(s); v5.version = 5; delete v5.props; delete v5.preShowProps;
+  v5.parts[0].scenes[0].items[1].cues[1].stage = { text: '탑햇테이블에 탑햇 세팅' };
+  const r = validateShow(v5);
+  assert.deepEqual(r.errors, []);
+  assert.deepEqual(r.warnings, []);
+  // 실데이터(v5, 배포 서버에 있는 파일)
+  const real = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cues', 'backstage-part1.json'), 'utf8'));
+  const rr = validateShow(unwrapShow(real));
+  assert.equal(unwrapShow(real).version, 5);
+  assert.deepEqual(rr.errors, []);
+  assert.deepEqual(rr.warnings, []);
+});
+
+test('v6: 소품 검사 — 모르는 propId 경고, 잘못된 action 오류, 빈 stage 큐 경고, 레지스트리 id 중복 오류', () => {
+  const s = docExample();
+  const st = s.parts[0].scenes[0].items[1].cues[1].stage;
+  const P = 'parts[0].scenes[0].items[1].cues[1].stage';
+  st.props.push({ propId: 'pr-ghost', action: 'in', at: '' }, { propId: 'pr-tophat', action: 'enter', at: '' });
+  s.preShowProps.push({ propId: 'pr-ghost', at: '' });
+  s.props.push({ id: 'pr-tophat', name: '중복' });
+  let v = validateShow(s);
+  assert.deepEqual(paths(v.errors).sort(), ['props[2].id', `${P}.props[2].action`].sort());
+  assert.deepEqual(paths(v.warnings).sort(), [`${P}.props[1].propId`, 'preShowProps[1].propId'].sort());
+  assert.match(v.warnings.find(w => w.path === 'preShowProps[1].propId').msg, /"pr-ghost" 가 props 에 없습니다/);
+
+  const e = docExample();
+  e.parts[0].scenes[0].items[1].cues[1].stage = { text: ' ', props: [] };
+  v = validateShow(e);
+  assert.deepEqual(v.errors, []);
+  assert.deepEqual(paths(v.warnings), ['parts[0].scenes[0].items[1].cues[1].stage']);
+  e.parts[0].scenes[0].items[1].cues[1].stage = { text: '', props: [{ propId: 'pr-tophat', action: 'out', at: '' }] }; // props 만 있어도 유효
+  assert.deepEqual(validateShow(e).warnings, []);
+  e.parts[0].scenes[0].items[1].cues[1].stage.props[0].propId = 3;
+  assert.deepEqual(paths(validateShow(e).errors), ['parts[0].scenes[0].items[1].cues[1].stage.props[0].propId']);
 });
 
 test('fillIds: 빠진 id 만 위치 기반으로, 기존 id 와 겹치지 않게', () => {

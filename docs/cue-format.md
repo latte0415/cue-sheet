@@ -1,7 +1,7 @@
-# 큐시트 JSON 형식 (show v5)과 업로드
+# 큐시트 JSON 형식 (show v6)과 업로드
 
 원문 큐시트(대본 + 조명·음향·무대·출연 큐)를 이 JSON 으로 바꿔 `scripts/upload.js` 로 올린다.
-사이트의 "내보내기"가 만드는 JSON 과 같은 형식이다. 기준 구현은 `index.html` 의 `migrate()`, 검증은 `lib/validate.js`.
+사이트의 "내보내기"가 만드는 JSON 과 같은 형식이다. `version` 5 파일도 그대로 읽힌다(소품 필드가 없는 옛 형식 — 경고 없음). 새로 만들 땐 6 을 쓴다. 기준 구현은 `index.html` 의 `migrate()`, 검증은 `lib/validate.js`.
 
 ## 올리기
 
@@ -27,8 +27,10 @@ node scripts/upload.js cues/show.json --project <id|제목>        # 그 프로�
 
 ```
 show
-├─ title, version: 5, preShowSetup, revision
+├─ title, version: 6, preShowSetup, revision
 ├─ people[]  { id, name, role, note }
+├─ props[]   { id, name, note }                            ← 소품 목록 (v6)
+├─ preShowProps[]  { propId, at }                          ← 공연 시작 때 무대에 있는 소품 (v6)
 ├─ tracks[]  { id, no, title, durationSec, fileName, fileKey, note, loop }
 └─ parts[]   { id, name, scenes[] }                       ← 1부, 2부 …
    └─ scenes[] { id, type, title, cast[], durationSec, setup, comments[], items[] }
@@ -43,10 +45,10 @@ show
 | 필드 | 타입 | 뜻 |
 |---|---|---|
 | `title` | string | 공연(프로젝트) 제목 |
-| `version` | number | **필수**, `5` |
+| `version` | number | **필수**, `6` (`5` 도 읽힘) |
 | `preShowSetup` | string | 공연 전 무대 세팅 (런 보기 첫 화면) |
 | `revision` | string | 판 표시, 40자까지 |
-| `people` / `tracks` / `parts` | array | 아래. `parts` 는 **필수** |
+| `people` / `props` / `preShowProps` / `tracks` / `parts` | array | 아래. `parts` 는 **필수** |
 
 ### people[] — 출연자·스태프
 
@@ -56,6 +58,25 @@ show
 | `name` | string | 표시 이름 |
 | `role` | `performer` `mc` `light` `sound` `stage` `other` | 기본 `other` |
 | `note` | string | 메모 (예: "MC 겸 공연자") |
+
+### props[] — 소품 (v6)
+
+사람(`people`)과 같은 방식의 목록. 무대 큐와 `preShowProps` 는 소품 이름이 아니라 이 `id` 로 가리킨다.
+
+| 필드 | 타입 | 뜻 |
+|---|---|---|
+| `id` | string | 소품을 가리키는 값 (예: `"pr-tophat"`) |
+| `name` | string | 표시 이름 |
+| `note` | string | 메모 |
+
+### preShowProps[] — 공연 전 무대 소품 (v6)
+
+공연이 시작할 때 이미 무대에 있는 소품. 항상 "들어와 있음"으로 보므로 `action` 은 없다.
+
+| 필드 | 타입 | 뜻 |
+|---|---|---|
+| `propId` | string | `props[].id`. 목록에 없으면 경고(지우지 않고 "삭제된 소품"으로 남는다) |
+| `at` | string | 놓인 위치 ("무대 오른쪽 테이블 위"). 빈 값 `""` 가능 |
 
 ### tracks[] — 음원(BGM)
 
@@ -103,7 +124,7 @@ show
 |---|---|
 | `light` | `{ channels: [{ ch, action, dim, color, colorName, timeSec }], anim }` — `ch`: `back` `top` `front` `house`(객석). `action`: `on` `off` `fadeIn` `fadeOut` `anim`. `dim` 0–100(%)·null, `color` `"#rrggbb"`·null, `colorName` 색 이름·null, `timeSec` 페이드 초·null. 암전 = 네 채널 모두 `off`. 상세 미정이면 `channels: []` + `status:"tbd"` |
 | `sound` | `{ track, action, timeSec, level }` — `track` = `tracks[].no`. `action`: `play` `fadeIn` `fadeOut` `stop` `volume`. `timeSec` 페이드/변화 초·null, `level` 0–100·null |
-| `stage` | `{ text }` — 무대 작업 ("탑햇테이블에 탑햇 세팅") |
+| `stage` | `{ text, props: [{ propId, action, at }] }` — 무대 작업. `text` 는 글로 적는 작업("탑햇테이블에 탑햇 세팅"), `props` 는 소품이 들어오고 나가는 동작: `propId` = `props[].id`, `action`: `in` `out` `move` (그 밖은 오류), `at` 위치·메모(`""` 가능). **`text` 와 `props` 중 하나는 있어야 한다**(둘 다 비면 경고). `props` 가 없으면 `[]` 로 채워진다. 모르는 `propId` 는 경고 |
 | `cast` | `{ personId, move, text }` — `personId` = `people[].id`, `move`: `in` `out` `move`, `text` 보충 |
 
 ## 표기 규칙
@@ -137,11 +158,18 @@ show
 ```json
 {
   "title": "1부 (초안)",
-  "version": 5,
+  "version": 6,
   "preShowSetup": "탑햇테이블",
   "people": [
     { "id": "p-yejun", "name": "조예준", "role": "mc", "note": "MC 겸 공연자" },
     { "id": "p-daehoon", "name": "박대훈", "role": "performer", "note": "" }
+  ],
+  "props": [
+    { "id": "pr-tophat", "name": "탑햇", "note": "" },
+    { "id": "pr-table", "name": "탑햇테이블", "note": "" }
+  ],
+  "preShowProps": [
+    { "propId": "pr-table", "at": "무대 중앙" }
   ],
   "tracks": [
     { "id": "tr-1", "no": 1, "title": "하우스 음악", "durationSec": null, "fileName": null, "fileKey": null, "note": "", "loop": true }
@@ -168,7 +196,7 @@ show
               { "id": "q-3", "dept": "cast", "trigger": "멘트 후", "offsetSec": null, "memo": "", "status": "set",
                 "cast": { "personId": "p-daehoon", "move": "in", "text": "" } },
               { "id": "q-4", "dept": "stage", "trigger": "이 대사 즈음", "offsetSec": null, "memo": "시점 리허설 때 확정", "status": "tbd",
-                "stage": { "text": "탑햇테이블에 탑햇 세팅" } }
+                "stage": { "text": "탑햇테이블에 탑햇 세팅", "props": [{ "propId": "pr-tophat", "action": "in", "at": "테이블 위" }] } }
             ] }
         ] },
       { "id": "s-2", "type": "act", "title": "멘탈", "cast": ["p-daehoon"], "durationSec": 180, "setup": "", "comments": [], "items": [] }
