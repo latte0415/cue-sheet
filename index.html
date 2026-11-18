@@ -942,7 +942,9 @@ const VIEW_L = { script: '대본', cuesheet: '큐시트', run: '런', stage: '�
 // v6: 소품 목록(props) · 공연 전 무대 소품(preShowProps) · 무대 큐 소품 동작(stage.props)
 // v7: 문단 코멘트의 snapshot(코멘트 당시 문단). 필드를 더하면 올린다 — 서버가 버전을 비교해 옛 화면이 모르는 필드를 떨어뜨린 채 저장하는 것을 막는다
 // v8: 큐 상세 note 하나(cast.text · stage.text · memo 를 합침), 무대 큐는 소품 필수 + 소품 액션 clean, 객석 채널은 on/off 만
-const SHOW_VER = 8;
+// v9: 음향 PLAY 큐의 sound.level = 시작 볼륨(그 볼륨으로 바로 재생). 모양은 v8 과 같다 — v8 → v9 는 version 만 바뀐다.
+//     v8 화면은 PLAY 의 level 을 모르고 큐를 저장할 때 지운다(조용한 손실) — 올려서 서버 426 · 새로고침 바로 옛 화면 저장을 막는다
+const SHOW_VER = 9;
 const FADE_DEFAULT = 3; // fadeOut 시간이 비어 있을 때 쓰는 기본 페이드(초)
 const THEMES = ['system', 'light', 'dark'];
 const THEME_L = { system: '시스템', light: '라이트', dark: '다크' };
@@ -2223,7 +2225,7 @@ async function smOfflineBoot() {
   // 이 화면보다 새 형식의 사본은 열지 않는다(모르는 필드를 떨어뜨린 채 다시 저장하지 않게) — 연결되면 새 화면을 받는다
   if (Number(pick.show.version) > SHOW_VER || (pick.base && Number(pick.base.version) > SHOW_VER)) return false;
   let show;
-  try { show = migrate(pick.show); } catch (e) { return false; } // 옛 형식(v5~v7) 사본도 여기서 v8 로
+  try { show = migrate(pick.show); } catch (e) { return false; } // 옛 형식(v5~v8) 사본도 여기서 현재 형식(SHOW_VER)으로
   Store = ServerStore;
   await loadMergeModule(); // Service Worker 사본에서 — 없으면 병합 없이 선택 바
   SM.bootOffline = true; SM.net = 'down';
@@ -2464,7 +2466,7 @@ function fadeText(s) {
 }
 function cuePlay(c) {
   const s = c.sound || {};
-  if (s.action === 'play') playTrack(s.track, 0);
+  if (s.action === 'play') playTrack(s.track, 0, lvl(s)); // 시작 볼륨(level)이 있으면 그 볼륨으로 바로
   else if (s.action === 'fadeIn') playTrack(s.track, s.timeSec || 0, lvl(s));
   else if (s.action === 'volume') volumeTo(s.track, s.level, s.timeSec);
   else stopFade(fadeSec(s));
@@ -2534,7 +2536,7 @@ function cuePlayLabel(c) {
   if (s.action === 'fadeOut') return `fadeOut ${fadeText(s)}`;
   if (s.action === 'stop') return `정지 ${fadeText(s)}`;
   if (s.action === 'volume') return soundSummary(s);
-  return `BGM ${s.track == null ? '?' : s.track} ${s.action === 'fadeIn' ? 'fadeIn' : '재생'}`;
+  return `BGM ${s.track == null ? '?' : s.track} ${s.action === 'fadeIn' ? 'fadeIn' : '재생'}${s.action === 'play' && s.level != null && s.level !== 100 ? ' ' + s.level + '%' : ''}`;
 }
 function soundSummary(x) {
   const no = `BGM ${x.track == null ? '?' : x.track}`;
@@ -2885,6 +2887,7 @@ function cueParts(c, look) {
       else if (b.action === 'fadeOut') v.push((b.timeSec || FADE_DEFAULT) + 's');
       else if (b.timeSec) v.push(b.timeSec + 's');
       if (b.action === 'fadeIn' && b.level != null && b.level !== 100) v.push('→ ' + b.level + '%');
+      if (b.action === 'play' && b.level != null && b.level !== 100) v.push(b.level + '%'); // 시작 볼륨 (비우거나 100 이면 기본 볼륨이라 표시 안 함)
       val = v.join(' · ');
       break;
     }
@@ -4990,8 +4993,8 @@ function draftCue(d) {
   if (d.dept === 'light') cue.light = { channels: draftChannels(d.light), anim: d.light.anim.trim() };
   else if (d.dept === 'sound') {
     const x = d.sound;
-    // level 은 volume(기본 100)·fadeIn(선택)에서만 저장
-    cue.sound = { track: x.track, action: x.action, timeSec: x.timeSec, level: x.action === 'volume' ? (x.level == null ? 100 : x.level) : x.action === 'fadeIn' && x.level != null ? x.level : null };
+    // level 은 volume(목표, 기본 100)·fadeIn(도착, 선택)·play(시작, 선택)에서만 저장 — stop·fadeOut 은 지운다
+    cue.sound = { track: x.track, action: x.action, timeSec: x.timeSec, level: x.action === 'volume' ? (x.level == null ? 100 : x.level) : (x.action === 'fadeIn' || x.action === 'play') && x.level != null ? x.level : null };
   }
   else if (d.dept === 'stage') cue.stage = { props: d.stage.props.filter(x => x.propId).map(x => ({ propId: x.propId, action: PROP_ACTS[x.action] ? x.action : 'in', at: String(x.at || '').trim() })) };
   else cue.cast = { personId: d.cast.personId, move: d.cast.move };
@@ -5059,9 +5062,9 @@ function cueModalBody() {
     h += `<div class="field"><label for="snd-track">대상 · BGM 트랙</label><select id="snd-track" data-f="sound.track"><option value="">(선택)</option>${known ? '' : `<option value="${esc(x.track)}" selected>BGM ${esc(x.track)} — 트랙 목록에 없음</option>`}${TS.map(t => `<option value="${esc(t.no)}" ${t.no === x.track ? 'selected' : ''}>BGM ${esc(t.no)}${t.title ? ' · ' + esc(t.title) : ''}</option>`).join('')}</select>${TS.length ? '' : '<p class="note">등록된 트랙이 없습니다 — 음원 탭에서 먼저 추가하세요</p>'}</div>
       <div class="field"><span class="lbl">액션</span>${segHtml('m-snd-act', ['play', 'stop', 'fadeIn', 'fadeOut', 'volume'], x.action, S_ACT_L)}</div>
       <div class="grid2"><div class="field"><label for="snd-time">${x.action === 'volume' ? '램프 시간 (초, 비우면 즉시)' : '시간 (초)'}</label><input type="number" id="snd-time" data-f="sound.timeSec" min="0" step="0.5" value="${x.timeSec == null ? '' : x.timeSec}" placeholder="${x.action === 'fadeOut' ? '비우면 ' + FADE_DEFAULT + '초' : x.action === 'stop' ? '비우면 즉시' : ''}"></div>`;
-    if (x.action === 'volume' || x.action === 'fadeIn') {
+    if (x.action === 'volume' || x.action === 'fadeIn' || x.action === 'play') {
       const lv = x.level, vol = x.action === 'volume';
-      h += `<div class="field"><label for="snd-level">${vol ? '목표 볼륨 %' : '도착 볼륨 % (비우면 100)'}</label><div class="dimbox"><input type="range" id="snd-levelr" data-f="sound.levelr" min="0" max="100" step="5" value="${lv == null ? 100 : lv}" aria-label="볼륨 슬라이더"><input type="number" id="snd-level" data-f="sound.level" min="0" max="100" step="1" value="${lv == null ? (vol ? 100 : '') : lv}"></div></div>`;
+      h += `<div class="field"><label for="snd-level">${vol ? '목표 볼륨 %' : x.action === 'play' ? '시작 볼륨 % (비우면 100)' : '도착 볼륨 % (비우면 100)'}</label><div class="dimbox"><input type="range" id="snd-levelr" data-f="sound.levelr" min="0" max="100" step="5" value="${lv == null ? 100 : lv}" aria-label="볼륨 슬라이더"><input type="number" id="snd-level" data-f="sound.level" min="0" max="100" step="1" value="${lv == null ? (vol ? 100 : '') : lv}"></div></div>`;
     }
     h += '</div>';
   } else if (d.dept === 'stage') {

@@ -136,7 +136,7 @@ test('오프라인 부팅: 옛 형식(v7) 사본은 migrate 로 v8 이 된다 (s
     { id: 'q', dept: 'cast', trigger: '', memo: '메모', status: 'set', cast: { personId: null, move: 'in', text: '천천히' } }] }] }] }] };
   const pick = FE.smBootPick({ rev: 3, savedAt: '2026-11-18T10:00:00Z', base: false, show: v7 }, null);
   const m = plain(migrate(pick.show));
-  assert.equal(m.version, 8);
+  assert.equal(m.version, 9);
   assert.equal(m.parts[0].scenes[0].items[0].cues[0].note, '천천히 / 메모');
   // 코드: 오프라인 부팅은 migrate 를 거치고, 이 화면보다 새 형식 사본은 열지 않는다
   const boot = HTML.slice(HTML.indexOf('async function smOfflineBoot'), HTML.indexOf('async function smPrepare'));

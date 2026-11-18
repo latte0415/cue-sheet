@@ -34,6 +34,9 @@ function corpus() {
     q('sound', { track: 9, action: 'fadeIn', timeSec: 4, level: 70 }),
     q('sound', { track: null, action: 'stop', timeSec: null, level: null }, { status: 'tbd' }),
     q('sound', { track: 1, action: 'volume', timeSec: null, level: null }),
+    q('sound', { track: 1, action: 'play', timeSec: null, level: 50 }),
+    q('sound', { track: 1, action: 'play', timeSec: null, level: 100 }),
+    q('sound', { track: null, action: 'play', timeSec: null, level: 30 }, { status: 'tbd' }),
     q('stage', { props: [{ propId: 'pr-a', action: 'out', at: '' }, { propId: 'pr-gone', action: 'in', at: '테이블' }] }, { note: '천천히' }),
     q('stage', { text: '', props: [] }, { status: 'tbd' }),
     q('cast', { personId: 'p-gone', move: 'move' }, { trigger: '암전 후', offsetSec: 3, memo: '확인' }),
@@ -51,5 +54,17 @@ test('lib/cuehead.js 는 index.html 과 같은 머리글 · 값 · 상세를 낸
     assert.deepEqual(LIB.cueHead(c, look), plain(FE.cueHead(c, look)), JSON.stringify(c));
     assert.deepEqual(LIB.cueDetail(c, look), plain(FE.cueDetail(c, look)), JSON.stringify(c));
     assert.equal(LIB.cueText(c, look), FE.cueText(c, look));
+  }
+});
+
+test('PLAY 시작 볼륨: 값 자리에 "50%" — 비우거나 100 이면 표시하지 않는다 (사이트 · 사본 같게)', () => {
+  const look = { person: () => '', track: no => (no === 1 ? '하우스 음악' : ''), prop: () => '' };
+  const q = level => ({ id: 'x', dept: 'sound', trigger: '', offsetSec: null, note: '', status: 'set', sound: { track: 1, action: 'play', timeSec: null, level } });
+  for (const F of [LIB, FE]) {
+    assert.equal(F.cueText(q(50), look), 'BGM 1 PLAY 하우스 음악 · 50%');
+    assert.equal(F.cueDetail(q(50), look).val, '하우스 음악 · 50%');
+    assert.equal(F.cueText(q(0), look), 'BGM 1 PLAY 하우스 음악 · 0%');
+    assert.equal(F.cueText(q(null), look), 'BGM 1 PLAY 하우스 음악');
+    assert.equal(F.cueText(q(100), look), 'BGM 1 PLAY 하우스 음악');
   }
 });

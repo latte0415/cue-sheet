@@ -35,7 +35,7 @@ test('상수가 index.html 과 같다', () => {
   // 프런트가 내보내는 version = 서버 스키마 SHOW_VER (MCP ops 도 이 값으로 저장)
   assert.equal(plain(FE.migrate({ version: 6, parts: [] })).version, SHOW_VER);
   assert.ok(CONST.SHOW_VERS.includes(SHOW_VER) && SHOW_VER === Math.max(...CONST.SHOW_VERS), 'SHOW_VER 는 읽을 수 있는 형식 중 가장 새 것');
-  assert.equal(plain(FE.migrate({ version: 7, parts: [] })).version, 8);
+  assert.equal(plain(FE.migrate({ version: 7, parts: [] })).version, 9);
   assert.equal(FE.ACT_RE.source, CONST.ACT_RE.source);
 });
 
@@ -118,6 +118,30 @@ test('경고: 사이트가 뜻을 유지한 채 고치는 값', () => {
   ].sort());
 });
 
+test('음향 level: play 시작 볼륨은 경고 없음, stop·fadeOut 의 level 은 "쓰이지 않음" 경고 (범위 밖이면 범위 경고 하나만)', () => {
+  const s = docExample(), q = s.parts[0].scenes[0].items[0].cues[1]; // fadeOut
+  const P = 'parts[0].scenes[0].items[0].cues[1].sound.level';
+  Object.assign(q.sound, { action: 'play', level: 50 });
+  assert.deepEqual(validateShow(s).warnings, []);
+  Object.assign(q.sound, { action: 'fadeIn', level: 70 });
+  assert.deepEqual(validateShow(s).warnings, []);
+  for (const action of ['stop', 'fadeOut']) {
+    Object.assign(q.sound, { action, level: 50 });
+    const w = validateShow(s).warnings;
+    assert.deepEqual(paths(w), [P], action);
+    assert.match(w[0].msg, /쓰이지 않습니다/);
+  }
+  Object.assign(q.sound, { action: 'stop', level: 120 });
+  assert.deepEqual(paths(validateShow(s).warnings), [P], '범위 경고와 겹치지 않는다');
+  // 사이트도 불러올 때 play 의 level 을 그대로 둔다 — v8 → v9 는 version 만 바뀐다
+  Object.assign(q.sound, { action: 'play', level: 50 });
+  s.version = 8;
+  assert.deepEqual(validateShow(s).warnings, [], 'v8 도 경고 없이 읽힌다');
+  const m = plain(FE.migrate(s));
+  assert.equal(m.version, SHOW_VER);
+  assert.equal(m.parts[0].scenes[0].items[0].cues[1].sound.level, 50);
+});
+
 test('경고: 지문 표기 규칙 — 괄호 한 쌍 (…)', () => {
   const s = docExample();
   const items = s.parts[0].scenes[0].items;
@@ -140,7 +164,7 @@ test('경고: 지문 표기 규칙 — 괄호 한 쌍 (…)', () => {
 
 test('소품이 있는 정상 문서는 오류·경고 없음, v5 도 경고 없음 · 실데이터(v5)는 소품 없는 무대 큐만 경고', () => {
   const s = docExample();
-  assert.equal(s.version, 8);
+  assert.equal(s.version, 9);
   assert.ok(s.props.length && s.preShowProps.length);
   assert.deepEqual(validateShow(s).warnings, []);
   const v5 = plain(s); v5.version = 5; delete v5.props; delete v5.preShowProps;
@@ -205,7 +229,8 @@ test('action-echo: 정리 전 실데이터(test/fixtures/backstage-part1-v5.json
 
 test('현재 실데이터(cues/backstage-part1.json, 2026-11-18 배포본 rev 84): v8, 오류·경고 없음 — action-echo 지문 22개는 큐 지점, 무대 큐 3개는 소품 지정', () => {
   const s = unwrapShow(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cues', 'backstage-part1.json'), 'utf8')));
-  assert.equal(s.version, SHOW_VER);
+  assert.equal(s.version, 8, '배포본 사본은 v8 — v9(PLAY 시작 볼륨, 모양은 같다)에서도 경고 없이 읽힌다');
+  assert.ok(CONST.SHOW_VERS.includes(s.version));
   const v = validateShow(s);
   assert.deepEqual(v.errors, []);
   assert.deepEqual(v.warnings, []);
@@ -284,7 +309,7 @@ test('v8: 객석(house)에 on/off 외 액션이나 밝기·색·시간이 있으
 test('v8 migrate: memo · text → note, 소품 없는 무대 큐는 남김, 객석은 on/off 로 접고 흔적, 왕복해도 같다', () => {
   const real = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'backstage-part1-v5.json'), 'utf8'));
   const m = plain(FE.migrate(unwrapShow(real)));
-  assert.equal(m.version, 8);
+  assert.equal(m.version, 9);
   const cues = m.parts.flatMap(p => p.scenes.flatMap(s => s.items.flatMap(i => i.cues)));
   const raw = unwrapShow(real).parts.flatMap(p => p.scenes.flatMap(s => s.items.flatMap(i => i.cues)));
   assert.equal(cues.length, raw.length, '큐를 하나도 잃지 않는다');

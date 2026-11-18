@@ -325,6 +325,21 @@ test('옛 화면 차단: 저장본보다 낮은 version 의 PUT 은 426 client_o
   assert.equal(r.status, 200);
 });
 
+test('옛 화면 차단 (v9): PLAY 시작 볼륨이 있는 v9 저장본에 v8 화면(저장할 때 PLAY 의 level 을 지움)이 저장하면 426, level 은 그대로', async () => {
+  assert.equal(SHOW_VER, 9);
+  const sq = level => ({ id: 'q1', dept: 'sound', trigger: '', offsetSec: null, note: '', status: 'set', sound: { track: 1, action: 'play', timeSec: null, level } });
+  const v = (title, version, level) => show(title, { version, props: [], preShowProps: [], tracks: [{ id: 'tr1', no: 1, title: '하우스 음악' }],
+    parts: [{ id: 'pt1', name: '1부', scenes: [{ id: 's1', items: [{ id: 'i1', kind: 'action', text: '(하우스 오픈)', cues: [sq(level)] }] }] }] });
+  const { id } = await (await fetch(S.base + '/api/shows', J('POST', { show: v('하우스 오픈', 9, 50) }))).json();
+  let r = await fetch(`${S.base}/api/shows/${id}`, J('PUT', { baseRev: 1, show: v('v8 화면', 8, null) }));
+  assert.equal(r.status, 426);
+  assert.deepEqual(await r.json().then(x => [x.error, x.version, x.schema]), ['client_outdated', 9, 9]);
+  const g = await (await fetch(`${S.base}/api/shows/${id}`)).json();
+  assert.equal(g.show.parts[0].scenes[0].items[0].cues[0].sound.level, 50);
+  r = await fetch(`${S.base}/api/shows/${id}`, J('PUT', { baseRev: 1, show: v('v9 화면', 9, 60) }));
+  assert.equal(r.status, 200);
+});
+
 test('옛 화면 차단: POST·복제는 기존 저장본을 덮어쓰지 않고, 복제는 version 을 그대로 둔다', async () => {
   // 새 프로젝트는 덮어쓸 저장본이 없다 — 옛 형식도 받는다(사이트가 불러올 때 migrate)
   let r = await fetch(S.base + '/api/shows', J('POST', { show: show('옛 형식 새 프로젝트') }));

@@ -64,6 +64,33 @@ test('set: cue 부서 객체는 얕게 합치고, dept 를 바꾸면 이전 내�
   rejects(() => applyOps(s, [{ op: 'set', id: 'q-4', fields: { sound: { track: 1 } } }]), 'bad_field', /stage cue.*dept:"sound"/);
 });
 
+test('음향 level: play 시작 볼륨·fadeIn 도착 볼륨은 남고, stop·fadeOut 은 경고와 함께 지운다', () => {
+  const s = docExample();
+  let r = applyOps(s, [{ op: 'set', id: 'q-2', fields: { sound: { action: 'play', level: 50 } } }]);
+  assert.deepEqual(find(r.show, 'q-2').sound, { track: 1, action: 'play', timeSec: 3, level: 50 }, 'play 의 level 은 시작 볼륨으로 남는다');
+  assert.ok(!r.warnings.some(w => /sound\.level/.test(w.msg)), JSON.stringify(r.warnings));
+  assert.deepEqual(validateShow(r.show).warnings, []);
+  r = applyOps(s, [{ op: 'set', id: 'q-2', fields: { sound: { action: 'play', level: 49.6 } } }]);
+  assert.equal(find(r.show, 'q-2').sound.level, 50, '정수로');
+  r = applyOps(s, [{ op: 'set', id: 'q-2', fields: { sound: { action: 'play', level: null } } }]);
+  assert.equal(find(r.show, 'q-2').sound.level, null, 'play 는 비워 두면 기본 볼륨 — volume 처럼 100 을 채우지 않는다');
+  r = applyOps(s, [{ op: 'set', id: 'q-2', fields: { sound: { action: 'fadeIn', level: 70 } } }]);
+  assert.equal(find(r.show, 'q-2').sound.level, 70);
+  for (const action of ['stop', 'fadeOut']) {
+    r = applyOps(s, [{ op: 'set', id: 'q-2', fields: { sound: { action, level: 50 } } }]);
+    assert.equal(find(r.show, 'q-2').sound.level, null, action);
+    assert.ok(r.warnings.some(w => /sound\.level is only kept for play\/fadeIn\/volume/.test(w.msg)), action);
+  }
+  // v8 공연에 op 를 적용하면 v9 로 — 모양은 그대로, version 만
+  const v8 = docExample(); v8.version = 8;
+  r = applyOps(v8, [{ op: 'set', id: 'q-2', fields: { sound: { action: 'play', level: 50 } } }]);
+  assert.equal(r.show.version, 9);
+  assert.equal(find(r.show, 'q-2').sound.level, 50);
+  // 새 큐로 만들어도 같다
+  r = applyOps(s, [{ op: 'add', kind: 'cue', parent: 'i-1', data: { dept: 'sound', sound: { track: 1, action: 'play', level: 50 } } }]);
+  assert.equal(find(r.show, 'i-1').cues.at(-1).sound.level, 50);
+});
+
 test('set: 모르는 필드·id·label·잘못된 값은 거부하고 이유를 말한다', () => {
   const s = docExample();
   rejects(() => applyOps(s, [{ op: 'set', id: 'i-1', fields: { color: 'red' } }]), 'bad_field', /unknown field "color" for item\. Allowed: kind, speaker, text/);
@@ -365,7 +392,7 @@ test('v6: 관계없는 op 를 적용해도 props·preShowProps·stage.props 는 
     { op: 'add', kind: 'person', data: { name: '스태프', role: 'stage' } }
   ]);
   assert.equal(JSON.stringify(s), before, '입력은 그대로');
-  assert.equal(r.show.version, 8);
+  assert.equal(r.show.version, 9);
   assert.deepEqual(r.show.props, s.props);
   assert.deepEqual(r.show.preShowProps, s.preShowProps);
   assert.deepEqual(find(r.show, 'q-4').stage, { props: [{ propId: 'pr-tophat', action: 'in', at: '테이블 위' }] });
@@ -379,7 +406,7 @@ test('v8: v5 공연은 migrate 처럼 v8 로 — 빈 props·preShowProps, 무대
   assert.equal(s.version, 5);
   const stageBefore = items(s).flatMap(i => i.cues).filter(c => c.dept === 'stage').map(c => c.stage.text);
   const r = applyOps(s, [{ op: 'set', kind: 'show', fields: { revision: 'v6 테스트' } }]);
-  assert.equal(r.show.version, 8);
+  assert.equal(r.show.version, 9);
   assert.deepEqual(r.show.props, []);
   assert.deepEqual(r.show.preShowProps, []);
   assert.deepEqual(Object.keys(r.show).slice(Object.keys(r.show).indexOf('people')), ['people', 'props', 'preShowProps', 'tracks', 'parts'], 'migrate 와 같은 키 순서');
@@ -483,7 +510,7 @@ test('v6: 사이트가 불러와도(index.html migrate) 소품 op 결과가 그�
     { op: 'add', kind: 'cue', parent: st.i.id, data: { dept: 'stage', stage: { props: [{ propId: 'pr-cup', action: 'in' }] } } },
     { op: 'set', id: lt.c.id, fields: { dept: 'stage', note: '의자', stage: { props: [{ propId: 'pr-cup', action: 'clean' }] } } }
   ]);
-  assert.equal(r.show.version, 8);
+  assert.equal(r.show.version, 9);
   const strip = x => { x = JSON.parse(JSON.stringify(x)); delete x.updatedAt; return x; };
   assert.deepEqual(strip(migrate(r.show)), strip(r.show));
 });
@@ -567,7 +594,7 @@ test('v8: v7 공연은 migrate 와 같게 올린다 — memo · text → note, �
   i2.cues[1].stage.text = '탑햇테이블에 탑햇 세팅';
   i2.comments.push({ id: 'c-s', author: 'a', text: '확인', createdAt: '2026-11-01T00:00:00.000Z', resolved: false, resolvedBy: null, resolvedAt: null, snapshot: { kind: i2.kind, speaker: i2.speaker, text: i2.text, cues: JSON.parse(JSON.stringify(i2.cues)) } });
   const r = applyOps(s, [{ op: 'set', kind: 'show', fields: { revision: 'v8' } }]);
-  assert.equal(r.show.version, 8);
+  assert.equal(r.show.version, 9);
   const [q1] = find(r.show, 'i-1').cues, [q3, q4] = find(r.show, 'i-2').cues;
   assert.deepEqual(q1.light.channels[3], { ch: 'house', action: 'off', dim: null, color: null, colorName: null, timeSec: null });
   assert.equal(q1.note, '(객석: 원래 FADE OUT 4s)');

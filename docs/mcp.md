@@ -101,7 +101,7 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
 일부만 반영된 상태가 저장된다. ops 배열이면 "문단 넣고 → 큐 달고 → 트랙 번호 바꾸기" 가 한 번의 원자적 저장이 되고(하나라도
 틀리면 아무것도 안 바뀜), 저장 기록도 한 칸만 쓴다. 에이전트는 `get_show` 개요에서 id 를 보고 바로 op 를 만든다.
 
-**개요는 싸게.** `cues/backstage-part1.json`(82문단·37큐) 기준 JSON 전체가 약 20,500자, 개요는 약 5,500자.
+**개요는 싸게.** `cues/backstage-part1.json`(79문단·37큐) 기준 JSON 전체가 약 20,500자, 개요는 약 5,500자.
 씬 하나만 보려면 `sceneId` 로 더 줄인다. 모든 필드가 필요할 때만 `view:"full"`.
 
 ### ops
@@ -141,7 +141,7 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
   시작하지 않으면 괄호를 씌운다(경고). `data.kind` 없이 본문 첫 줄이 `(` 로 시작하면 action.
 - **표기 규칙** (`docs/cue-format.md` "표기 규칙"). 지문은 `(…)` 괄호 한 쌍 — `*`·`—` 시작, `)` 로 안 끝남, 괄호 안 괄호는
   편집기처럼 저장은 하되 `validateShow` 의 `action-format` 경고가 edit_show 결과에 나온다(op 가 새로 만든 경고만). 서버가 `*` 를
-  괄호로 바꾸는 등 자동 고침은 하지 않는다 — 브라우저 편집기도 받는 값이고, 뜻을 바꾸지 않게 에이전트가 고치게 둔다. 음향 `level` 은 `volume`(없으면 100)·`fadeIn` 에서만 남긴다(index.html `saveCue`).
+  괄호로 바꾸는 등 자동 고침은 하지 않는다 — 브라우저 편집기도 받는 값이고, 뜻을 바꾸지 않게 에이전트가 고치게 둔다. 음향 `level` 은 `volume`(목표, 없으면 100)·`fadeIn`(도착)·`play`(시작 볼륨 — 그 볼륨으로 바로 재생)에서 남기고 `stop`·`fadeOut` 에서는 경고와 함께 지운다(index.html `saveCue`).
   `#rrggbb` 가 아닌 색은 `colorName` 으로 옮긴다(migrate). 큐가 바뀐 문단의 `isCue` 는 큐 유무를 따른다.
   내용 없는 큐(채널 없는 조명, 트랙 없는 음향, 사람 없는 출연)는 저장하되 "채우거나 `status:"tbd"`" 경고. 무대는 위 "소품 필수".
 - **새 항목.** id 는 브라우저 `uid()` 와 같은 접두어(`pt-` `s-` `i-` `q-` `c-` `p-` `pr-` `tr-`)로 만든다. 같은 호출의 뒤 op 에서
@@ -155,7 +155,7 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
 - **소품 (show v6~).** `props[]` 는 사람처럼 `kind:"prop"` 의 add/set(name·note)/remove/move 로 고친다. force 삭제는 브라우저 소품
   삭제와 같이 `preShowProps` 에서는 빼고, 무대 큐의 소품 행은 그대로 둬 "(삭제된 소품)" 으로 보인다(validateShow 경고).
   `preShowProps` 는 항목 id 가 없어 `set kind:"show"` 의 배열 통째 교체만 된다.
-- **v5~v7 → v8.** 옛 공연에 op 를 적용하면 사이트가 불러올 때(migrate)처럼 `version:8` 로 올린다: 빈 `props`·`preShowProps`·`stage.props` 를 붙이고,
+- **v5~v8 → v9.** 옛 공연에 op 를 적용하면 사이트가 불러올 때(migrate)처럼 `version:9` 로 올린다(v8 → v9 는 `version` 만 바뀐다 — PLAY 시작 볼륨): 빈 `props`·`preShowProps`·`stage.props` 를 붙이고,
   큐(코멘트 snapshot 안의 큐 포함)의 `note` = 기존 note · `cast.text`/`stage.text` · `memo` 를 `" / "` 로 이어 붙인 것, 객석 채널은 on/off 로 접고
   지운 값은 `note` 에 `"(객석: 원래 FADE IN 40% 3s)"` 로 남긴다(`lib/ops.js` `upgradeShow`). 다른 값은 바꾸지 않는다(v4 이하는 그대로 두고 사이트의 변환에 맡긴다).
 
