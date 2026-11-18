@@ -457,6 +457,14 @@ function createServer(opts) {
         res.end(req.method === 'HEAD' ? undefined : data);
       });
     }
+    // 브라우저 409 자동 병합 (index.html 이 <script src="lib/merge.js"> 로 읽는다 — 같은 파일을 Node 테스트도 require)
+    if (pathname === '/lib/merge.js') {
+      return fs.readFile(path.join(__dirname, 'lib', 'merge.js'), (err, data) => {
+        if (err) return text(500, 'error');
+        res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache' });
+        res.end(req.method === 'HEAD' ? undefined : data);
+      });
+    }
     text(404, 'not found');
   });
   // 프록시(Railway 등)의 유휴 연결 시간보다 길게 — 서버가 먼저 닫아 재사용 중인 연결이 끊기는 경쟁을 줄인다

@@ -29,6 +29,9 @@ test('health: 비밀번호 없음, showCount', async () => {
   assert.deepEqual(await r.json(), { ok: true, hasPassword: false, showCount: 0, schema: SHOW_VER });
   assert.equal((await fetch(S.base + '/healthz')).status, 200);
   assert.equal((await fetch(S.base + '/')).status, 200);
+  const mj = await fetch(S.base + '/lib/merge.js'); // index.html 의 409 자동 병합 모듈
+  assert.equal(mj.status, 200); assert.match(mj.headers.get('content-type'), /javascript/); assert.match(await mj.text(), /CueMerge/);
+  assert.equal((await fetch(S.base + '/lib/store.js')).status, 404, 'lib/ 의 다른 파일은 내주지 않는다');
   assert.equal((await fetch(S.base + '/nope')).status, 404);
   assert.equal((await fetch(S.base + '/api/nope')).status, 404);
 });
