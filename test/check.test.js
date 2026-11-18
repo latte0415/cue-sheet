@@ -31,7 +31,7 @@ function input(show, over) {
   show.parts.forEach(p => p.scenes.forEach(s => s.items.forEach(it => entries.push({ item: it, scene: s, q: it.cues.length ? String(++q) : null }))));
   return Object.assign({
     show, entries, sceneTitle: s => s.title, pname: id => people[id] || '?', hasPerson: id => id in people,
-    cueSummary: c => c.dept === 'cast' ? c.cast.personId + ' ' + c.cast.move : 'x', trackByNo: no => show.tracks.find(t => t.no === no) || null,
+    cueText: c => c.dept === 'cast' ? c.cast.personId + ' ' + c.cast.move : 'x', trackByNo: no => show.tracks.find(t => t.no === no) || null,
     hasFile: t => !!t.fileKey, useCount: () => 1, propIssues: () => [], fileWhere: '서버에'
   }, over || {});
 }

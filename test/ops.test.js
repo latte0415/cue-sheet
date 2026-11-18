@@ -389,7 +389,7 @@ test('v6: v5 공연은 migrate 처럼 v6 으로 — 빈 props·preShowProps, 무
 test('v6: set 으로 stage.props 통째 교체 — 빠진 필드는 기본값, 항목 필드 검증', () => {
   const s = docExample();
   let r = applyOps(s, [{ op: 'set', id: 'q-4', fields: { stage: { props: [{ propId: 'pr-table', action: 'out' }, { propId: 'pr-tophat', at: '객석 쪽' }] } } }]);
-  assert.deepEqual(find(r.show, 'q-4').stage, { text: '탑햇테이블에 탑햇 세팅', props: [{ propId: 'pr-table', action: 'out', at: '' }, { propId: 'pr-tophat', action: 'in', at: '객석 쪽' }] });
+  assert.deepEqual(find(r.show, 'q-4').stage, { text: '', props: [{ propId: 'pr-table', action: 'out', at: '' }, { propId: 'pr-tophat', action: 'in', at: '객석 쪽' }] });
   assert.deepEqual(r.warnings, []);
   // 글을 지워도 소품 동작이 있으면 내용 있는 큐 (index.html saveCue·validateShow 와 같은 기준)
   r = applyOps(s, [{ op: 'set', id: 'q-4', fields: { stage: { text: '' } } }]);
@@ -485,12 +485,13 @@ test('v6: 개요·검색에 소품', () => {
   const o = outline(s, { rev: 1 });
   assert.match(o, /^props: pr-tophat=탑햇, pr-table=탑햇테이블$/m);
   assert.match(o, /^preShowProps: 탑햇테이블 in @무대 중앙$/m);
-  assert.match(o, /q-4 stage 탑햇테이블에 탑햇 세팅 · props: 탑햇 in @테이블 위/);
+  assert.match(o, /q-4 stage 탑햇 IN \| → 테이블 위 @ "이 대사 즈음" \[tbd\]/, '사이트와 같은 머리글(lib/cuehead.js)');
   const r = search(s, '탑햇');
   assert.ok(r.matches.some(m => m.kind === 'prop' && m.id === 'pr-tophat'));
   assert.ok(r.matches.some(m => m.kind === 'cue' && m.id === 'q-4' && m.field === 'stage.prop'));
   assert.ok(search(s, '무대 중앙').matches.some(m => m.field === 'preShowProps.at'));
   // 지운 소품은 "(삭제된 소품 id)"
   const g = JSON.parse(JSON.stringify(s)); g.props = [];
-  assert.match(outline(g, {}), /props: \(삭제된 소품 pr-tophat\) in/);
+  assert.match(outline(g, {}), /preShowProps: \(삭제된 소품 pr-table\) in/);
+  assert.match(outline(g, {}), /q-4 stage \(삭제된 소품 pr-tophat\) IN/);
 });
