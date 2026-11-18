@@ -807,7 +807,7 @@ const KEY_PREF = 'cueSheet.prefs';
 const DEPTS = ['cast', 'light', 'sound', 'stage'];
 const DEPT_L = { cast: '출연', light: '조명', sound: '음향', stage: '무대' };
 const CH = ['back', 'top', 'front', 'house'];
-const CH_L = { back: '백', top: '탑', front: '프론트', house: '관객석' };
+const CH_L = { back: '백', top: '탑', front: '프론트', house: '객석' };
 const L_ACT = ['on', 'off', 'fadeIn', 'fadeOut', 'anim'];
 const S_ACT = ['play', 'fadeIn', 'fadeOut', 'stop', 'volume'];
 const S_ACT_L = { play: 'play', fadeIn: 'fadeIn', fadeOut: 'fadeOut', stop: 'stop', volume: '볼륨' };
@@ -893,7 +893,7 @@ function sampleShow() {
       A('(하우스 음악 올림)', [
         Sd('공연 시작', null, 1, 'volume', { level: 100, time: 3 }),
         Lt('하우스 음악 커지면', null, [ch('house', 'off')]),
-        Sd('관객석 Off 후', null, 1, 'fadeOut')
+        Sd('객석 Off 후', null, 1, 'fadeOut')
       ]),
       A('(암전)', [Lt('하우스 페이드 아웃 후', null, BLACK())]),
       A('(조예준 인)', [Ca('암전 후', null, P.yj, 'in')]),

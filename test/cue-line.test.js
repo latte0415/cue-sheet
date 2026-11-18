@@ -33,7 +33,7 @@ test('세 채널만 off 거나 하나가 on 이면 암전이 아니다', () => {
   assert.equal(FE.lightLine(three), '백·탑·프론트 Off');
   const mixed = { channels: [ch('back', 'off'), ch('top', 'off'), ch('front', 'off'), ch('house', 'on')], anim: '' };
   assert.equal(FE.isBlackout(mixed), false);
-  assert.equal(FE.lightLine(mixed), '백·탑·프론트 Off, 관객석 On');
+  assert.equal(FE.lightLine(mixed), '백·탑·프론트 Off, 객석 On');
 });
 
 test('암전 페이드 시간이 모두 같으면 시간을 붙인다', () => {
@@ -42,7 +42,7 @@ test('암전 페이드 시간이 모두 같으면 시간을 붙인다', () => {
 });
 
 test('조명: 객석 On, 전체 페이드인 밝기·색', () => {
-  assert.equal(FE.lightLine({ channels: [ch('house', 'on')], anim: '' }), '관객석 On');
+  assert.equal(FE.lightLine({ channels: [ch('house', 'on')], anim: '' }), '객석 On');
   const all = { channels: ['back', 'top', 'front', 'house'].map(c => ch(c, 'fadeIn', { dim: 80, colorName: '앰버', timeSec: 5 })), anim: '' };
   assert.equal(FE.lightLine(all), '전체 페이드인 80% 앰버 5s');
 });
