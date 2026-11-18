@@ -100,3 +100,21 @@ test('validateShow: snapshot 은 모르는 키 경고가 나지 않는다', () =
   assert.deepEqual(v.errors, []);
   assert.deepEqual(v.warnings.filter(w => /snapshot/.test(w.path + ' ' + w.message)), []);
 });
+
+test('v6: snapshot 의 무대 큐 소품 동작(stage.props)도 보존되고, 결과는 version 6 으로 검증 통과', () => {
+  const stage = { id: 'q-3', dept: 'stage', trigger: '', offsetSec: null, memo: '', status: 'set', stage: { text: '', props: [{ propId: 'pr-hat', action: 'in', at: '테이블' }] } };
+  const it = Object.assign(item(), { cues: [light('q-1', 50), stage] });
+  const raw = Object.assign(showWith([{ id: 'c-1', author: 'a', text: '확인', createdAt: '2026-11-01T00:00:00.000Z', resolved: false, resolvedBy: null, resolvedAt: null, snapshot: FE.cmtSnap(it) }]),
+    { version: 6, props: [{ id: 'pr-hat', name: '탑햇', note: '' }], preShowProps: [] });
+  raw.parts[0].scenes[0].items[0].cues = plain(it.cues);
+  const s = plain(FE.migrate(raw));
+  assert.equal(s.version, 6);
+  assert.deepEqual(s.parts[0].scenes[0].items[0].comments[0].snapshot.cues[1].stage, { text: '', props: [{ propId: 'pr-hat', action: 'in', at: '테이블' }] });
+  const v = validateShow(s);
+  assert.deepEqual(v.errors, []);
+  assert.deepEqual(v.warnings.filter(w => /snapshot/.test(w.path + ' ' + w.message)), []);
+  // v5 snapshot 의 무대 큐(props 없음)는 v6 모양(props: [])으로 정규화
+  const old = Object.assign(item(), { cues: [{ id: 'q-9', dept: 'stage', trigger: '', offsetSec: null, memo: '', status: 'set', stage: { text: '컵 빼기' } }] });
+  const s5 = plain(FE.migrate(showWith([{ id: 'c-2', author: 'a', text: '옛', createdAt: '2026-11-01T00:00:00.000Z', resolved: false, snapshot: FE.cmtSnap(old) }])));
+  assert.deepEqual(s5.parts[0].scenes[0].items[0].comments[0].snapshot.cues[0].stage, { text: '컵 빼기', props: [] });
+});

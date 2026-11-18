@@ -71,3 +71,11 @@ test('무대: 작업 내용 그대로, 시점은 when 으로', () => {
   assert.deepEqual(plain(L), { dept: '무대', text: '컵 빼고, 카드 매니용 빈 탑햇 넣기', when: '이 대사 즈음', memo: '', tbd: false });
   assert.equal(FE.cueLine(cue('stage', { text: '' }, { status: 'tbd' }), look).text, '상세 미정');
 });
+
+test('무대 v6: 소품 동작(stage.props)도 같은 줄에, 설명이 없으면 소품 동작만', () => {
+  const lk = Object.assign({ prop: id => ({ 'pr-hat': '탑햇', 'pr-cup': '컵' })[id] || '' }, look);
+  const props = [{ propId: 'pr-hat', action: 'in', at: '' }, { propId: 'pr-cup', action: 'out', at: '' }];
+  assert.equal(FE.cueLine(cue('stage', { text: '테이블 정리', props }), lk).text, '테이블 정리 · +탑햇 −컵');
+  assert.equal(FE.cueLine(cue('stage', { text: '', props }), lk).text, '+탑햇 −컵');
+  assert.equal(FE.cueLine(cue('stage', { text: '', props: [{ propId: 'pr-x', action: 'move', at: '' }] }), look).text, '→pr-x', 'look.prop 이 없으면 id 그대로');
+});

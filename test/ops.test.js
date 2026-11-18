@@ -91,6 +91,22 @@ test('같은 id 가 여러 종류면 kind 로 구분', () => {
   assert.equal(c2.resolvedBy, null); assert.equal(c2.resolvedAt, null);
 });
 
+test('코멘트 snapshot(사이트가 남기는 코멘트 당시 문단)은 op 를 거쳐도 그대로, op 로 새로 쓰지는 못한다', () => {
+  const s = docExample();
+  const it = s.parts[0].scenes[0].items[0];
+  const snapshot = { kind: it.kind, speaker: it.speaker, text: it.text + ' (옛)', cues: JSON.parse(JSON.stringify(it.cues)) };
+  it.comments.push({ id: 'c-snap', author: 'a', text: '확인', createdAt: '2026-11-01T00:00:00.000Z', resolved: false, resolvedBy: null, resolvedAt: null, snapshot });
+  const r = applyOps(s, [
+    { op: 'set', id: 'c-snap', fields: { text: '확인 (수정)', resolved: true } },
+    { op: 'set', id: it.id, fields: { text: '바뀐 문장' } }
+  ]);
+  const c = r.show.parts[0].scenes[0].items[0].comments[0];
+  assert.equal(c.text, '확인 (수정)');
+  assert.deepEqual(c.snapshot, snapshot);
+  assert.deepEqual(validateShow(r.show).errors, []);
+  rejects(() => applyOps(s, [{ op: 'set', id: 'c-snap', fields: { snapshot: null } }]), 'bad_field', /unknown field "snapshot"/);
+});
+
 test('add: 브라우저와 같은 id 접두어·기본값, 자식 포함, 위치(after/first/끝), 새 큐 문단에 번호', () => {
   const s = docExample();
   const r = applyOps(s, [
