@@ -1,6 +1,7 @@
 # cue-sheet
 
-공연 큐시트 웹앱. 프런트는 단일 파일(`index.html`), 서버는 의존성 없는 Node 20(`server.js` + `lib/store.js`).
+공연 큐시트 웹앱. 프런트는 단일 파일(`index.html`), 서버는 Node 20(`server.js` + `lib/store.js`). npm 의존성은
+`/mcp` 가 쓰는 공식 MCP SDK 뿐이고(`npm install` 필요), 없으면 `/mcp` 만 꺼지고 나머지는 그대로 돈다.
 
 - **서버 모드**(기본): 여러 기기(연출 노트북, 조명/음향 오퍼 노트북, 무대보조 폰)가 같은 큐시트를 보고 고친다.
   공연 하나 = 프로젝트 하나. 음원 파일도 서버에 올라가 모든 기기에서 재생된다. 5초마다 다른 기기의 변경을 가져오고,
@@ -13,14 +14,15 @@
 ```sh
 node server.js                         # http://localhost:3000, 비밀번호 없음, 데이터는 ./data
 APP_PASSWORD=비번 node server.js        # 비밀번호 화면 확인용
-npm test                               # 서버 API 테스트 (node --test, 의존성 없음)
+npm install                            # MCP SDK (처음 한 번)
+npm test                               # 서버 API·MCP 테스트 (node --test)
 ```
 
 | 환경변수 | 기본값 | 설명 |
 |---|---|---|
 | `PORT` | 3000 | Railway 가 자동으로 넣는다 |
 | `DATA_DIR` | `./data` | 프로젝트 JSON·음원 저장 위치. Railway 에서는 볼륨 경로 `/data` |
-| `APP_PASSWORD` | (없음) | 설정하면 `/api/*` 에 팀 공유 비밀번호 필요. 없으면 인증 없음(로컬 개발용) |
+| `APP_PASSWORD` | (없음) | 설정하면 `/api/*`·`/mcp` 에 팀 공유 비밀번호 필요. 없으면 인증 없음(로컬 개발용) |
 
 `data/` 는 `.gitignore` 에 들어 있다.
 
@@ -45,20 +47,34 @@ npm test                               # 서버 API 테스트 (node --test, 의�
 원문을 큐시트 JSON 으로 바꾼 뒤 `node scripts/upload.js <파일.json> [--project <id|제목>] [--url <서버>] [--key <비밀번호>] [--dry-run]`.
 검증에 실패하면 어느 행·필드가 틀렸는지 출력하고 올리지 않는다. 형식과 옵션은 [docs/cue-format.md](docs/cue-format.md).
 
+## 에이전트로 고치기 (MCP)
+
+Claude Code·Codex 에 이 사이트를 MCP 서버로 연결하면 "멘탈 씬 끝에 박대훈 퇴장 큐 넣어 줘" 처럼 말로 큐시트를 부분 수정할 수 있다.
+수정은 모두 기록에 남아 되돌릴 수 있다. 연결:
+
+```sh
+claude mcp add --transport http cue-sheet 'https://<사이트>/mcp' --header 'Authorization: Bearer <비밀번호>'
+```
+
+사이트 메뉴의 **에이전트 연결** 에서 이 사이트 주소·비밀번호가 들어간 명령을 그대로 복사할 수도 있다(비밀번호의 특수 문자도 알맞게 감싼다).
+
+Codex 설정, 도구 목록, 동시 편집 주의점은 [docs/mcp.md](docs/mcp.md).
+
 ## 데이터 구조
 
 ```
 DATA_DIR/shows/<id>.json                 { rev, updatedAt, show }   ← show = 앱의 큐시트 JSON (version 5)
 DATA_DIR/shows/<id>/audio/<fileKey>       음원 원본
 DATA_DIR/shows/<id>/audio/<fileKey>.json  { fileKey, name, mime, size }
+DATA_DIR/shows/<id>.history/<rev>.json    덮어쓰기 직전 버전 (최근 30개, 되돌리기용 — docs/mcp.md)
 ```
 
 쓰기는 임시 파일 → rename 으로 원자적이고, 한 프로세스 안에서 직렬화된다(서버 인스턴스는 하나로 둔다).
 
 ## API
 
-모든 `/api/*` 응답은 JSON, `Cache-Control: no-store`. `APP_PASSWORD` 가 있으면 `X-App-Key` 헤더(URL 인코딩한 비밀번호)
-또는 `?key=` 쿼리가 필요하고, 틀리면 `401 {"error":"unauthorized"}`. 오류는 `{ "error": "<code>" }`.
+모든 `/api/*` 응답은 JSON, `Cache-Control: no-store`. `APP_PASSWORD` 가 있으면 `X-App-Key` 헤더(URL 인코딩한 비밀번호),
+`Authorization: Bearer <비밀번호>` 또는 `?key=` 쿼리가 필요하고, 틀리면 `401 {"error":"unauthorized"}`. 오류는 `{ "error": "<code>" }`.
 
 | 메서드 | 경로 | 응답 |
 |---|---|---|
@@ -74,6 +90,7 @@ DATA_DIR/shows/<id>/audio/<fileKey>.json  { fileKey, name, mime, size }
 | PUT | `/api/shows/:id/audio/:fileKey` | raw body(`audio/*` 또는 `application/octet-stream`, `X-File-Name` 은 URL 인코딩, ≤100MB) → `{ fileKey, size, name }` |
 | GET | `/api/shows/:id/audio/:fileKey` | 파일. `Range` 지원(`206`, `Accept-Ranges: bytes`), `?download=1` 이면 attachment |
 | DELETE | `/api/shows/:id/audio/:fileKey` | `{ ok: true }` |
+| POST | `/mcp` | MCP Streamable HTTP (상태 없음, JSON-RPC). 인증은 위와 같음(보통 `Authorization: Bearer`). 도구 6개 — [docs/mcp.md](docs/mcp.md). GET·DELETE 는 `405` |
 
 검증: `:id` 는 `[A-Za-z0-9_-]{1,32}`(서버가 생성), `:fileKey` 는 `[A-Za-z0-9_-]{1,64}` — 아니면 `400`.
 `show` 는 `parts` 배열과 숫자 `version` 이 있어야 하고 parts·scenes·items·cues 가 객체 배열이어야 한다(`400 invalid_show`, `message` 에 경로). 필드 단위 엄격 검증은 업로드 스크립트가 한다(`lib/validate.js`). 본문 초과는 `413 too_large`.

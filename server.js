@@ -2,12 +2,14 @@
 //   /            index.html
 //   /healthz     Railway 헬스체크 (text)
 //   /api/*       프로젝트(공연)별 큐시트 JSON + 음원 파일. README 의 API 표 참고
-// 환경변수: PORT, DATA_DIR(기본 ./data), APP_PASSWORD(설정 시 /api 에 X-App-Key 또는 ?key= 필요)
+//   /mcp         원격 MCP 서버 (에이전트용 읽기·부분 수정). docs/mcp.md — 이 경로만 npm 의존성(MCP SDK)을 쓴다
+// 환경변수: PORT, DATA_DIR(기본 ./data), APP_PASSWORD(설정 시 /api·/mcp 에 X-App-Key, Authorization: Bearer 또는 ?key= 필요)
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { Store, ID_RE, KEY_RE, invalidShow } = require('./lib/store');
+const { createMcp } = require('./lib/mcp');
 
 const INDEX = path.join(__dirname, 'index.html');
 const JSON_LIMIT = 5 * 1024 * 1024;
@@ -33,6 +35,18 @@ function readJson(req, limit) {
     });
   });
 }
+// 본문을 읽지 않고 답할 때(401): keep-alive 로 다시 쓰는 연결이 남은 본문 때문에 깨지지 않게, 길이를 아는 작은 본문(≤64KB)만
+// 비우고, 길이를 모르거나(chunked) 큰 본문은 읽지 않고 응답 뒤 연결을 닫는다
+const DRAIN_LIMIT = 64 * 1024;
+async function settleUnreadBody(req, res) {
+  if (req.readableEnded) return;
+  const cl = req.headers['content-length'], te = req.headers['transfer-encoding'];
+  if (cl == null && te == null) return; // 본문 없음
+  const n = Number(cl);
+  if (te == null && Number.isInteger(n) && n >= 0 && n <= DRAIN_LIMIT) {
+    await new Promise(r => { req.on('end', r); req.on('error', r); req.on('close', r); req.resume(); });
+  } else res.setHeader('Connection', 'close');
+}
 function digest(s) { return crypto.createHash('sha256').update(String(s)).digest(); }
 function etagMatch(header, rev) {
   if (!header) return false;
@@ -56,13 +70,27 @@ function createServer(opts) {
   const pwDigest = password ? digest(password) : null;
   const log = opts.log !== undefined ? opts.log : (msg => console.log(msg));
   const ready = store.init();
+  const mcp = createMcp({ store });
 
+  // /api 와 /mcp 가 같이 쓴다. X-App-Key(프런트), Authorization: Bearer(MCP 클라이언트), ?key= 중 하나
   function authed(req, query) {
     if (!pwDigest) return true;
-    // 헤더는 Latin-1 만 실을 수 있어 프론트가 encodeURIComponent 해서 보낸다 (쿼리는 URLSearchParams 가 디코딩)
-    let given = req.headers['x-app-key'];
-    if (given) { try { given = decodeURIComponent(given); } catch (e) { /* 원문 그대로 */ } } else given = query.get('key') || '';
-    return crypto.timingSafeEqual(digest(given), pwDigest);
+    const given = [];
+    // 헤더는 Latin-1 만 실을 수 있어 프론트는 encodeURIComponent 해서 보낸다. MCP 클라이언트는 UTF-8 바이트를 그대로
+    // 보낼 수 있어(Node 는 latin1 로 읽음) 그 해석도 함께 본다 (쿼리는 URLSearchParams 가 디코딩)
+    const header = v => {
+      if (!v) return;
+      given.push(v);
+      try { given.push(decodeURIComponent(v)); } catch (e) { /* 원문 그대로 */ }
+      given.push(Buffer.from(v, 'latin1').toString('utf8'));
+    };
+    header(req.headers['x-app-key']);
+    const m = /^Bearer\s+(.+)$/i.exec(String(req.headers.authorization || '').trim());
+    if (m) header(m[1].trim());
+    if (!given.length) given.push(query.get('key') || '');
+    let ok = false;
+    for (const g of given) if (crypto.timingSafeEqual(digest(g), pwDigest)) ok = true;
+    return ok;
   }
   async function needShow(id) {
     if (!ID_RE.test(id)) throw new HttpError(400, 'bad_id');
@@ -79,7 +107,7 @@ function createServer(opts) {
     if (parts[0] === 'health' && parts.length === 1 && M === 'GET') {
       return sendJson(res, 200, { ok: true, hasPassword: !!pwDigest, showCount: await store.count() });
     }
-    if (!authed(req, query)) throw new HttpError(401, 'unauthorized');
+    if (!authed(req, query)) { await settleUnreadBody(req, res); throw new HttpError(401, 'unauthorized'); }
     if (parts[0] !== 'shows') throw new HttpError(404, 'not_found');
     const [, id, sub, key, extra] = parts;
     if (extra !== undefined) throw new HttpError(404, 'not_found');
@@ -206,6 +234,22 @@ function createServer(opts) {
       }
       return;
     }
+    if (pathname === '/mcp') {
+      res.setHeader('Cache-Control', 'no-store');
+      try {
+        await ready;
+        if (!authed(req, u.searchParams)) {
+          await settleUnreadBody(req, res);
+          return sendJson(res, 401, { error: 'unauthorized', message: 'Authorization: Bearer <APP_PASSWORD> 헤더가 필요합니다' }, { 'WWW-Authenticate': 'Bearer realm="cue-sheet"' });
+        }
+        await mcp(req, res);
+      } catch (e) {
+        console.error(e);
+        if (res.headersSent) { res.destroy(); return; }
+        sendJson(res, 500, { error: 'server_error' });
+      }
+      return;
+    }
     if (!['GET', 'HEAD'].includes(req.method)) return text(404, 'not found');
     if (pathname === '/healthz') return text(200, 'ok');
     if (pathname === '/' || pathname === '/index.html') {
@@ -217,6 +261,9 @@ function createServer(opts) {
     }
     text(404, 'not found');
   });
+  // 프록시(Railway 등)의 유휴 연결 시간보다 길게 — 서버가 먼저 닫아 재사용 중인 연결이 끊기는 경쟁을 줄인다
+  server.keepAliveTimeout = 65 * 1000;
+  server.headersTimeout = 66 * 1000; // keepAliveTimeout 보다 커야 한다
   server.ready = ready;
   server.store = store;
   return server;

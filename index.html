@@ -386,6 +386,10 @@ kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--rule-2);paddin
 .dimbox input[type=number]{width:62px}
 .colorbox input[type=text]{flex:1;min-width:0}
 .code{font-family:var(--mono);font-size:12px;width:100%;min-height:260px}
+.ag-blk{border-top:1px solid var(--rule);padding-top:10px}
+.ag-h{display:flex;align-items:baseline;gap:10px;margin-bottom:6px}
+.ag-h h3{margin:0;font-size:13px;font-weight:600;flex:1}
+.ag-pre{margin:0 0 6px;padding:8px 0;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);font:12px/1.6 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + var(--player-h, 0px) + env(safe-area-inset-bottom, 0px));z-index:80;background:var(--ink);color:var(--paper);padding:8px 14px;font-size:13px;max-width:calc(100vw - 32px)}
 body.has-player{--player-h:44px}
 body.has-player .app{padding-bottom:calc(var(--player-h) + env(safe-area-inset-bottom, 0px))}
@@ -623,6 +627,7 @@ body.has-player .app{padding-bottom:calc(var(--player-h) + env(safe-area-inset-b
         <div class="menu" id="data-menu" role="menu" hidden>
           <button type="button" role="menuitem" id="menu-export" data-act="export">JSON 내보내기</button>
           <button type="button" role="menuitem" id="menu-import" data-act="import">JSON 가져오기</button>
+          <button type="button" role="menuitem" id="menu-agent" data-act="agent-open" hidden>에이전트 연결</button>
           <button type="button" role="menuitem" id="menu-undo-del" data-act="undo-del" data-confirm="정말? (삭제 이후의 변경도 함께 되돌아감)">마지막 삭제 되돌리기</button>
           <button type="button" role="menuitem" id="menu-renumber" data-act="renumber" data-confirm="정말 다시 매기기? (1부터 순서대로)">큐 번호 다시 매기기</button>
           <button type="button" role="menuitem" id="menu-reset" data-act="reset" data-confirm="정말 초기화? (현재 데이터 삭제)">샘플로 초기화</button>
@@ -3140,6 +3145,7 @@ function renderTop() {
   tb.classList.toggle('on', state.booth);
   tb.setAttribute('aria-label', state.booth ? '부스 모드 켜짐 — 눌러서 끄기' : `화면 테마 ${THEME_L[state.theme]} — 눌러서 바꾸기`);
   $('#data-menu').hidden = !state.menuOpen;
+  $('#menu-agent').hidden = Store.mode !== 'server';
   $('#btn-data').setAttribute('aria-expanded', String(state.menuOpen));
   const ud = $('#menu-undo-del'), last = DEL[DEL.length - 1];
   ud.disabled = !last;
@@ -3384,6 +3390,14 @@ function cueModalBody() {
   if (m.err) h += `<p class="err" role="alert">${esc(m.err)}</p>`;
   return h;
 }
+function agentText(k, mask) {
+  const o = location.origin + '/mcp', key = Srv.key ? (mask ? '•'.repeat(Math.min(Srv.key.length, 12)) : Srv.key) : '';
+  // 비밀번호에 $ ` " \ ' 같은 기호가 있어도 붙여 넣은 그대로 전달되게: 셸은 작은따옴표로 감싸고(' 는 '\''), TOML 은 \ 와 " 를 이스케이프
+  const shq = s => "'" + String(s).replace(/'/g, "'\\''") + "'";
+  const tomlq = s => '"' + String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+  if (k === 'claude') return `claude mcp add --transport http cue-sheet ${shq(o)}` + (key ? ` --header ${shq('Authorization: Bearer ' + key)}` : '');
+  return `[mcp_servers.cue-sheet]\nurl = ${tomlq(o)}` + (key ? `\nhttp_headers = { "Authorization" = ${tomlq('Bearer ' + key)} }` : '');
+}
 function renderModal(focusFirst) {
   const root = $('#modal-root'), m = state.modal;
   if (!m) { root.innerHTML = ''; return; }
@@ -3400,6 +3414,16 @@ function renderModal(focusFirst) {
       <p class="note">음원 파일은 포함되지 않습니다(트랙 정보만). 파일 저장이 막히는 환경에서는 복사해서 쓰세요.</p>`;
     foot = `<a class="btn left" id="btn-download" download="cue-sheet-${esc(state.show.id)}.json" href="data:application/json;charset=utf-8,${encodeURIComponent(json)}">파일로 저장</a>
       <button type="button" class="btn" data-act="modal-close">닫기</button><button type="button" class="btn strong" id="btn-copy" data-act="copy-json">복사</button>`;
+  } else if (m.type === 'agent') {
+    title = '에이전트 연결';
+    const hasKey = !!Srv.key, shown = k => !hasKey || m.reveal ? k : '•'.repeat(Math.min(k.length, 12));
+    const blk = (k, h, extra) => `<section class="ag-blk"><div class="ag-h"><h3>${h}</h3><button type="button" class="tb" data-act="agent-copy" data-k="${k}">복사</button></div><pre class="ag-pre">${esc(agentText(k, !m.reveal))}</pre>${extra || ''}</section>`;
+    body = `<p class="note">Claude Code·Codex 같은 에이전트가 이 큐시트를 읽고 고치게 연결합니다. 아래를 터미널이나 설정 파일에 붙여 넣으세요.${hasKey ? ' 비밀번호가 들어 있으니 다른 사람에게 보여 주지 마세요.' : ''}</p>
+      ${hasKey ? `<label class="chk"><input type="checkbox" data-act="agent-reveal" ${m.reveal ? 'checked' : ''}>비밀번호 표시</label>` : ''}
+      ${blk('claude', 'Claude Code', '<p class="note">연결 확인: Claude Code 에서 /mcp 입력</p>')}
+      ${blk('codex', 'Codex — ~/.codex/config.toml 에 추가')}
+      <section class="ag-blk"><div class="ag-h"><h3>이렇게 요청하세요</h3></div><p class="note">「백스테이지」 큐시트에서 2장 첫 대사 화자를 ○○로 바꿔줘</p><p class="note">잘못 고쳤다면 “방금 수정 되돌려줘” 라고 말하면 됩니다.</p></section>`;
+    foot = '<button type="button" class="btn" data-act="modal-close">닫기</button>';
   } else if (m.type === 'import') {
     title = 'JSON 가져오기';
     body = `<div class="field"><label for="import-file">파일 선택</label><input type="file" id="import-file" accept=".json,application/json" data-act="import-file"></div>
@@ -3886,6 +3910,20 @@ function act(a, el) {
     case 'm-ch-del': state.modal.draft.light.channels.splice(Number(el.dataset.i), 1); renderModal(); break;
     case 'm-save': saveCue(); break;
     case 'm-del': { const m = state.modal; const ok = deleteCue(m.itemId, m.cueId); closeModal(true); commit(); if (ok) delToast('큐를 삭제했습니다'); break; }
+    case 'agent-open': state.menuOpen = false; renderTop(); state.modal = { type: 'agent', reveal: false }; renderModal(); break;
+    case 'agent-copy': {
+      const txt = agentText(el.dataset.k, false);
+      const fallback = () => {
+        const ta = document.createElement('textarea'); ta.value = txt; ta.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(ta); ta.select();
+        let ok = false; try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+        ta.remove(); toast(ok ? '복사했습니다' : '자동 복사가 막혀 있습니다 — 표시 후 직접 복사하세요');
+      };
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(() => toast('복사했습니다'), fallback);
+        else fallback();
+      } catch (e) { fallback(); }
+      break;
+    }
     case 'copy-json': {
       const ta = $('#export-text'); if (!ta) break;
       const fallback = () => {
@@ -3965,6 +4003,7 @@ document.addEventListener('change', ev => {
       rd.readAsText(f);
       return;
     }
+    if (t.dataset.act === 'agent-reveal' && state.modal) { state.modal.reveal = t.checked; renderModal(); return; }
     modalField(t); return;
   }
   const a = t.dataset.act;
