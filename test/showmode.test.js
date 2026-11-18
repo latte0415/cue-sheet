@@ -121,6 +121,29 @@ test('smBootPick: 옛 판의 백업·사본보다 먼저 쓴 백업은 무시', 
   assert.equal(FE.smBootPick(cache, { baseRev: 7, savedAt: '2026-11-18T09:00:00Z', show: { title: 'early' } }).show.title, 'c', '이미 저장된 뒤 남은 백업');
 });
 
+test('smBootPick: 사본보다 옛 형식(version)의 백업은 쓰지 않는다 — 옛 화면이 새 필드를 떨어뜨린 백업일 수 있다', () => {
+  const cache = { rev: 5, savedAt: '2026-11-18T10:00:00Z', base: true, show: { version: 8, title: 'c' } };
+  const r = FE.smBootPick(cache, { baseRev: 5, savedAt: '2026-11-18T10:05:00Z', show: { version: 7, title: 'old-ui' } });
+  assert.deepEqual(plain([r.show.title, r.dirty]), ['c', false]);
+  // 같은 형식이면 원래대로 백업
+  assert.equal(FE.smBootPick(cache, { baseRev: 5, savedAt: '2026-11-18T10:05:00Z', show: { version: 8, title: 'b' } }).show.title, 'b');
+});
+
+test('오프라인 부팅: 옛 형식(v7) 사본은 migrate 로 v8 이 된다 (smOfflineBoot 가 pick.show 를 migrate)', () => {
+  const a = HTML.indexOf('/* ================= 상수'), b = HTML.indexOf('/* ================= 상태');
+  const { migrate } = vm.runInNewContext(HTML.slice(a, b) + '\n;({ migrate })', {});
+  const v7 = { version: 7, title: 'v7 사본', parts: [{ id: 'pt', scenes: [{ id: 's', items: [{ id: 'i', kind: 'action', text: '(x)', cues: [
+    { id: 'q', dept: 'cast', trigger: '', memo: '메모', status: 'set', cast: { personId: null, move: 'in', text: '천천히' } }] }] }] }] };
+  const pick = FE.smBootPick({ rev: 3, savedAt: '2026-11-18T10:00:00Z', base: false, show: v7 }, null);
+  const m = plain(migrate(pick.show));
+  assert.equal(m.version, 8);
+  assert.equal(m.parts[0].scenes[0].items[0].cues[0].note, '천천히 / 메모');
+  // 코드: 오프라인 부팅은 migrate 를 거치고, 이 화면보다 새 형식 사본은 열지 않는다
+  const boot = HTML.slice(HTML.indexOf('async function smOfflineBoot'), HTML.indexOf('async function smPrepare'));
+  assert.match(boot, /show = migrate\(pick\.show\)/);
+  assert.match(boot, /Number\(pick\.show\.version\) > SHOW_VER/);
+});
+
 test('smBootPick: 더 새 판 위의 백업은 열되 병합 기준은 없음', () => {
   const cache = { rev: 5, savedAt: '2026-11-18T10:00:00Z', base: true, show: { title: 'c' } };
   const r = FE.smBootPick(cache, { baseRev: 6, savedAt: '2026-11-18T10:05:00Z', show: { title: 'b' } });

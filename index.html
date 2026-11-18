@@ -1390,9 +1390,12 @@ function smNos(nos) { return 'BGM ' + nos.map(n => n == null ? '?' : n).join(', 
 // 오프라인으로 새로고침했을 때 무엇으로 열지. cache = 공연 모드가 둔 마지막 서버 판 { rev, savedAt, base, show },
 // backup = 저장 못 한 변경 백업(cueSheet.backup.<id>) { baseRev, savedAt, show }. 백업이 캐시보다 나중이고 같은(또는 새) 판 위의 것이면 백업을 열고
 // 연결되면 다시 저장한다(dirty). base = 409 병합 기준 — 캐시와 같은 판 위의 백업일 때만 캐시 내용. 열 것이 없으면 null
+// 백업이 사본보다 옛 형식(version)이면 쓰지 않는다 — 옛 화면(SW 캐시)이 새 형식 사본을 읽어 모르는 필드(v8 note·큐 지점)를 떨어뜨린 채
+// 남긴 백업일 수 있다. 그대로 다시 저장하면 서버의 새 형식 내용을 덮는다
 function smBootPick(cache, backup) {
   const okC = !!(cache && cache.show && Number.isFinite(cache.rev));
-  const okB = !!(backup && backup.show && Number.isFinite(backup.baseRev));
+  const ver = x => Number(x && x.show && x.show.version) || 0;
+  const okB = !!(backup && backup.show && Number.isFinite(backup.baseRev)) && !(okC && ver(backup) < ver(cache));
   const t = x => Date.parse(x && x.savedAt) || 0;
   if (okB && (!okC || (backup.baseRev >= cache.rev && t(backup) > t(cache)))) {
     return { show: backup.show, rev: backup.baseRev, dirty: true, base: okC && cache.base && backup.baseRev === cache.rev ? cache.show : null };
@@ -2101,8 +2104,10 @@ async function smOfflineBoot() {
   const read = k => { try { return JSON.parse(lsGet(k) || 'null'); } catch (e) { return null; } };
   const pick = smBootPick(read('cueSheet.offline.' + id), read('cueSheet.backup.' + id));
   if (!pick) return false;
+  // 이 화면보다 새 형식의 사본은 열지 않는다(모르는 필드를 떨어뜨린 채 다시 저장하지 않게) — 연결되면 새 화면을 받는다
+  if (Number(pick.show.version) > SHOW_VER || (pick.base && Number(pick.base.version) > SHOW_VER)) return false;
   let show;
-  try { show = migrate(pick.show); } catch (e) { return false; }
+  try { show = migrate(pick.show); } catch (e) { return false; } // 옛 형식(v5~v7) 사본도 여기서 v8 로
   Store = ServerStore;
   await loadMergeModule(); // Service Worker 사본에서 — 없으면 병합 없이 선택 바
   SM.bootOffline = true; SM.net = 'down';
