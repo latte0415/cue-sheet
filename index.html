@@ -249,7 +249,13 @@ input[type=color]{padding:0 2px;width:40px;height:30px;cursor:pointer}
 .doc p.dnd-tgt{background:var(--accent-tint);box-shadow:inset 2px 0 0 var(--accent)}
 .script:not(.ro) .qb .ql[data-cue]{cursor:grab}
 .script:not(.ro) .qb .ql .qd{touch-action:none}
-@media print{.dnd-h,.dnd-line,.dnd-tag{display:none!important}}
+/* 문단 사이 "+ 큐" (편집 모드 호버): 얇은 괘선 + 오른쪽 끝 글자 버튼. 괘선은 클릭을 막지 않는다 */
+.gap-add{position:absolute;z-index:3;height:0;pointer-events:none}
+.gap-add .gap-l{position:absolute;left:10px;right:44px;top:0;border-top:1px solid var(--accent)}
+.gap-add .gap-b{position:absolute;right:0;top:-9px;height:18px;padding:0 0 0 6px;font-size:11px;line-height:18px;color:var(--accent);background:var(--paper);pointer-events:auto;white-space:nowrap}
+.gap-add .gap-b:hover{text-decoration:underline;text-underline-offset:3px}
+.dnd-tag.newpt::before{content:"새 큐 지점 · ";color:var(--accent)}
+@media print{.dnd-h,.dnd-line,.dnd-tag,.gap-add{display:none!important}}
 
 /* ---------- 큐시트 ---------- */
 .cs-top{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px;padding:18px 0 10px}
@@ -5686,6 +5692,12 @@ function act(a, el) {
       openCueModal(null, null, { newPoint: { sceneId: se.scene.id, after: last ? last.id : null } });
       break;
     }
+    case 'gap-cue': { // 대본 문단 사이 "+ 큐": 그 자리에 큐 지점
+      gapHide();
+      if (!state.edit || !IDX.byScene.get(el.dataset.scene)) break;
+      openCueModal(null, null, { newPoint: { sceneId: el.dataset.scene, after: el.dataset.after || null } });
+      break;
+    }
     case 'cuept-new': { // 패널: 이 문단 바로 뒤에 큐 지점
       const e = IDX.byItem.get(el.dataset.item); if (!e) break;
       openCueModal(null, null, { newPoint: { sceneId: e.scene.id, after: e.item.id } });
@@ -6345,6 +6357,25 @@ function relocateCueGroup(show, fromItemId, toItemId, index, ids) {
   b.item.cues.splice(k, 0, ...moved); b.item.isCue = true;
   return { ids: moved.map(c => c.id), from: { itemId: fromItemId, index: from }, to: { itemId: toItemId, index: k }, changed: true, pruned: pruneCuePoint(show, fromItemId) };
 }
+// 큐들(ids, 한 문단의 것)을 sceneId 씬의 index 자리(문단 사이 — 옮기기 전 기준)에 새 큐 지점을 만들어 옮긴다.
+// 원래 문단이 빈 큐 지점이 되면 정리(pruned). 같은 지점의 큐를 전부 그 지점 바로 앞뒤 틈에 놓으면 제자리 → changed:false.
+// 되돌리기는 restoreCuePoint(pruned) 뒤 relocateCueGroup(show, pointId, from.itemId, from.index, ids) — 새 지점은 비어 저절로 정리된다.
+// 다시 실행은 같은 pointId 를 넘긴다
+function relocateCuesToNewPoint(show, ids, sceneId, index, pointId) {
+  const f = ids && ids.length ? dndFindCue(show, ids[0]) : null, dst = dndScene(show, sceneId);
+  if (!f || !dst) return null;
+  const src = f.item, at = dndFindItem(show, src.id), pick = new Set(ids);
+  const moved = src.cues.filter(c => pick.has(c.id));
+  if (!moved.length) return null;
+  const k = dndClamp(index, dst.items.length);
+  if (src.kind === 'cue' && moved.length === src.cues.length && at.scene === dst && (k === at.index || k === at.index + 1)) return { ids: moved.map(c => c.id), changed: false };
+  const from = { itemId: src.id, index: src.cues.findIndex(c => pick.has(c.id)) };
+  src.cues.splice(0, src.cues.length, ...src.cues.filter(c => !pick.has(c.id)));
+  src.isCue = src.cues.length > 0;
+  const pt = { id: pointId || uid('i'), kind: 'cue', speaker: null, text: '', label: null, isCue: true, cues: moved, comments: [] };
+  dst.items.splice(k, 0, pt);
+  return { ids: moved.map(c => c.id), pointId: pt.id, to: { sceneId, index: k }, from, changed: true, pruned: pruneCuePoint(show, src.id) };
+}
 // 한 칸 위/아래 자리 — 씬의 처음/끝이면 이전 씬의 끝 / 다음 씬의 처음 (파트 경계도 넘는다). 더 갈 곳이 없으면 null
 function stepSlot(show, itemId, d) {
   const at = dndFindItem(show, itemId); if (!at) return null;
@@ -6430,6 +6461,21 @@ function dndNearestDoc(y) {
   });
   return best;
 }
+// 문단 사이 틈: y 가 두 문단 경계의 좁은 띠(위 문단 아래 3px ~ 아래 문단 위 3px, 최소 ±4px)면 { doc, sceneId, index(아래 문단 자리), after(위 문단 id|null), y(경계) }.
+// 큐 끌어 놓기의 "새 큐 지점" 자리와 편집 모드 호버 "+ 큐" 가 같은 띠를 쓴다 — 띠 밖은 평소처럼 문단(대상·글 선택)
+function gapAt(doc, y) {
+  if (!doc) return null;
+  const ps = Array.from(doc.children).filter(p => p.dataset.id);
+  if (!ps.length) return null;
+  for (let i = 0; i <= ps.length; i++) {
+    const a = ps[i - 1], b = ps[i];
+    const ab = a ? a.getBoundingClientRect().bottom : null, bt = b ? b.getBoundingClientRect().top : null;
+    const mid = a && b ? (ab + bt) / 2 : a ? ab + 2 : bt - 3;
+    const lo = Math.min(a ? ab - 3 : bt - 8, mid - 4), hi = Math.max(b ? bt + 3 : ab + 8, mid + 4);
+    if (y >= lo && y <= hi) return { doc, sceneId: doc.dataset.scene, index: i, after: a ? a.dataset.id : null, y: mid };
+  }
+  return null;
+}
 function dndParaAtY(doc, y) {
   if (!doc) return null;
   const ps = Array.from(doc.children).filter(p => p.dataset.id);
@@ -6494,10 +6540,28 @@ function dndUpdate() {
     line.style.top = Math.round(s.y - 1) + 'px'; line.style.left = Math.round(s.left) + 'px'; line.style.width = Math.round(s.width) + 'px';
     line.hidden = false;
   } else {
-    // 큐 하나·Q 묶음: 놓을 문단 = 포인터 높이의 문단 (원래 문단은 빼고)
+    // 큐 하나·Q 묶음: 문단 사이 틈이면 그 자리에 새 큐 지점(가로 괘선), 아니면 포인터 높이의 문단(원래 문단은 빼고, 대상 표시)
     const f = DND.kind === 'cue' ? dndFindCue(state.show, DND.id) : null, from = f ? f.item.id : DND.kind === 'group' ? DND.id : null;
-    const p = dndParaAtY(dndNearestDoc(DND.y), DND.y), t = p && from && p.dataset.id !== from ? p : null;
+    const doc = dndNearestDoc(DND.y), gp = from ? gapAt(doc, DND.y) : null, line = dndLine();
+    let t = null;
+    DND.slot = null;
+    if (gp) {
+      // 제자리(그 지점의 큐 전부를 지점 바로 앞뒤 틈에)면 아무 표시도 하지 않는다
+      const src = IDX.byItem.get(from), all = DND.kind === 'group' || (src && src.item.cues.length === 1);
+      const noop = !!src && src.item.kind === 'cue' && all && src.scene.id === gp.sceneId && (gp.index === src.ii || gp.index === src.ii + 1);
+      if (!noop) {
+        const dr = doc.getBoundingClientRect();
+        DND.slot = { gap: true, sceneId: gp.sceneId, index: gp.index };
+        line.style.top = Math.round(gp.y - 1) + 'px'; line.style.left = Math.round(dr.left) + 'px'; line.style.width = Math.round(dr.width) + 'px';
+      }
+      line.hidden = noop;
+    } else {
+      line.hidden = true;
+      const p = dndParaAtY(doc, DND.y);
+      t = p && from && p.dataset.id !== from ? p : null;
+    }
     if (DND.tgt !== t) { if (DND.tgt) DND.tgt.classList.remove('dnd-tgt'); if (t) t.classList.add('dnd-tgt'); DND.tgt = t; }
+    const tag = dndTag(); tag.classList.toggle('newpt', !!DND.slot);
   }
 }
 // 가장자리 자동 스크롤 + 자리 다시 계산 (스크롤하면 같은 포인터 위치라도 자리가 바뀐다)
@@ -6526,14 +6590,45 @@ function dndEnd(drop) {
   if (tgt) tgt.classList.remove('dnd-tgt');
   DND.src = null; DND.tgt = null; DND.slot = null;
   $('#app').classList.remove('dnd-drag');
-  dndLine().hidden = true; dndTag().hidden = true;
+  dndLine().hidden = true; dndTag().hidden = true; dndTag().classList.remove('newpt');
   if (!started) return;
   DND.eatClick = true; setTimeout(() => { DND.eatClick = false; }, 0); // 끌고 난 뒤의 click(큐 블록 → 상세 열기)은 먹는다
   if (!drop || !dndOn()) return;
   if (kind === 'item' && slot && !slot.noop) dndMoveItem(id, slot.sceneId, slot.index, true);
+  else if ((kind === 'cue' || kind === 'group') && slot && slot.gap) dndMoveToNewPoint(kind, id, slot.sceneId, slot.index);
   else if (kind === 'cue' && tgt) dndMoveCue(id, tgt.dataset.id);
   else if (kind === 'group' && tgt) dndMoveGroup(id, tgt.dataset.id);
 }
+// 문단 사이 "+ 큐": 편집 모드에서 마우스가 문단 경계의 좁은 띠(gapAt)에 오면 얇은 가로 괘선과 오른쪽 끝의 "+ 큐".
+// 누르면 그 자리에 큐 지점을 만드는 큐 추가 모달(패널 버튼과 같은 흐름 — 취소하면 아무것도 남지 않는다). 띠 밖·끌기·글 선택 중·보기 모드에는 없다
+let gapEl = null;
+function gapAdd() {
+  if (gapEl) return gapEl;
+  const g = document.createElement('div');
+  g.className = 'gap-add'; g.hidden = true;
+  g.innerHTML = '<span class="gap-l" aria-hidden="true"></span><button type="button" class="gap-b" data-act="gap-cue" title="이 자리에 큐 지점 만들기">+ 큐</button>';
+  gapEl = g; return g;
+}
+function gapHide() { if (gapEl && !gapEl.hidden) gapEl.hidden = true; }
+function gapShow(gp) {
+  const g = gapAdd(), sheet = gp.doc.closest('.sheet'); if (!sheet) return gapHide();
+  if (g.parentNode !== sheet) sheet.appendChild(g);
+  const sr = sheet.getBoundingClientRect(), dr = gp.doc.getBoundingClientRect();
+  g.style.top = Math.round(gp.y - sr.top) + 'px'; g.style.left = Math.round(dr.left - sr.left) + 'px'; g.style.width = Math.round(dr.width) + 'px';
+  const b = g.querySelector('.gap-b'); b.dataset.scene = gp.sceneId; b.dataset.after = gp.after || '';
+  g.hidden = false;
+}
+document.addEventListener('pointermove', ev => {
+  if (ev.pointerType !== 'mouse') return;
+  const t = ev.target;
+  if (gapEl && !gapEl.hidden && t && t.closest && t.closest('.gap-add')) return; // "+ 큐" 위에 있는 동안은 그대로
+  if (DND.on || ev.buttons || !state.edit || mountedView !== 'script' || state.modal || state.moveCue || composing) { gapHide(); return; }
+  const sheet = t && t.closest && t.closest('#script .sheet');
+  const doc = sheet && sheet.querySelector('.doc');
+  // 문단 손잡이·거터 Q·큐 블록 위에서는 띄우지 않는다 (끌기·상세 열기와 겹치지 않게)
+  const gp = doc && !(t.closest('.dnd-h, .gutter, .qb, .spk-btn')) ? gapAt(doc, ev.clientY) : null;
+  if (gp) gapShow(gp); else gapHide();
+});
 document.addEventListener('pointermove', ev => {
   if (DND.on && ev.pointerId === DND.pid) {
     DND.x = ev.clientX; DND.y = ev.clientY;
@@ -6665,6 +6760,25 @@ function dndMoveGroup(fromId, toId, ids) {
     : `큐 ${r.ids.length}개를 옮겼습니다 → ${q ? q + ' · ' : ''}${cut(ne ? itemRefText(ne, 24) : '', 30)} — Ctrl+Z 되돌리기`);
   return r;
 }
+// 큐 하나(kind 'cue', id = 큐 id) 또는 Q 묶음(kind 'group', id = 문단 id)을 문단 사이 틈에 놓기 → 그 자리에 새 큐 지점.
+// 이동 기록 하나라 Ctrl+Z 한 번에 새 지점 · 이동 · 원래 지점 복원이 모두 돌아간다
+function dndMoveToNewPoint(kind, id, sceneId, index) {
+  const S = state.show;
+  const f = kind === 'cue' ? dndFindCue(S, id) : null, src = f ? f.item : (dndFindItem(S, id) || {}).item;
+  if (!src || !src.cues.length) return null;
+  const ids = kind === 'cue' ? [id] : src.cues.map(c => c.id), srcScene = (dndFindItem(S, src.id) || {}).scene;
+  const labels = labelMap(S);
+  const r = relocateCuesToNewPoint(S, ids, sceneId, index, null);
+  if (!r || !r.changed) return null;
+  renumberLabels(S);
+  const sids = Array.from(new Set([srcScene.id, sceneId]));
+  dndPush({ kind: 'newpt', id: r.pointId, ids: r.ids, pointId: r.pointId, from: r.from, to: r.to, pruned: r.pruned, labels, scenes: sids });
+  const ac = document.activeElement; if (ac && ac.classList && ac.classList.contains('doc')) ac.blur(); // dndMoveCue 와 같은 이유
+  dndRedraw(sids, true, null);
+  const ne = IDX.byItem.get(r.pointId);
+  toast(`새 큐 지점${ne && ne.q ? ' Q' + ne.q : ''} 에 큐 ${r.ids.length}개를 옮겼습니다 — Ctrl+Z 되돌리기`);
+  return r;
+}
 // 거터 Q 번호에 포커스 + Alt+↑/↓: 이전·다음 문단으로 (씬 경계를 넘는다). 큐가 있는 문단에 닿으면 합치되, 이어서 누르면
 // 방금 옮긴 큐만 계속 간다 — 그 문단의 원래 큐는 제자리에 남는다
 const QKEY = { itemId: null, ids: null, all: '' }; // all: 옮긴 직후 그 문단의 큐 id 전부 — 그 사이 큐가 바뀌었으면 이어 가지 않는다
@@ -6693,6 +6807,22 @@ function dndApply(e, redo) {
     sids = [cur.scene.id, dst.sceneId];
     dndSync(sids);
     if (!relocateItem(S, e.id, dst.sceneId, dst.index)) return false;
+  } else if (e.kind === 'newpt') {
+    // 새 큐 지점으로 옮긴 것: 되돌리면 원래 지점을 되살리고 큐를 돌려보낸다(빈 새 지점은 relocateCueGroup 이 정리). 다시 하면 같은 id 로 다시 만든다
+    if (redo) {
+      const cur = dndFindCue(S, e.ids[0]); if (!cur || !dndScene(S, e.to.sceneId)) return false;
+      sids = [cur.scene.id, e.to.sceneId];
+      const r = relocateCuesToNewPoint(S, e.ids, e.to.sceneId, e.to.index, e.pointId);
+      if (!r || !r.changed) return false;
+      e.pruned = r.pruned;
+    } else {
+      if (e.pruned && !dndFindItem(S, e.pruned.item.id)) restoreCuePoint(S, e.pruned);
+      const pt = dndFindItem(S, e.pointId), di = dndFindItem(S, e.from.itemId); if (!pt || !di) return false;
+      sids = [pt.scene.id, di.scene.id];
+      const r = relocateCueGroup(S, e.pointId, e.from.itemId, e.from.index, e.ids);
+      if (!r || !r.changed) return false;
+    }
+    docs = true;
   } else {
     // 되돌리기: 옮기면서 사라진 큐 지점을 먼저 제자리에 되살린다 (다시 실행하면 relocate 가 다시 정리하고 새 자리를 적는다)
     if (!redo && e.pruned && !dndFindItem(S, e.pruned.item.id)) restoreCuePoint(S, e.pruned);

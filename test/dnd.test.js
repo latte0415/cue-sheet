@@ -14,7 +14,7 @@ function frontend() {
     return html.slice(a, b);
   };
   return vm.runInNewContext(cut('큐 번호', '마이그레이션') + cut('끌어 옮기기: 모델', '끌어 옮기기: 화면') +
-    '\n;({ relocateItem, relocateCue, relocateCueGroup, stepSlot, labelMap, restoreLabels, renumberLabels, pruneCuePoint, restoreCuePoint })', {});
+    '\n;({ relocateItem, relocateCue, relocateCueGroup, stepSlot, labelMap, restoreLabels, renumberLabels, pruneCuePoint, restoreCuePoint, relocateCuesToNewPoint })', {});
 }
 const FE = frontend();
 const plain = o => JSON.parse(JSON.stringify(o));
@@ -260,4 +260,68 @@ test('큐 지점은 큐 번호 대상이다 (큐가 있는 문단)', () => {
   s.parts[0].scenes[0].items.splice(1, 0, point('pt', [cue('qp')]));
   FE.renumberLabels(s);
   assert.deepEqual(['a', 'pt', 'c', 'd'].map(i => find(s, i).label), ['1', '2', '3', '4']);
+});
+
+// ---- 큐를 문단 사이 틈에 놓기 → 그 자리에 새 큐 지점 (relocateCuesToNewPoint)
+const order = (s, sid) => s.parts.flatMap(p => p.scenes).find(x => x.id === sid).items.map(i => i.id);
+test('새 큐 지점: 큐 하나를 틈에 — 새 지점이 그 자리에, 원래 문단은 그대로(일반 문단), 되돌리면 원래대로', () => {
+  const s = show(), before = JSON.stringify(s);
+  // c 의 q3 을 S1 의 a 와 b 사이(index 1)에
+  const r = FE.relocateCuesToNewPoint(s, ['q3'], 'S1', 1, 'np');
+  assert.deepEqual(plain({ ids: r.ids, pointId: r.pointId, to: r.to, from: r.from, changed: r.changed, pruned: r.pruned }),
+    { ids: ['q3'], pointId: 'np', to: { sceneId: 'S1', index: 1 }, from: { itemId: 'c', index: 1 }, changed: true, pruned: null });
+  assert.deepEqual(order(s, 'S1'), ['a', 'np', 'b', 'c']);
+  assert.deepEqual(plain(find(s, 'np')), { id: 'np', kind: 'cue', speaker: null, text: '', label: null, isCue: true, cues: [cue('q3')], comments: [] });
+  assert.deepEqual(find(s, 'c').cues.map(c => c.id), ['q2']);
+  // 되돌리기: 큐를 원래 문단 원래 자리로 → 빈 새 지점은 relocateCueGroup 이 정리
+  const back = FE.relocateCueGroup(s, r.pointId, r.from.itemId, r.from.index, r.ids);
+  assert.equal(back.pruned.item.id, 'np');
+  assert.equal(JSON.stringify(s), before);
+});
+
+test('새 큐 지점: Q 묶음을 다른 씬 틈에 — 원래 큐 지점은 정리(pruned), 되돌리기 = 지점 복원 + 큐 되돌림', () => {
+  const s = show();
+  s.parts[0].scenes[0].items.splice(1, 0, point('pt', [cue('x1'), cue('x2')])); // S1: a pt b c
+  const before = JSON.stringify(s);
+  const r = FE.relocateCuesToNewPoint(s, ['x1', 'x2'], 'S2', 0, 'np');
+  assert.equal(r.pruned.item.id, 'pt');
+  assert.deepEqual([order(s, 'S1'), order(s, 'S2')], [['a', 'b', 'c'], ['np', 'd']]);
+  assert.deepEqual(find(s, 'np').cues.map(c => c.id), ['x1', 'x2']);
+  FE.restoreCuePoint(s, r.pruned);
+  FE.relocateCueGroup(s, r.pointId, r.from.itemId, r.from.index, r.ids);
+  assert.equal(JSON.stringify(s), before);
+  // 다시 실행: 같은 pointId 로 같은 결과
+  const r2 = FE.relocateCuesToNewPoint(s, r.ids, r.to.sceneId, r.to.index, r.pointId);
+  assert.deepEqual([order(s, 'S1'), order(s, 'S2'), r2.pruned.index], [['a', 'b', 'c'], ['np', 'd'], 1]);
+});
+
+test('새 큐 지점: 같은 씬 뒤쪽 틈 — 원래 지점이 앞에서 빠져도 자리가 맞고, 되돌리면 원래대로', () => {
+  const s = show();
+  s.parts[0].scenes[0].items.splice(0, 0, point('pt', [cue('x1')])); // S1: pt a b c
+  const before = JSON.stringify(s);
+  const r = FE.relocateCuesToNewPoint(s, ['x1'], 'S1', 3, 'np'); // b 와 c 사이
+  assert.deepEqual(order(s, 'S1'), ['a', 'b', 'np', 'c']);
+  FE.restoreCuePoint(s, r.pruned);
+  FE.relocateCueGroup(s, r.pointId, r.from.itemId, r.from.index, r.ids);
+  assert.equal(JSON.stringify(s), before);
+});
+
+test('새 큐 지점: 지점의 큐 전부를 그 지점 바로 앞뒤 틈에 놓으면 제자리 — 아무것도 바꾸지 않는다', () => {
+  const s = show();
+  s.parts[0].scenes[0].items.splice(1, 0, point('pt', [cue('x1'), cue('x2')])); // S1: a pt b c → pt 는 index 1
+  const before = JSON.stringify(s);
+  assert.equal(FE.relocateCuesToNewPoint(s, ['x1', 'x2'], 'S1', 1, 'np').changed, false);
+  assert.equal(FE.relocateCuesToNewPoint(s, ['x1', 'x2'], 'S1', 2, 'np').changed, false);
+  assert.equal(JSON.stringify(s), before);
+  // 일부만 옮기면 제자리가 아니다 (지점이 둘로 나뉜다)
+  const r = FE.relocateCuesToNewPoint(s, ['x2'], 'S1', 2, 'np');
+  assert.equal(r.changed, true); assert.equal(r.pruned, null);
+  assert.deepEqual(order(s, 'S1'), ['a', 'pt', 'np', 'b', 'c']);
+  // 일반 문단의 큐를 바로 앞 틈에 놓는 것은 새 지점이 생긴다
+  const s2 = show();
+  assert.equal(FE.relocateCuesToNewPoint(s2, ['q1'], 'S1', 0, 'np').changed, true);
+  assert.deepEqual(order(s2, 'S1'), ['np', 'a', 'b', 'c']);
+  // 없는 큐·씬
+  assert.equal(FE.relocateCuesToNewPoint(show(), ['nope'], 'S1', 0, 'np'), null);
+  assert.equal(FE.relocateCuesToNewPoint(show(), ['q1'], 'nope', 0, 'np'), null);
 });
