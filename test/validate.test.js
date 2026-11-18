@@ -398,3 +398,22 @@ test('큐 지점(kind:"cue"): 본문·화자 없이 큐만 — 정상은 경고 
   const real = plain(FE.migrate(unwrapShow(JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'backstage-part1-v5.json'), 'utf8')))));
   assert.ok(!real.parts.some(p => p.scenes.some(sc => sc.items.some(i => i.kind === 'cue'))));
 });
+
+test('빈 문단에 붙은 큐(empty-cued): 본문이 빈 대사·지문에 큐 → 경고(큐 지점으로), 큐 지점·큐 없는 빈 문단은 아님', () => {
+  const s = docExample();
+  const its = s.parts[0].scenes[0].items;
+  its[1].text = '   '; its[1].speaker = null;
+  let v = validateShow(s);
+  const w = v.warnings.filter(x => x.code === 'empty-cued');
+  assert.deepEqual(w.map(x => x.path), ['parts[0].scenes[0].items[1].text']);
+  assert.match(JSON.stringify(w[0]), /큐 지점으로/);
+  assert.deepEqual(v.errors, []);
+  // 큐 지점으로 바꾸면 경고 없음
+  its[1].kind = 'cue'; its[1].text = '';
+  v = validateShow(s);
+  assert.equal(v.warnings.filter(x => x.code === 'empty-cued').length, 0);
+  // 큐 없는 빈 문단은 해당 없음
+  its[1].kind = 'line'; its[1].cues = []; its[1].isCue = false; its[1].label = null;
+  v = validateShow(s);
+  assert.equal(v.warnings.filter(x => x.code === 'empty-cued').length, 0);
+});

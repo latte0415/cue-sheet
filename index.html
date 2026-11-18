@@ -627,7 +627,9 @@ body.has-player .app,body.has-preview .app{padding-bottom:calc(var(--player-h, 0
 .pl-q .plq-t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pl-q .plq-d{text-align:right}
 .pl-q .note{margin:0;padding:8px 12px}
-.toast .toast-a{color:var(--paper);border-bottom:1px solid var(--paper);margin-left:14px;font-weight:600}
+.toast .toast-a{color:var(--paper);border-bottom:1px solid var(--paper);margin-left:14px;font-weight:600;pointer-events:auto}
+/* 알림은 아래 있는 버튼을 가로막지 않는다(방금 누른 [삭제] 위에 떠도 그 자리를 다시 누를 수 있게) — [되돌리기] 만 누른다 */
+.toast{pointer-events:none}
 
 /* ---------- 5차: 판 정보 / 이동 모드 / 런 씬 경계 / 코멘트 ---------- */
 .rev{display:inline-flex;align-items:baseline;gap:6px;font-size:12px;color:var(--ink-3);white-space:nowrap;min-width:0;flex:none}
@@ -3336,20 +3338,23 @@ function syncDoc(doc, light) {
     }
     items.push(it); seen.add(it.id);
   });
-  // 큐·코멘트가 붙은 문단이 사라졌으면 빈 문단으로 되살린다 (삭제는 거터에서 2단계 확인)
-  let kept = 0, keptPt = 0;
+  // 큐·코멘트가 붙은 문단이 글 지우기로 사라졌으면 그 자리에 되살린다(문단 자체를 지우는 것은 거터·패널의 [삭제]).
+  // 큐가 있으면 큐 지점(kind:'cue' — 본문 없이 큐 블록만)으로: 빈 대사·지문 줄을 남기지 않는다. 코멘트만 있으면 빈 문단으로(큐 없는 지점은 없다)
+  let toPt = 0, kept = 0, keptPt = 0;
   old.forEach((r, oi) => {
     if (seen.has(r.id) || !hasAttach(r)) return;
     let at = 0, anchor = null;
     for (let k = oi - 1; k >= 0; k--) { const j = items.indexOf(old[k]); if (j >= 0) { at = j + 1; anchor = old[k]; break; } }
-    const pt = r.kind === 'cue';
-    if (!pt) { r.text = ''; r.speaker = null; r.kind = 'line'; }
-    items.splice(at, 0, r); seen.add(r.id); if (pt) keptPt++; else kept++;
+    const was = r.kind === 'cue', pt = was || r.cues.length > 0;
+    if (!was) { r.text = ''; r.speaker = null; r.kind = pt ? 'cue' : 'line'; TOUCHED.add(r.id); }
+    if (pt) r.isCue = true;
+    items.splice(at, 0, r); seen.add(r.id); if (was) keptPt++; else if (pt) toPt++; else kept++;
     const np = pt ? cuePointEl(r) : mkP(''); np.dataset.id = r.id; np._raw = '';
     const ap = anchor && doc.querySelector(`p[data-id="${cssq(anchor.id)}"]`);
     if (ap) ap.after(np); else doc.prepend(np);
   });
-  if (kept) toast(`큐·코멘트가 붙은 문단 ${kept}개는 빈 문단으로 남겼습니다 — 지우려면 왼쪽 여백의 [삭제]`);
+  if (toPt) toast(`큐가 붙은 문단 ${toPt}개는 글을 지워 큐 지점으로 남겼습니다 — 큐는 그대로, 큐를 지우면 지점도 사라집니다${kept ? ` · 코멘트만 붙은 ${kept}개는 빈 문단으로` : ''}`);
+  else if (kept) toast(`코멘트가 붙은 문단 ${kept}개는 빈 문단으로 남겼습니다 — 지우려면 왼쪽 여백의 [삭제]`);
   else if (keptPt) toast('큐 지점은 글처럼 지워지지 않습니다 — 큐를 지우면 지점도 사라집니다');
   if (lone && doc.children.length === 1) doc.firstElementChild.removeAttribute('data-id');
   markEmpty(doc);
@@ -3606,6 +3611,9 @@ function spkBtnPlace() {
 }
 
 /* ===== 되돌리기 (편집기 전용 — 브라우저 기본 undo 는 프로그램이 바꾼 DOM 과 섞이면 깨진다) ===== */
+// Ctrl/⌘ 와 함께 누른 Z·Y. 한글 자판이면 key 가 'ㅋ'·'ㅛ' 라 자리(code: KeyZ·KeyY)로 본다 — key 가 라틴 글자면 key 대로(독일 자판 등 Z·Y 자리가 다른 자판)
+function undoKey(ev) { const k = ev.key || ''; return k === 'z' || k === 'Z' || (ev.code === 'KeyZ' && !/^[a-z]$/i.test(k)); }
+function redoKey(ev) { const k = ev.key || ''; return k === 'y' || k === 'Y' || (ev.code === 'KeyY' && !/^[a-z]$/i.test(k)); }
 const UNDO = new Map();
 let UNDO_SEQ = 0; // 스냅숏·끌어 옮기기 기록의 순서 (Ctrl+Z 가 더 최근 것을 고른다)
 function undoBox(doc) { const k = doc.dataset.scene; if (!UNDO.has(k)) UNDO.set(k, { stack: [], redo: [], t: 0 }); return UNDO.get(k); }
@@ -4636,6 +4644,7 @@ const CK_GROUPS = [
   { k: 'castlist', sev: 'check', t: '씬 출연에 없는 사람의 IN/OUT', short: '출연 명단', note: '씬 마지막 큐의 IN(다음 씬 등장)과 첫 큐의 OUT(앞 씬 퇴장)은 뺍니다.', depts: ['cast'] },
   { k: 'noprops', sev: 'check', t: '소품 미지정 무대 큐', short: '소품 미지정', note: '확정 무대 큐인데 소품이 없습니다 — 소품을 등록하고 대상으로 고르세요(v8: 무대 큐는 소품 필수). 원래 문장은 상세에 있습니다.', depts: ['stage'] },
   { k: 'files', sev: 'check', t: '음원 파일', short: '음원 파일', note: '', depts: ['sound'] },
+  { k: 'emptyq', sev: 'check', t: '빈 문단에 붙은 큐', short: '빈 문단 큐', note: '본문이 빈 대사·지문에 큐가 붙어 있습니다 — 큐 지점으로 바꾸세요(본문 없이 큐만 보이는 실행 지점). lib/validate.js empty-cued 와 같은 조건.', depts: ['common'] },
   { k: 'empty', sev: 'info', t: '문단 없는 액트 씬', short: '빈 액트', note: '코멘트·큐를 달 문단이 없습니다.', depts: ['common'], fold: true },
   { k: 'cmt', sev: 'info', t: '미해결 코멘트', short: '코멘트', note: '', depts: ['common'] }
 ];
@@ -4675,6 +4684,8 @@ function checkCollect(x) {
         last.set(pid, { move: mv, e });
       }
     });
+    // 빈 문단에 붙은 큐: 큐 지점이 아닌 문단인데 본문이 비었다 — 문단 하나에 한 줄, 고치기 [큐 지점으로]
+    if (e.item.kind !== 'cue' && e.item.cues.length && !String(e.item.text || '').trim()) add('emptyq', { dept: 'common', person: null, sid, who: e.scene.cast.slice(), item: id, fix: { item: id }, text: `${ref(e)} — 빈 문단에 큐 ${e.item.cues.length}개 (${e.item.cues.map(c => DEPT_L[c.dept]).join('·')})` });
     e.item.comments.forEach(cm => { if (!cm.resolved) add('cmt', { dept: 'common', person: null, sid, who: e.scene.cast.slice(), item: id, text: `${ref(e)} — ${cm.author}: ${cut(cm.text, 50)}` }); });
   });
   scenes.forEach(sc => sc.comments.forEach(cm => {
@@ -4774,7 +4785,7 @@ function viewCheck() {
       h += `<li class="fix ${last === 'files|*' || (last && last.indexOf('files|') === 0 && !fo) ? 'last' : ''}">${ckBtn(Object.assign({}, first, { key: 'files|*' }), `음원 파일 ${v.files.have}/${v.files.total} 올림${smOn() ? ` · 이 기기에 받음 ${smState().ready}/${v.files.total}` : ''}`)}<button type="button" class="tb ck-fix" data-act="ck-fold" data-k="files" aria-expanded="${fo}">${fo ? '접기' : `없는 ${g.list.length}곡 보기`}</button></li>`;
       if (fo) h += g.list.map(x => `<li class="ck-sub ${last === x.key ? 'last' : ''}">${ckBtn(x)}</li>`).join('');
     } else {
-      h += g.list.map(x => `<li class="${x.fix ? 'fix' : ''} ${last === x.key ? 'last' : ''}">${ckBtn(x)}${x.fix && state.edit ? `<button type="button" class="tb ck-fix" data-act="cast-add" data-scene="${esc(x.fix.scene)}" data-person="${esc(x.fix.person)}">출연에 추가</button>` : ''}</li>`).join('');
+      h += g.list.map(x => `<li class="${x.fix ? 'fix' : ''} ${last === x.key ? 'last' : ''}">${ckBtn(x)}${x.fix && state.edit ? (x.fix.item ? `<button type="button" class="tb ck-fix" data-act="ck-cuept" data-item="${esc(x.fix.item)}">큐 지점으로</button>` : `<button type="button" class="tb ck-fix" data-act="cast-add" data-scene="${esc(x.fix.scene)}" data-person="${esc(x.fix.person)}">출연에 추가</button>`) : ''}</li>`).join('');
     }
     h += '</ol></section>';
   });
@@ -6442,6 +6453,12 @@ function act(a, el) {
     }
     case 'm-pr-del': state.modal.draft.stage.props.splice(Number(el.dataset.i), 1); renderModal(); break;
     case 'pv-stop': stopPreview(); break;
+    case 'ck-cuept': { // 점검 "빈 문단에 붙은 큐" 고치기: 그 문단을 큐 지점으로 (큐·코멘트는 그대로)
+      const e = IDX.byItem.get(el.dataset.item);
+      if (!e || e.item.kind === 'cue' || !e.item.cues.length || String(e.item.text || '').trim()) { render(); break; }
+      e.item.kind = 'cue'; e.item.text = ''; e.item.speaker = null; e.item.isCue = true;
+      mountedView = null; commit(); toast('큐 지점으로 바꿨습니다'); break;
+    }
     case 'track-play': {
       const t = S.tracks.find(x => x.id === el.dataset.track); if (!t) break;
       const au = audioEl();
@@ -6821,7 +6838,7 @@ document.addEventListener('keydown', ev => {
     return;
   }
   if (doc) {
-    if (mod && !ev.altKey && (ev.key === 'z' || ev.key === 'Z' || ev.key === 'y' || ev.key === 'Y')) { ev.preventDefault(); undo(doc, ev.key === 'y' || ev.key === 'Y' || ev.shiftKey); return; }
+    if (mod && !ev.altKey && (undoKey(ev) || redoKey(ev))) { ev.preventDefault(); undo(doc, redoKey(ev) || ev.shiftKey); return; }
     if (mod && (ev.key === 'b' || ev.key === 'i' || ev.key === 'u')) { ev.preventDefault(); return; } // 서식 없음
     if (ev.altKey && !mod && !ev.shiftKey && (ev.key === 'ArrowUp' || ev.key === 'ArrowDown')) { ev.preventDefault(); movePara(doc, ev.key === 'ArrowUp' ? -1 : 1); return; }
     if (ev.key === 'Escape') { doc.blur(); return; }
@@ -7544,7 +7561,7 @@ function dndUndoTurn(doc, redo) {
 // 다시 실행은 이동만 (삭제를 다시 하려면 다시 지운다)
 document.addEventListener('keydown', ev => {
   const mod = ev.ctrlKey || ev.metaKey, k = ev.key;
-  const isZ = k === 'z' || k === 'Z' || ev.code === 'KeyZ', isY = k === 'y' || k === 'Y' || ev.code === 'KeyY'; // 한글 자판이면 key 가 'ㅋ'·'ㅛ'
+  const isZ = undoKey(ev), isY = redoKey(ev);
   if (!mod || ev.altKey || !(isZ || isY)) return;
   if (!state.show || state.modal || GATE.type) return;
   const t = ev.target;

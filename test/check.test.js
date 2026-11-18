@@ -22,7 +22,7 @@ const plain = o => JSON.parse(JSON.stringify(o)); // vm 쪽 객체는 프로토�
 let n = 0;
 const cue = (dept, body, extra) => Object.assign({ id: 'q' + (++n), dept, trigger: '대사 끝', offsetSec: null, memo: '', status: 'set', [dept]: body }, extra);
 const castCue = (pid, move, extra) => cue('cast', { personId: pid, move, text: '' }, extra);
-const item = (cues, comments) => ({ id: 'i' + (++n), kind: 'action', text: '', cues: cues || [], comments: comments || [] });
+const item = (cues, comments) => ({ id: 'i' + (++n), kind: 'action', text: '(지문)', cues: cues || [], comments: comments || [] });
 const scene = (id, type, cast, items, comments) => ({ id, type, title: id, cast, items, comments: comments || [] });
 const people = { a: '박대훈', b: '조예준', c: '라태형' };
 function input(show, over) {
@@ -162,4 +162,20 @@ test('소품 미지정 무대 큐(v8): 확정 무대 큐에 소품이 없으면 
   const r2 = FE.checkCollect(input(showOf(sc)));
   assert.equal(r2.propsSkip, true);
   assert.deepEqual(plain(r2.groups.find(x => x.k === 'noprops').list), []);
+});
+
+test('빈 문단에 붙은 큐: 큐 지점이 아닌 문단의 본문이 비었으면 "확인" 한 줄(문단마다) + 고치기 [큐 지점으로]', () => {
+  const blank = Object.assign(item([cue('light', { channels: [1], anim: '' }), cue('sound', { track: 1, action: 'play' })]), { text: '  ' });
+  const pt = Object.assign(item([cue('light', { channels: [1], anim: '' })]), { kind: 'cue', text: '' });
+  const noCue = Object.assign(item([]), { text: '' });
+  const s = showOf([scene('s1', 'act', ['a'], [item([cue('light', { channels: [1], anim: '' })]), blank, pt, noCue])], { tracks: [{ id: 't1', no: 1, title: '음악', fileKey: 'f' }] });
+  const r = FE.checkCollect(input(s));
+  const g = r.groups.find(x => x.k === 'emptyq');
+  assert.equal(g.sev, 'check');
+  assert.deepEqual(plain(g.list.map(x => [x.item, x.dept, x.fix])), [[blank.id, 'common', { item: blank.id }]], '큐 지점·큐 없는 빈 문단·본문 있는 문단은 아님');
+  assert.match(g.list[0].text, /빈 문단에 큐 2개 \(조명·음향\)/);
+  assert.match(g.note, /큐 지점으로/);
+  // 확인 건수에 들고, 모든 역할에 보인다(공통)
+  assert.equal(FE.checkFilter(r, 'all').total, 1);
+  assert.equal(keys(FE.checkFilter(r, 'stage')).emptyq, 1);
 });
