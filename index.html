@@ -214,7 +214,7 @@ tr.tbd .cs-num{border-left:2px dashed var(--red)}
 .cs-q{width:30%;min-width:240px}
 .cs-ctx{display:block;font-size:12px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:380px}
 .cs-trig{font-size:12px;color:var(--ink-3);margin:1px 0}
-.cs-text{font-size:14px;line-height:1.6}
+.cs-text{font-size:14px;line-height:1.6;white-space:pre-wrap}
 .cs-text .spk{font-weight:600;font-size:13px;margin-right:5px}
 .cs-text.k-action{color:var(--ink-2)}
 .cs-text .paren{color:var(--ink-3)}
@@ -247,11 +247,11 @@ tr.tbd .cs-num{border-left:2px dashed var(--red)}
 .run-mine.disabled{opacity:.45;cursor:default}
 .run-prog{height:1px;background:var(--rule);margin:10px 0 0}
 .run-prog i{display:block;height:2px;margin-top:-.5px;background:var(--accent)}
-.run-ctx{font-size:14px;color:var(--ink-3);padding:10px 0;overflow-wrap:anywhere}
+.run-ctx{font-size:14px;color:var(--ink-3);padding:10px 0;overflow-wrap:anywhere;white-space:pre-wrap}
 .run-ctx .spk{font-weight:600;font-size:13px;margin-right:5px}
 .run-cur{border-top:2px solid var(--accent);border-bottom:1px solid var(--rule-2);padding:14px 0 6px}
 .run-trig{font-size:13px;color:var(--ink-2)}
-.run-text{font-size:clamp(20px,3.2vw,28px);font-weight:500;letter-spacing:-.015em;line-height:1.5;margin:6px 0 12px;overflow-wrap:anywhere}
+.run-text{font-size:clamp(20px,3.2vw,28px);font-weight:500;letter-spacing:-.015em;line-height:1.5;margin:6px 0 12px;overflow-wrap:anywhere;white-space:pre-wrap}
 .run-text.k-action{color:var(--ink-2)}
 .run-text .spk{font-weight:600;font-size:.62em;letter-spacing:0;margin-right:8px;color:var(--ink-2)}
 .run-cues{border-collapse:collapse;width:100%}
@@ -513,7 +513,7 @@ body.has-player .app{padding-bottom:calc(var(--player-h) + env(safe-area-inset-b
 .ml-it.sel{background:var(--tint)}
 .ml-cue{display:block;font-size:13px;line-height:1.5;color:var(--ink-3);padding:0 0 3px 12px;overflow-wrap:anywhere}
 .ml-cue .spk{font-weight:600;font-size:12px;margin-right:5px}
-.ml-me{display:block;font-size:16px;line-height:1.65;border-left:2px solid var(--accent);padding-left:10px;overflow-wrap:anywhere}
+.ml-me{display:block;font-size:16px;line-height:1.65;border-left:2px solid var(--accent);padding-left:10px;overflow-wrap:anywhere;white-space:pre-wrap}
 .ml-me .spk{font-weight:600;font-size:14px;margin-right:6px}
 .ml-me .paren{color:var(--ink-3)}
 .ml-me.mv{border-left-style:dashed;font-size:14px;color:var(--ink-2)}
@@ -1857,27 +1857,33 @@ function findPerson(name) {
   if (name.length >= 2) { const c = ps.filter(x => x.name.length > name.length && x.name.endsWith(name)); if (c.length === 1) return c[0]; }
   return null;
 }
-// 원문 한 줄 → { kind, head(화자 부분), name, rest }
+// 문단 안 줄바꿈(Shift+Enter, text 의 \n): 화자·동작 판정은 첫 줄만 본다 — 둘째 줄 이후는 대사 본문
+function isActHead(raw) { const s = String(raw || ''), i = s.indexOf('\n'); return ACT_RE.test(i < 0 ? s : s.slice(0, i)); }
+// 원문 → { kind, head(화자 부분), name, rest(첫 줄 나머지 + 둘째 줄 이후) }
 function splitHead(raw) {
-  if (ACT_RE.test(raw)) return { kind: 'action' };
-  let m = SPK_RE.exec(raw);
-  if (m && !/^\d+$/.test(m[2])) return { kind: 'line', head: m[1], name: m[2], rest: m[3] };
-  m = QSPK_RE.exec(raw);
-  if (m && findPerson(m[2])) return { kind: 'line', head: m[1], name: m[2], rest: m[3] };
+  raw = String(raw || '');
+  if (isActHead(raw)) return { kind: 'action' };
+  const i = raw.indexOf('\n'), first = i < 0 ? raw : raw.slice(0, i), more = i < 0 ? '' : raw.slice(i);
+  let m = SPK_RE.exec(first);
+  if (m && !/^\d+$/.test(m[2])) return { kind: 'line', head: m[1], name: m[2], rest: m[3] + more };
+  m = QSPK_RE.exec(first);
+  if (m && findPerson(m[2])) return { kind: 'line', head: m[1], name: m[2], rest: m[3] + more };
   return { kind: 'line' };
 }
 function parenHtml(s) { return escT(s).replace(/\([^()]*\)/g, m => '<span class="paren">' + m + '</span>'); }
 function rawToHtml(raw) {
   if (!raw) return '<br>';
+  // 끝의 \n 만으로는 빈 줄이 그려지지 않아 커서가 안 보인다 — 자리 채움 <br> (textContent 에는 잡히지 않는다)
+  const tail = raw.endsWith('\n') ? '<br>' : '';
   const s = splitHead(raw);
-  if (s.kind === 'action') return escT(raw);
+  if (s.kind === 'action') return escT(raw) + tail;
   // 사람 목록에 없는 이름은 회색 (편집기를 떠날 때 추가/무시를 묻는다)
-  if (s.head) return '<span class="spk' + (findPerson(s.name) ? '' : ' unk') + '">' + escT(s.head) + '</span>' + parenHtml(s.rest);
-  return parenHtml(raw);
+  if (s.head) return '<span class="spk' + (findPerson(s.name) ? '' : ' unk') + '">' + escT(s.head) + '</span>' + parenHtml(s.rest) + tail;
+  return parenHtml(raw) + tail;
 }
 function itemToRaw(it) {
   if (it.kind === 'line' && it.speaker) { const n = IDX.people.get(it.speaker); return (n ? n.name : '삭제된사람') + ': ' + it.text; }
-  if (it.kind === 'action' && it.text && !ACT_RE.test(it.text)) return '(' + it.text + ')';
+  if (it.kind === 'action' && it.text && !isActHead(it.text)) return '(' + it.text + ')';
   return it.text || '';
 }
 // 원문을 Item 에 반영. create=true 면 모르는 화자를 사람으로 추가 (지금은 쓰지 않음 — 모르는 이름은 이름 확인 줄에서 고른다)
@@ -1901,7 +1907,8 @@ function applyParse(it, raw, create, scene) {
 function newItem(kind) { return { id: uid('i'), kind: kind || 'line', speaker: null, text: '', label: null, isCue: false, cues: [], comments: [] }; }
 
 /* ================= 편집기: DOM 도우미 ================= */
-function textOf(p) { return p.textContent.replace(/\u00a0/g, ' ').replace(/\n/g, ' '); }
+// 문단 원문. \n 은 Shift+Enter 로 넣은 문단 안 줄바꿈 (.doc p 는 pre-wrap, <br> 은 textContent 에 안 잡힌다)
+function textOf(p) { return p.textContent.replace(/\u00a0/g, ' ').replace(/\r\n?/g, '\n'); }
 function kindClass(raw) { return splitHead(raw).kind === 'action' && raw ? 'k-action' : ''; }
 function styleP(p, raw) { const k = kindClass(raw); p.classList.toggle('k-action', k === 'k-action'); }
 function mkP(raw) { const p = document.createElement('p'); p.innerHTML = rawToHtml(raw); styleP(p, raw); return p; }
@@ -2233,7 +2240,7 @@ function spkPick(i) {
   let out, caret;
   if (x.t === 'p') { const h = x.p.name + ': '; out = h + body; caret = h.length + at; }
   else if (x.t === 'none') { out = body; caret = at; }
-  else if (ACT_RE.test(body)) { out = body; caret = at; }
+  else if (isActHead(body)) { out = body; caret = at; }
   else { out = '(' + body + ')'; caret = 1 + at; }
   if (out !== raw) { pushUndo(doc, true); setPara(p, out); }
   setCaret(p, Math.min(caret, out.length));
@@ -2314,6 +2321,17 @@ function splitAtCaret(c) {
     setPara(p, raw.slice(0, off));
     const np = mkP(raw.slice(off)); p.after(np); setCaret(np, 0);
   }
+  syncDoc(doc);
+  const cp = selCtx(); if (cp) cp.p.scrollIntoView({ block: 'nearest' });
+}
+// Shift+Enter: 문단을 나누지 않고 같은 문단(같은 화자) 안에서 줄만 바꾼다 — 원문에 \n
+function insertBreak(c) {
+  const doc = c.doc;
+  pushUndo(doc, true);
+  let p = c.p, r = c.r;
+  if (!r.collapsed) { r.deleteContents(); const c2 = selCtx(); if (!c2) return; p = c2.p; r = c2.r; }
+  const raw = textOf(p), off = caretOffset(p, r);
+  setPara(p, raw.slice(0, off) + '\n' + raw.slice(off)); setCaret(p, off + 1);
   syncDoc(doc);
   const cp = selCtx(); if (cp) cp.p.scrollIntoView({ block: 'nearest' });
 }
@@ -2532,7 +2550,7 @@ function queuePaint() { if (paintRaf) return; paintRaf = requestAnimationFrame((
 const RO = typeof ResizeObserver === 'function' ? new ResizeObserver(ents => { ents.forEach(en => { const sh = en.target.closest('.sheet'); if (sh) layoutGutter(sh); }); }) : null;
 function markEmpty(doc) {
   const e = doc.children.length === 1 && !textOf(doc.firstElementChild) && state.edit;
-  if (e) doc.setAttribute('data-empty', '비어 있음 — 여기에 입력 (이름: 대사 / (동작) · Tab 화자 목록)'); else doc.removeAttribute('data-empty');
+  if (e) doc.setAttribute('data-empty', '비어 있음 — 여기에 입력 (이름: 대사 / (동작) · Tab 화자 목록 · Shift+Enter 문단 안 줄바꿈)'); else doc.removeAttribute('data-empty');
 }
 function afterMountScript() {
   $$('#script .doc > p').forEach(p => { p._raw = textOf(p); });
@@ -4021,13 +4039,15 @@ document.addEventListener('compositionend', ev => {
   composing = false;
   if (doc) setTimeout(() => { if (!composing && doc.isConnected) { syncDoc(doc); spkAuto(doc); } }, 0);
 });
+const ENTER = { shift: false }; // 편집기에서 마지막으로 누른 키가 Shift+Enter 인가 (keydown 에서 갱신)
 document.addEventListener('beforeinput', ev => {
   const doc = ev.target.closest && ev.target.closest('.doc'); if (!doc) return;
   const t = ev.inputType || '';
   if (t === 'historyUndo' || t === 'historyRedo') { ev.preventDefault(); undo(doc, t === 'historyRedo'); return; }
   // 화자 자동 목록이 떠 있으면 Enter 는 고르기 (IME 가 조합을 끝내며 보내는 Enter 포함)
   if ((t === 'insertParagraph' || t === 'insertLineBreak') && spkOpenNow() && SPK.doc === doc) { ev.preventDefault(); spkPick(SPK.i); return; }
-  if (t === 'insertParagraph' || t === 'insertLineBreak') { ev.preventDefault(); const c = selCtx(); if (c) splitAtCaret(c); return; }
+  // Enter = 새 문단, Shift+Enter = 문단 안 줄바꿈. inputType 은 브라우저·IME 마다 달라 keydown 에서 본 Shift 로 가른다
+  if (t === 'insertParagraph' || t === 'insertLineBreak') { ev.preventDefault(); const c = selCtx(); if (c) { if (ENTER.shift) insertBreak(c); else splitAtCaret(c); } return; }
   if (t === 'insertFromDrop') { ev.preventDefault(); toast('끌어놓기 대신 잘라내기·붙여넣기를 쓰세요'); return; }
   if (/^delete/.test(t)) {
     const c = selCtx();
@@ -4123,6 +4143,7 @@ document.addEventListener('keydown', ev => {
   if (state.projOpen && ev.key === 'Escape') { state.projOpen = false; renderProj(); const b = $('#proj-btn'); if (b) b.focus(); return; }
   if (ev.key === 'Enter' && t.id === 'pj-new-title') { ev.preventDefault(); act('proj-new', { dataset: { kind: 'blank' } }); return; }
   const doc = t.closest && t.closest('.doc');
+  if (doc) ENTER.shift = ev.key === 'Enter' && ev.shiftKey && !mod && !ev.altKey;
   // 화자 목록: ↑↓ 고르기 · Enter/Tab 확정 · Esc 닫기. IME 조합 중(229) 키는 건드리지 않는다
   const ime = ev.isComposing || ev.keyCode === 229;
   if (doc && spkOpenNow() && !ime) {
