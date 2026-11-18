@@ -143,7 +143,6 @@ input[type=color]{padding:0 2px;width:40px;height:30px;cursor:pointer}
 
 /* ---------- 대본 (문서 편집기) ---------- */
 .script{max-width:780px;padding:4px 0 0 var(--gut)}
-.with-cues .script{max-width:1100px}
 .preshow{font-size:13px;color:var(--ink-2);padding:14px 0 0;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
 .ce{outline:0;min-width:2em}
 .ce:empty::before{content:attr(data-ph);color:var(--ink-3)}
@@ -174,7 +173,6 @@ input[type=color]{padding:0 2px;width:40px;height:30px;cursor:pointer}
 .sc-props input:focus{border-bottom-color:var(--accent)}
 .cast-edit{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center}
 .sheet{position:relative;margin-top:12px}
-.with-cues .sheet{margin-right:290px}
 .gutter{position:absolute;left:calc(-1 * var(--gut));top:0;width:calc(var(--gut) - 10px)}
 .g{position:absolute;left:0;right:0;display:flex;flex-direction:column;align-items:flex-end;border-right:2px solid transparent;padding-right:7px}
 .g.has-q{border-right-color:var(--accent)}
@@ -194,8 +192,6 @@ input[type=color]{padding:0 2px;width:40px;height:30px;cursor:pointer}
 .doc p.sel{background:var(--tint)}
 .ro .doc p.sel{background:none}
 .doc p.dim{color:var(--ink-3)}
-.doc p[data-sum]::after{display:none}
-.with-cues .doc p[data-sum]::after{content:attr(data-sum);display:block;position:absolute;left:calc(100% + 22px);top:6px;width:268px;font-size:12px;line-height:1.45;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:1px solid var(--accent);padding-left:8px}
 .ro{--gut:52px}
 .ro .g-open{font-size:10px;padding-top:7px}
 .doc[data-empty]::before{content:attr(data-empty);position:absolute;left:0;top:2px;color:var(--ink-3);pointer-events:none}
@@ -204,6 +200,9 @@ input[type=color]{padding:0 2px;width:40px;height:30px;cursor:pointer}
 .qlayer{position:absolute;left:0;right:0;top:0;height:0;z-index:1}
 .qb{position:absolute;left:0;right:4px;display:block;padding:2px 0 2px;text-align:left}
 .doc p.has-qb{padding-top:calc(var(--qh, 0px) + 1px);margin-top:10px}
+/* 큐 숨기기: 큐 줄과 그 자리(--qh 여백)를 빼고 대사만 — 거터의 Q 번호는 남긴다 */
+.hide-cues .qlayer{display:none}
+.hide-cues .doc p.has-qb{padding-top:2px;margin-top:0}
 .ql{display:grid;grid-template-columns:2.4em minmax(0,1fr);column-gap:10px;align-items:baseline;font-size:14px;line-height:1.5;color:var(--ink)}
 .ql .qd{font-size:12px;font-weight:600;white-space:nowrap;color:var(--ink-2)}
 .ql.d-cast .qd{color:var(--q-cast)}
@@ -561,8 +560,8 @@ body.has-player .app{padding-bottom:calc(var(--player-h) + env(safe-area-inset-b
 .doc p.mine::before,.doc p.mycue::before{content:"";position:absolute;left:-6px;top:0;bottom:0;border-left:2px solid var(--accent)}
 .doc p.mycue:not(.mine)::before{border-left-style:dashed}
 .doc p.other{color:var(--ink-3)}
-.app:not(.with-cues) .doc p[data-mv]{padding-right:48px}
-.app:not(.with-cues) .doc p[data-mv]::after{content:attr(data-mv);display:block;position:absolute;right:0;top:7px;font-family:var(--mono);font-size:11px;line-height:1.3;color:var(--accent)}
+.app .doc p[data-mv]{padding-right:48px}
+.app .doc p[data-mv]::after{content:attr(data-mv);display:block;position:absolute;right:0;top:7px;font-family:var(--mono);font-size:11px;line-height:1.3;color:var(--accent)}
 .print-h{display:none}
 /* 내 대사만 (배우 큐 대본) */
 .ml{max-width:780px;padding:0}
@@ -655,8 +654,6 @@ body.has-player .app{padding-bottom:calc(var(--player-h) + env(safe-area-inset-b
 /* ---------- 반응형 ---------- */
 @media (max-width:1100px){
   .panel{position:fixed;right:0;top:0;bottom:0;z-index:40;width:min(380px,100%);background:var(--paper);border-left:1px solid var(--rule-2);padding:calc(12px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) 16px}
-  .with-cues .sheet{margin-right:0}
-  .with-cues .doc p[data-sum]::after{position:static;width:auto;white-space:normal;margin:2px 0 4px}
 }
 @media (max-width:820px){
   .nav-toggle{display:inline}
@@ -699,8 +696,6 @@ body.has-player .app{padding-bottom:calc(var(--player-h) + env(safe-area-inset-b
   .part-h{break-after:avoid}
   .scene{break-inside:avoid}
   .doc p.sel,.cs-table tbody tr.sel td{background:none}
-  .with-cues .sheet{margin-right:0}
-  .with-cues .doc p[data-sum]::after{position:static;width:auto;white-space:normal;margin:2px 0 4px}
   .table-wrap{overflow:visible}
   .cs-table{min-width:0;font-size:10.5px}
   .cs-table th,.cs-table td{padding:4px 6px;border-bottom:1px solid #999}
@@ -740,7 +735,7 @@ body.has-player .app{padding-bottom:calc(var(--player-h) + env(safe-area-inset-b
     <div class="tools-r">
       <button type="button" class="tb pl-mini" id="pl-reopen" data-act="pl-open" hidden></button>
       <label class="chk" id="mylines-wrap" for="mylines" hidden><input type="checkbox" id="mylines" data-act="mylines">내 대사만</label>
-      <label class="chk" id="cueview-wrap" for="cueview"><input type="checkbox" id="cueview" data-act="cueview">큐 함께 보기</label>
+      <label class="chk" id="hidecues-wrap" for="hidecues"><input type="checkbox" id="hidecues" data-act="hidecues">큐 숨기기</label>
       <label class="sr-only" for="role-sel">역할 선택</label><select id="role-sel" class="role-sel" data-act="role-sel"></select>
       <span class="mode" id="mode-seg" role="group" aria-label="편집·보기 전환"></span>
       <button type="button" class="tb" id="btn-comments" data-act="panel-toggle" aria-controls="panel"></button>
@@ -1136,7 +1131,7 @@ function applySnap(it, snap) {
 
 /* ================= 상태 ================= */
 const state = {
-  show: null, view: 'script', role: 'all', edit: true, cueView: false,
+  show: null, view: 'script', role: 'all', edit: true, hideCues: false,
   panel: false, panelTab: 'item', panelFocus: null, unresolvedOnly: false, selItem: null,
   author: '', commentDraft: '', runItemId: null, runMine: false,
   modal: null, menuOpen: false, navOpen: false, curScene: null, sceneEdit: null,
@@ -2020,7 +2015,7 @@ function loadPrefs() {
       if (typeof p.role === 'string') state.role = p.role;
       if (typeof p.author === 'string') state.author = p.author;
       if (typeof p.runItemId === 'string') { state.runItemId = p.runItemId; Srv.localRun = p.runItemId; }
-      state.runMine = !!p.runMine; state.panel = !!p.panel; state.cueView = !!p.cueView; state.myLines = !!p.myLines;
+      state.runMine = !!p.runMine; state.panel = !!p.panel; state.hideCues = !!p.hideCues; state.myLines = !!p.myLines; // 예전 cueView(요약 열)는 읽지 않는다 — 다음 저장 때 빠진다
       if (typeof p.edit === 'boolean') state.edit = p.edit;
       if (typeof p.vol === 'number' && p.vol >= 0 && p.vol <= 1) AU.vol = p.vol;
       if (THEMES.includes(p.theme)) state.theme = p.theme;
@@ -2035,7 +2030,7 @@ function loadPrefs() {
   // 처음 쓰는 브라우저: 지금 이후 코멘트만 "새"
   if (!state.lastSeen) { state.lastSeen = new Date().toISOString(); savePrefs(); }
   const h = (location.hash || '').slice(1);
-  if (h === 'split') { state.view = 'script'; state.cueView = true; }
+  if (h === 'split') state.view = 'script'; // 예전 "큐 함께 보기" 링크 — 큐 줄은 이제 대본에 늘 보인다
   else state.view = VIEWS.includes(h) ? h : 'script';
 }
 let saveT = null;
@@ -2065,7 +2060,7 @@ function savePrefs() {
   const srv = Store.mode === 'server';
   if (srv && Srv.showId && state.show) Srv.runPos[Srv.showId] = state.runItemId;
   if (!srv) Srv.localRun = state.runItemId;
-  lsSet(KEY_PREF, JSON.stringify({ role: state.role, author: state.author, runItemId: Srv.localRun, runMine: state.runMine, panel: state.panel, cueView: state.cueView, myLines: state.myLines, edit: state.edit, vol: AU.vol, theme: state.theme, booth: state.booth, autoCd: state.autoCd, lastSeenComments: state.lastSeen,
+  lsSet(KEY_PREF, JSON.stringify({ role: state.role, author: state.author, runItemId: Srv.localRun, runMine: state.runMine, panel: state.panel, hideCues: state.hideCues, myLines: state.myLines, edit: state.edit, vol: AU.vol, theme: state.theme, booth: state.booth, autoCd: state.autoCd, lastSeenComments: state.lastSeen,
     appKey: Srv.key, currentShowId: Srv.showId, runPos: Srv.runPos }));
 }
 function commit() { save(); render(); }
@@ -2913,20 +2908,11 @@ function layoutCues(sheet) {
   });
   want.forEach((b, p) => { b.style.top = p.offsetTop + 'px'; });
 }
-function cueSumLine(it) {
-  const cs = it.cues.filter(cueMine);
-  if (!cs.length) return '';
-  const tr = trigLabels(cs);
-  return (tr.length ? '↳ ' + tr.join(' / ') + ' — ' : '') + cs.map(c => DEPT_L[c.dept] + ' ' + cueSummary(c) + (c.status === 'tbd' ? ' (미정)' : '')).join(' / ');
-}
 // 출연자 시점: mine = 내 대사, mycue = 내 인/아웃 큐가 붙은 문단(data-mv = IN/OUT), other = 남의 대사
 function decorateParas(root) {
   const p0 = rolePerson();
   $$('.doc > p[data-id]', root || document).forEach(p => {
     const it = ITEMS.get(p.dataset.id); if (!it) return;
-    const sum = it.cues.length ? cueSumLine(it) : '';
-    if (sum) { if (p.getAttribute('data-sum') !== sum) p.setAttribute('data-sum', sum); }
-    else if (p.hasAttribute('data-sum')) p.removeAttribute('data-sum');
     p.classList.toggle('sel', state.selItem === it.id);
     const cs = myCastCues(it, p0), mv = cs.map(c => MOVES[c.cast.move] + (c.status === 'tbd' ? '?' : '')).join('·');
     p.classList.toggle('mine', isMyLine(it, p0));
@@ -3808,8 +3794,8 @@ function renderTop() {
   const ml = myLinesOn();
   $('#mylines-wrap').hidden = !(state.view === 'script' && rolePerson());
   $('#mylines').checked = state.myLines;
-  $('#cueview-wrap').hidden = state.view !== 'script' || ml;
-  $('#cueview').checked = state.cueView;
+  $('#hidecues-wrap').hidden = state.view !== 'script' || ml;
+  $('#hidecues').checked = state.hideCues;
   const open = allComments().filter(x => !x.c.resolved).length;
   const b = $('#btn-comments');
   b.innerHTML = `코멘트${open ? `<span class="count">${open}</span>` : ''}`;
@@ -3827,7 +3813,7 @@ function renderTop() {
   const ud = $('#menu-undo-del'), last = DEL[DEL.length - 1];
   ud.disabled = !last;
   if (!ud.classList.contains('armed')) ud.textContent = last ? `마지막 삭제 되돌리기 (${last.label})` : '마지막 삭제 되돌리기';
-  $('#app').classList.toggle('with-cues', state.view === 'script' && state.cueView && !ml);
+  $('#app').classList.toggle('hide-cues', state.view === 'script' && state.hideCues && !ml);
   renderRev();
   // 큐 이동 모드 안내 바
   const mb = $('#movebar'), mv = state.moveCue && moveCueInfo();
@@ -5202,7 +5188,7 @@ document.addEventListener('change', ev => {
   }
   if (t.id === 'pl-vol') return;
   if (a === 'role-sel') { state.role = t.value || 'all'; savePrefs(); render(); }
-  else if (a === 'cueview') { state.cueView = t.checked; savePrefs(); renderTop(); refreshScript(); }
+  else if (a === 'hidecues') { state.hideCues = t.checked; savePrefs(); renderTop(); refreshScript(); }
   else if (a === 'mylines') {
     flushSave(); state.myLines = t.checked; savePrefs(); render();
     const sc = state.curScene && document.getElementById('sc-' + state.curScene); if (sc) sc.scrollIntoView({ block: 'start' });
