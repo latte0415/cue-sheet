@@ -31,7 +31,7 @@ test('편집 비밀번호: 키 없음·틀림 403, 기본 1234, 읽기·새 프�
     assert.equal(list.find(x => x.id === id).editDefault, true);
     r = await fetch(`${P.base}/api/shows/${id}`, { headers: A });
     assert.equal(r.status, 200, '읽기는 편집 키 없이');
-    assert.deepEqual(Object.keys(await r.json()).sort(), ['rev', 'show', 'updatedAt'], 'GET 에 비밀번호 정보가 섞이지 않는다');
+    assert.deepEqual(Object.keys(await r.json()).sort(), ['by', 'rev', 'show', 'updatedAt', 'via'], 'GET 에 비밀번호 정보가 섞이지 않는다 (by·via 는 수정자 기록)');
 
     const W = (h, method, p, body) => fetch(`${P.base}/api/shows/${id}${p || ''}`, { method, headers: { ...A, 'Content-Type': 'application/json', ...h }, body: body === undefined ? undefined : JSON.stringify(body) });
     for (const h of [{}, K('9999')]) {
@@ -153,7 +153,7 @@ test('기록(HTTP): 목록은 보기 권한, 내용·복원은 편집. 최근 N 
     // 현재 rev 6 + 직전 3개(rev 5,4,3)
     let list = await (await H()).json();
     assert.deepEqual(list.map(x => x.rev), [6, 5, 4, 3]);
-    assert.deepEqual(Object.keys(list[0]).sort(), ['cueCount', 'current', 'restoredFrom', 'rev', 'sceneCount', 'title', 'updatedAt']);
+    assert.deepEqual(Object.keys(list[0]).sort(), ['by', 'cueCount', 'current', 'restoredFrom', 'rev', 'sceneCount', 'title', 'updatedAt', 'via']);
     assert.deepEqual([list[1].title, list[1].sceneCount, list[1].cueCount, list[1].current], ['v5', 2, 0, false]);
     assert.deepEqual([list[2].sceneCount, list[2].cueCount], [1, 2]);
     assert.equal(fs.readdirSync(path.join(P.dir, 'shows', id, 'history')).length, 3, '오래된 것은 지운다');
@@ -174,6 +174,7 @@ test('기록(HTTP): 목록은 보기 권한, 내용·복원은 편집. 최근 N 
     assert.deepEqual(await r.json().then(x => [x.rev, x.restoredFrom]), [7, 4]);
     let g = await (await fetch(`${P.base}/api/shows/${id}`)).json();
     assert.deepEqual([g.rev, g.show.title, g.restoredFrom], [7, 'v4', 4]);
+    assert.deepEqual([g.by, g.via], ['브라우저', 'restore'], '웹 앱 복원은 브라우저·restore 로 기록');
     list = await (await H()).json();
     assert.deepEqual(list.map(x => x.rev), [7, 6, 5, 4], '복원 직전(rev 6)도 남아 복원을 되돌릴 수 있다');
     assert.equal((await R({ rev: 6 })).status, 200);

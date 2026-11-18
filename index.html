@@ -390,6 +390,14 @@ kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--rule-2);paddin
 .ag-h{display:flex;align-items:baseline;gap:10px;margin-bottom:6px}
 .ag-h h3{margin:0;font-size:13px;font-weight:600;flex:1}
 .ag-pre{margin:0 0 6px;padding:8px 0;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);font:12px/1.6 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere}
+.ag-h h4{margin:0;font-size:12px;font-weight:400;color:var(--ink-2);flex:1}
+.ag-sub{margin-top:14px}
+.ag-blk>.ag-sub:first-child,.ag-blk>.ag-h+.ag-sub,.ag-once+.ag-sub{margin-top:0}
+.ag-new{display:flex;gap:10px;align-items:center}
+.ag-new input{flex:1}
+.ag-once{margin:0 0 10px;padding-left:10px;border-left:2px solid var(--accent);font-size:13px}
+.ag-tbl td:last-child{text-align:right;padding-right:0}
+.ag-tbl .n{text-align:left;padding-right:10px;white-space:nowrap}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + var(--player-h, 0px) + env(safe-area-inset-bottom, 0px));z-index:80;background:var(--ink);color:var(--paper);padding:8px 14px;font-size:13px;max-width:calc(100vw - 32px)}
 body.has-player{--player-h:44px}
 body.has-player .app{padding-bottom:calc(var(--player-h) + env(safe-area-inset-bottom, 0px))}
@@ -3792,16 +3800,131 @@ function cueModalBody() {
   if (m.err) h += `<p class="err" role="alert">${esc(m.err)}</p>`;
   return h;
 }
-function agentText(k, mask) {
-  const o = location.origin + '/mcp', key = Srv.key ? (mask ? '•'.repeat(Math.min(Srv.key.length, 12)) : Srv.key) : '';
+// 연결 명령. key = 사람별 토큰(cue_…) 또는 사이트 비밀번호, ek = 편집 비밀번호(이미 URL 인코딩한 값). 화면에 가릴 때는 가린 문자열, 없으면 그 헤더 없이
+function agentText(k, key, ek) {
+  const o = location.origin + '/mcp';
   // 비밀번호에 $ ` " \ ' 같은 기호가 있어도 붙여 넣은 그대로 전달되게: 셸은 작은따옴표로 감싸고(' 는 '\''), TOML 은 \ 와 " 를 이스케이프
   const shq = s => "'" + String(s).replace(/'/g, "'\\''") + "'";
   const tomlq = s => '"' + String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
-  // 편집 비밀번호(이 브라우저가 아는 지금 프로젝트의 것)가 있으면 X-Edit-Key 헤더도 — 없으면 에이전트는 읽기만 된다. 헤더라 URL 인코딩
-  const ek = editKey() ? (mask ? '•'.repeat(Math.min(editKey().length, 12)) : enc(editKey())) : '';
+  // 편집 비밀번호(이 브라우저가 아는 지금 프로젝트의 것)가 있으면 X-Edit-Key 헤더도 — 없으면 에이전트는 읽기만 된다 (agentEk)
   if (k === 'claude') return `claude mcp add --transport http cue-sheet ${shq(o)}` + (key ? ` --header ${shq('Authorization: Bearer ' + key)}` : '') + (ek ? ` --header ${shq('X-Edit-Key: ' + ek)}` : '');
   const hs = (key ? [`"Authorization" = ${tomlq('Bearer ' + key)}`] : []).concat(ek ? [`"X-Edit-Key" = ${tomlq(ek)}`] : []);
   return `[mcp_servers.cue-sheet]\nurl = ${tomlq(o)}` + (hs.length ? `\nhttp_headers = { ${hs.join(', ')} }` : '');
+}
+// 에이전트 연결 모달. 비밀번호 있는 서버: 사람별 토큰 발급·목록·폐기가 기본이고, 사이트 비밀번호 연결은 접어 둔다.
+// 발급한 토큰 원문은 서버가 발급 응답에서 한 번만 주므로 이 모달이 열려 있는 동안만 m.issued 에 둔다
+// 가린 표시용 / 복사용 비밀번호 문자열
+function agentMask(k) { return k ? '•'.repeat(Math.min(k.length, 12)) : ''; }
+// 연결 설정에 넣을 X-Edit-Key 값 (헤더라 URL 인코딩). src 가 issued 면 "편집 비밀번호 포함" 선택을 따른다
+function agentEk(m, src, raw) {
+  if (!editKey() || (src === 'issued' && m && m.withEdit === false)) return '';
+  return raw || (m && m.reveal) ? enc(editKey()) : agentMask(editKey());
+}
+function agentModalBody(m) {
+  // src: 복사할 때 원문을 어디서 가져올지 (issued = 방금 발급한 토큰, master = 사이트 비밀번호, open = 키 없음)
+  // 하위 블록(토큰·Claude Code·Codex)마다 ag-sub 로 감싸 위아래 간격을 둔다 — 앞 블록의 안내 문장이 다음 제목에 붙어 보이지 않게
+  const sub = (k, src, key, h, after) => `<div class="ag-sub"><div class="ag-h"><h4>${h}</h4><button type="button" class="tb" data-act="agent-copy" data-k="${k}" data-src="${src}">복사</button></div><pre class="ag-pre">${esc(k === 'token' ? key : agentText(k, key, agentEk(m, src)))}</pre>${after || ''}</div>`;
+  const setup = (src, key) => sub('claude', src, key, 'Claude Code — 터미널에서 실행', '<p class="note">연결 확인: Claude Code 에서 /mcp 입력</p>') + sub('codex', src, key, 'Codex — ~/.codex/config.toml 에 추가');
+  const ask = '<section class="ag-blk"><div class="ag-h"><h3>이렇게 요청하세요</h3></div><p class="note">「백스테이지」 큐시트에서 2장 첫 대사 화자를 ○○로 바꿔줘</p><p class="note">잘못 고쳤다면 “방금 수정 되돌려줘” 라고 말하면 됩니다.</p></section>';
+  // 편집 비밀번호: 토큰·사이트 비밀번호와 별개로, 고치기(저장·복원)에는 그 프로젝트의 편집 비밀번호가 X-Edit-Key 로 필요하다
+  const editNote = `<p class="note" id="ag-edit-note">${editKey() ? `고치기(편집)에는 토큰과 별도로 이 프로젝트(${esc(state.show.title) || '제목 없음'})의 편집 비밀번호가 필요해 설정에 X-Edit-Key 로 들어갑니다. 다른 프로젝트는 그 프로젝트의 편집 비밀번호를 알려 주거나 이 줄을 바꾸세요. 편집 비밀번호를 바꾸면 이 설정도 다시 복사하세요.` : '지금은 편집 잠금 상태라 에이전트는 읽기만 할 수 있습니다. 고치게 하려면 먼저 편집 잠금을 해제한 뒤 다시 여세요.'}</p>`;
+  const reveal = `<label class="chk"><input type="checkbox" data-act="agent-reveal" ${m.reveal ? 'checked' : ''}>비밀번호 표시</label>`;
+  if (!Srv.hasPassword) {
+    return `<p class="note">Claude Code·Codex 같은 에이전트가 이 큐시트를 읽고 고치게 연결합니다. 이 서버는 사이트 비밀번호 없이 열려 있어 토큰 없이 연결되고, 수정 기록에는 “익명”으로 남습니다.</p>
+      ${editNote}${editKey() ? reveal : ''}<section class="ag-blk">${setup('open', '')}</section>${ask}`;
+  }
+  let h = `<p class="note">Claude Code·Codex 같은 에이전트가 이 큐시트를 읽고 고치게 연결합니다. 쓸 사람마다 토큰을 발급하세요 — 수정 기록에 그 이름이 남고, 필요 없어지면 그 토큰만 폐기할 수 있습니다. 설정에는 비밀번호가 들어 있으니 다른 사람에게 보여 주지 마세요.</p>
+    ${editNote}${editKey() || m.admin ? reveal : ''}
+    <section class="ag-blk"><div class="ag-h"><h3>토큰 발급</h3></div>
+      ${m.needAdmin ? `<div class="field" style="margin-bottom:8px"><label for="ag-admin-key">관리자 키 (발급·폐기에 필요)</label><input type="password" id="ag-admin-key" data-f="ag.adminKey" autocomplete="off" value="${esc(m.adminKey)}"></div>` : ''}
+      <div class="ag-new"><label class="sr-only" for="ag-name">쓸 사람 이름</label><input type="text" id="ag-name" data-f="ag.name" maxlength="40" autocomplete="off" placeholder="쓸 사람 이름 (예: 김민수)" value="${esc(m.name)}"><button type="button" class="btn" id="ag-issue" data-act="agent-issue" ${m.busy ? 'disabled' : ''}>발급</button></div>
+      ${m.tokErr ? `<p class="err" role="alert">${esc(m.tokErr)}</p>` : ''}
+    </section>`;
+  if (m.issued) {
+    const t = m.issued.token;
+    h += `<section class="ag-blk" id="ag-issued"><div class="ag-h"><h3>${esc(m.issued.name)} — 연결 설정</h3></div>
+      <p class="ag-once" role="status">이 토큰은 지금 한 번만 표시됩니다. 창을 닫기 전에 복사해 전해 주세요.</p>
+      ${editKey() ? `<label class="chk" style="margin-bottom:6px"><input type="checkbox" data-act="agent-withedit" ${m.withEdit !== false ? 'checked' : ''}>이 프로젝트 편집 비밀번호도 넣기 (빼면 읽기만)</label>` : ''}
+      ${sub('token', 'issued', t, '토큰')}${setup('issued', t)}</section>`;
+  }
+  h += '<section class="ag-blk"><div class="ag-h"><h3>발급한 토큰</h3></div>';
+  if (m.listErr) h += `<p class="err" role="alert">${esc(m.listErr)}</p>`;
+  if (!m.tokens) h += '<p class="note">불러오는 중…</p>';
+  else if (!m.tokens.length) h += '<p class="note">아직 없습니다.</p>';
+  else {
+    h += `<table class="ltable ag-tbl"><thead><tr><th>이름</th><th>발급</th><th>마지막 사용</th><th><span class="sr-only">폐기</span></th></tr></thead><tbody>${m.tokens.map(x => `<tr>
+      <td>${esc(x.name)}</td><td class="n">${esc(fmtTime(x.createdAt))}</td><td class="n">${x.lastUsedAt ? esc(fmtTime(x.lastUsedAt)) : '—'}</td>
+      <td><button type="button" class="tb red" data-act="agent-revoke" data-id="${esc(x.id)}" data-confirm="정말 폐기? (연결 끊김)" aria-label="${esc(x.name)} 토큰 폐기">폐기</button></td></tr>`).join('')}</tbody></table>`;
+  }
+  h += '</section>';
+  h += `<section class="ag-blk"><div class="ag-h"><h3>사이트 비밀번호로 연결</h3><button type="button" class="tb" id="ag-admin" data-act="agent-admin" aria-expanded="${m.admin ? 'true' : 'false'}">${m.admin ? '접기' : '펼치기'}</button></div>
+    <p class="note">팀 공용 사이트 비밀번호를 그대로 쓰는 방법입니다. 기록에는 “사이트 비밀번호”로 남아 누가 고쳤는지 구분되지 않고, 비밀번호를 바꾸기 전에는 끊을 수 없습니다.</p>
+    ${m.admin ? setup('master', m.reveal ? Srv.key : agentMask(Srv.key)) : ''}</section>`;
+  return h + ask;
+}
+// 토큰 목록 다시 읽기 (모달이 그대로일 때만 반영)
+async function agentLoadTokens() {
+  const m0 = state.modal;
+  let r = null;
+  try { r = await api('GET', '/tokens'); } catch (e) { r = null; }
+  const m = state.modal; if (!m || m !== m0) return;
+  if (r && r.status === 200 && Array.isArray(r.data)) { m.tokens = r.data; m.listErr = ''; }
+  else { m.tokens = m.tokens || []; m.listErr = '토큰 목록을 불러오지 못했습니다' + (r ? ` (HTTP ${r.status})` : ''); }
+  agentRerender();
+}
+// ADMIN_KEY 가 있는 서버는 토큰 발급·폐기에 관리자 키가 필요하다(403 admin_forbidden 으로 알게 된다). 키는 이 모달에만 두고 저장하지 않는다
+function agentAdminHeaders(m) { return m.adminKey ? { 'X-Admin-Key': enc(m.adminKey) } : {}; }
+function agentAdminDenied(m, r) {
+  if (!r || !(r.status === 403 || r.status === 429) || !r.data || !/^(admin_forbidden|too_many_attempts)$/.test(r.data.error)) return false;
+  m.needAdmin = true; return true;
+}
+function agentAdminMsg(r, sent) {
+  if (r.data.error === 'too_many_attempts') return `관리자 키를 너무 많이 틀렸습니다 — 잠시 후(${r.data.retryAfter || 60}초 뒤) 다시 하세요`;
+  if (sent) return '관리자 키가 맞지 않습니다';
+  return '이 서버는 토큰 발급·폐기에 관리자 키(ADMIN_KEY)가 필요합니다 — 관리자 키를 넣고 다시 누르세요';
+}
+async function agentIssue() {
+  const m = state.modal; if (!m || m.type !== 'agent' || m.busy) return;
+  const name = String(m.name || '').trim();
+  if (!name) { m.tokErr = '쓸 사람 이름을 입력하세요'; agentRerender('ag-name'); return; }
+  m.busy = true; m.tokErr = ''; agentRerender();
+  let r = null;
+  try { r = await api('POST', '/tokens', { name }, agentAdminHeaders(m)); } catch (e) { r = null; }
+  if (state.modal !== m) return;
+  m.busy = false;
+  if (agentAdminDenied(m, r)) { m.tokErr = agentAdminMsg(r, !!m.adminKey); agentRerender('ag-admin-key'); return; }
+  if (r && r.status === 201 && r.data && r.data.token) {
+    m.issued = r.data; m.name = '';
+    m.tokens = (m.tokens || []).concat({ id: r.data.id, name: r.data.name, createdAt: r.data.createdAt, lastUsedAt: null });
+    agentRerender();
+    const sec = $('#ag-issued'); if (sec && sec.scrollIntoView) sec.scrollIntoView({ block: 'nearest' });
+  } else {
+    m.tokErr = (r && r.data && r.data.message) || ('발급하지 못했습니다' + (r ? ` (HTTP ${r.status})` : ' — 네트워크를 확인하세요'));
+    agentRerender('ag-name');
+  }
+}
+async function agentRevoke(id) {
+  const m = state.modal; if (!m || m.type !== 'agent') return;
+  let r = null;
+  try { r = await api('DELETE', '/tokens/' + enc(id), undefined, agentAdminHeaders(m)); } catch (e) { r = null; }
+  if (state.modal !== m) return;
+  if (agentAdminDenied(m, r)) { m.listErr = agentAdminMsg(r, !!m.adminKey); agentRerender('ag-admin-key'); return; }
+  if (r && (r.status === 200 || r.status === 404)) {
+    const row = (m.tokens || []).find(x => x.id === id);
+    m.tokens = (m.tokens || []).filter(x => x.id !== id);
+    if (m.issued && m.issued.id === id) m.issued = null;
+    agentRerender();
+    toast(`${row ? row.name + ' — ' : ''}토큰을 폐기했습니다`);
+  } else { m.listErr = (r && r.data && r.data.message) || ('폐기하지 못했습니다' + (r ? ` (HTTP ${r.status})` : ' — 네트워크를 확인하세요')); agentRerender(); }
+}
+// 다시 그려도 입력 칸의 포커스·커서를 지킨다 (목록이 늦게 와도 이름 입력이 끊기지 않게)
+function agentRerender(focusId) {
+  const a = document.activeElement, typing = a && (a.id === 'ag-name' || a.id === 'ag-admin-key');
+  const id = focusId || (typing ? a.id : null);
+  const sel = typing && id === a.id ? [a.selectionStart, a.selectionEnd] : null;
+  renderModal();
+  const el = id && $('#' + id);
+  if (el) { el.focus(); if (sel) try { el.setSelectionRange(sel[0], sel[1]); } catch (e) { /* 무시 */ } }
 }
 function renderModal(focusFirst) {
   const root = $('#modal-root'), m = state.modal;
@@ -3821,14 +3944,7 @@ function renderModal(focusFirst) {
       <button type="button" class="btn" data-act="modal-close">닫기</button><button type="button" class="btn strong" id="btn-copy" data-act="copy-json">복사</button>`;
   } else if (m.type === 'agent') {
     title = '에이전트 연결';
-    const hasKey = !!Srv.key || !!editKey(), shown = k => !hasKey || m.reveal ? k : '•'.repeat(Math.min(k.length, 12));
-    const blk = (k, h, extra) => `<section class="ag-blk"><div class="ag-h"><h3>${h}</h3><button type="button" class="tb" data-act="agent-copy" data-k="${k}">복사</button></div><pre class="ag-pre">${esc(agentText(k, !m.reveal))}</pre>${extra || ''}</section>`;
-    body = `<p class="note">Claude Code·Codex 같은 에이전트가 이 큐시트를 읽고 고치게 연결합니다. 아래를 터미널이나 설정 파일에 붙여 넣으세요.${hasKey ? ' 비밀번호가 들어 있으니 다른 사람에게 보여 주지 마세요.' : ''}</p>
-      ${hasKey ? `<label class="chk"><input type="checkbox" data-act="agent-reveal" ${m.reveal ? 'checked' : ''}>비밀번호 표시</label>` : ''}
-      <p class="note" id="ag-edit-note">${editKey() ? `고치기(편집)에는 이 프로젝트(${esc(state.show.title) || '제목 없음'})의 편집 비밀번호가 X-Edit-Key 로 들어갑니다. 다른 프로젝트는 그 프로젝트의 편집 비밀번호를 알려 주거나 이 줄을 바꾸세요. 편집 비밀번호를 바꾸면 이 설정도 다시 복사하세요.` : '지금은 편집 잠금 상태라 에이전트는 읽기만 할 수 있습니다. 고치게 하려면 먼저 편집 잠금을 해제한 뒤 다시 여세요.'}</p>
-      ${blk('claude', 'Claude Code', '<p class="note">연결 확인: Claude Code 에서 /mcp 입력</p>')}
-      ${blk('codex', 'Codex — ~/.codex/config.toml 에 추가')}
-      <section class="ag-blk"><div class="ag-h"><h3>이렇게 요청하세요</h3></div><p class="note">「백스테이지」 큐시트에서 2장 첫 대사 화자를 ○○로 바꿔줘</p><p class="note">잘못 고쳤다면 “방금 수정 되돌려줘” 라고 말하면 됩니다.</p></section>`;
+    body = agentModalBody(m);
     foot = '<button type="button" class="btn" data-act="modal-close">닫기</button>';
   } else if (m.type === 'import') {
     title = 'JSON 가져오기';
@@ -4043,6 +4159,8 @@ document.addEventListener('keydown', ev => {
 function modalField(t) {
   const m = state.modal; if (!m || !t.dataset.f) return;
   const f = t.dataset.f, d = m.draft, v = t.value;
+  if (f === 'ag.adminKey') { m.adminKey = v; return; }
+  if (f === 'ag.name') { m.name = v; if (m.tokErr) { m.tokErr = ''; const e = $('.modal-b .ag-blk .err'); if (e) e.remove(); } return; }
   if (f === 'trigger' || f === 'memo') d[f] = v;
   else if (f === 'itemText') m.itemText = v;
   else if (f === 'offsetSec') d.offsetSec = num(v);
@@ -4573,9 +4691,19 @@ function act(a, el) {
     case 'm-ch-del': state.modal.draft.light.channels.splice(Number(el.dataset.i), 1); renderModal(); break;
     case 'm-save': saveCue(); break;
     case 'm-del': { const m = state.modal; const ok = deleteCue(m.itemId, m.cueId); closeModal(true); commit(); if (ok) delToast('큐를 삭제했습니다'); break; }
-    case 'agent-open': state.menuOpen = false; renderTop(); state.modal = { type: 'agent', reveal: false }; renderModal(); break;
+    case 'agent-open':
+      state.menuOpen = false; renderTop();
+      state.modal = { type: 'agent', reveal: false, admin: false, name: '', tokens: null, issued: null, busy: false, tokErr: '', listErr: '', needAdmin: false, adminKey: '' };
+      renderModal();
+      if (Srv.hasPassword) agentLoadTokens();
+      break;
+    case 'agent-issue': agentIssue(); break;
+    case 'agent-revoke': agentRevoke(el.dataset.id); break;
+    case 'agent-admin': if (state.modal) { state.modal.admin = !state.modal.admin; renderModal(); const b = $('#ag-admin'); if (b) b.focus(); } break;
     case 'agent-copy': {
-      const txt = agentText(el.dataset.k, false);
+      const m = state.modal, src = el.dataset.src;
+      const key = src === 'issued' ? (m && m.issued ? m.issued.token : '') : src === 'master' ? Srv.key : '';
+      const txt = el.dataset.k === 'token' ? key : agentText(el.dataset.k, key, agentEk(m, src, true));
       const fallback = () => {
         const ta = document.createElement('textarea'); ta.value = txt; ta.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(ta); ta.select();
         let ok = false; try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
@@ -4667,6 +4795,7 @@ document.addEventListener('change', ev => {
       return;
     }
     if (t.dataset.act === 'agent-reveal' && state.modal) { state.modal.reveal = t.checked; renderModal(); return; }
+    if (t.dataset.act === 'agent-withedit' && state.modal) { state.modal.withEdit = t.checked; renderModal(); return; }
     modalField(t); return;
   }
   const a = t.dataset.act;
@@ -4856,6 +4985,7 @@ document.addEventListener('keydown', ev => {
   }
   if (state.projOpen && ev.key === 'Escape') { state.projOpen = false; renderProj(); const b = $('#proj-btn'); if (b) b.focus(); return; }
   if (ev.key === 'Enter' && t.id === 'pj-new-title') { ev.preventDefault(); act('proj-new', { dataset: { kind: 'blank' } }); return; }
+  if (ev.key === 'Enter' && (t.id === 'ag-name' || t.id === 'ag-admin-key') && !ev.isComposing && ev.keyCode !== 229) { ev.preventDefault(); if (t.id === 'ag-name') state.modal.name = t.value; else state.modal.adminKey = t.value; agentIssue(); return; }
   const doc = t.closest && t.closest('.doc');
   if (doc) ENTER.shift = ev.key === 'Enter' && ev.shiftKey && !mod && !ev.altKey;
   // 화자 목록: ↑↓ 고르기 · Enter/Tab 확정 · Esc 닫기. IME 조합 중(229) 키는 건드리지 않는다

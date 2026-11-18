@@ -22,11 +22,11 @@ npm test                               # 서버 API·MCP 테스트 (node --test)
 |---|---|---|
 | `PORT` | 3000 | Railway 가 자동으로 넣는다 |
 | `DATA_DIR` | `./data` | 프로젝트 JSON·음원 저장 위치. Railway 에서는 볼륨 경로 `/data` |
-| `APP_PASSWORD` | (없음) | 설정하면 `/api/*`·`/mcp` 에 팀 공유 비밀번호 필요. 없으면 인증 없음(로컬 개발용) |
+| `APP_PASSWORD` | (없음) | 설정하면 `/api/*`·`/mcp` 에 팀 공유 비밀번호 필요(`/mcp` 는 사람별 토큰도 받음). 없으면 인증 없음(로컬 개발용) |
 | `HISTORY_KEEP` | 100 | 프로젝트마다 보관할 이전 버전 수 (웹 자동 저장은 10분에 한 번만 남김, MCP 수정·복원은 매번) |
 | `TRUST_PROXY` | (Railway 에서 자동) | `1` 이면 편집 비밀번호 실패 제한의 IP 를 `X-Forwarded-For` 마지막 값으로 판별 |
 | `TRASH_DAYS` | 30 | 삭제한 프로젝트를 휴지통(`DATA_DIR/trash/`)에 두는 일수. 지나면 서버 시작 때와 6시간마다 영구 삭제 |
-| `ADMIN_KEY` | (없음) | 설정하면 관리자 복구 키가 켜진다 — 편집 비밀번호를 `1234` 로 초기화(`POST /api/shows/:id/edit-password/reset`). 없으면 그 기능 자체가 없다(404) |
+| `ADMIN_KEY` | (없음) | 설정하면 관리자 복구 키가 켜진다 — 편집 비밀번호를 `1234` 로 초기화(`POST /api/shows/:id/edit-password/reset`). 없으면 그 기능 자체가 없다(404). 있으면 MCP 토큰 발급·폐기에도 필요 |
 
 `data/` 는 `.gitignore` 에 들어 있다.
 
@@ -84,25 +84,28 @@ npm test                               # 서버 API·MCP 테스트 (node --test)
 ## 에이전트로 고치기 (MCP)
 
 Claude Code·Codex 에 이 사이트를 MCP 서버로 연결하면 "멘탈 씬 끝에 박대훈 퇴장 큐 넣어 줘" 처럼 말로 큐시트를 부분 수정할 수 있다.
-수정은 모두 기록에 남아 되돌릴 수 있다. 연결:
+수정은 모두 기록에 남아 되돌릴 수 있고, 누가 고쳤는지도 남는다.
+
+연결은 사이트 메뉴의 **에이전트 연결** 에서 쓸 사람 이름으로 **토큰을 발급**하고, 나오는 명령을 복사해 붙여 넣으면 된다.
+사람마다 토큰을 따로 쓰면 수정 기록에 그 이름이 남고, 그 토큰만 폐기할 수 있다(팀 비밀번호는 그대로).
+토큰은 읽기 권한과 이름이고, 고치게 하려면 그 공연의 편집 비밀번호도 `X-Edit-Key` 로 넣는다(편집 잠금을 푼 상태에서 열면 같이 들어간다).
 
 ```sh
-claude mcp add --transport http cue-sheet 'https://<사이트>/mcp' --header 'Authorization: Bearer <비밀번호>'
+claude mcp add --transport http cue-sheet 'https://<사이트>/mcp' --header 'Authorization: Bearer cue_…' --header 'X-Edit-Key: <편집 비밀번호>'
 ```
-
-사이트 메뉴의 **에이전트 연결** 에서 이 사이트 주소·비밀번호가 들어간 명령을 그대로 복사할 수도 있다(비밀번호의 특수 문자도 알맞게 감싼다).
 
 Codex 설정, 도구 목록, 동시 편집 주의점은 [docs/mcp.md](docs/mcp.md).
 
 ## 데이터 구조
 
 ```
-DATA_DIR/shows/<id>.json                 { rev, updatedAt, show[, restoredFrom] }   ← show = 앱의 큐시트 JSON (version 5)
+DATA_DIR/shows/<id>.json                 { rev, updatedAt, by, via, show[, restoredFrom] }   ← show = 앱의 큐시트 JSON (version 6). by·via = 그 버전을 저장한 사람·경로
 DATA_DIR/shows/<id>/audio/<fileKey>       음원 원본
 DATA_DIR/shows/<id>/audio/<fileKey>.json  { fileKey, name, mime, size }
 DATA_DIR/shows/<id>/history/<rev>.json    덮어쓰기 직전 버전 (최근 HISTORY_KEEP 개, 되돌리기용). 예전 위치 shows/<id>.history/ 는 시작할 때 여기로 옮긴다
 DATA_DIR/shows/<id>/auth.json             편집 비밀번호 scrypt 해시. 없으면 기본값 1234
 DATA_DIR/trash/<id>-<삭제 ms>/             휴지통: meta.json { id, title, rev, deletedAt, ip }, show.json(=<id>.json), files/(=shows/<id>/ 통째)
+DATA_DIR/tokens.json                      사람별 MCP 토큰 [{ id, name, hash, createdAt, lastUsedAt }] — 토큰 원문은 저장하지 않음(sha256)
 ```
 
 쓰기는 임시 파일 → rename 으로 원자적이고, 한 프로세스 안에서 직렬화된다(서버 인스턴스는 하나로 둔다).
@@ -121,7 +124,7 @@ DATA_DIR/trash/<id>-<삭제 ms>/             휴지통: meta.json { id, title, r
 | GET | `/api/health` | `{ ok, hasPassword, showCount }` — 인증 없음 |
 | GET | `/api/shows` | `[{ id, title, rev, updatedAt, sceneCount, cueCount, editDefault }]` (최근 수정 순). `editDefault` = 아직 편집 비밀번호 1234 |
 | POST | `/api/shows` | body `{ show }` → `201 { id, rev: 1, updatedAt }` |
-| GET | `/api/shows/:id` | `{ rev, updatedAt, show }` + `ETag: "rev"`. `If-None-Match` 가 같으면 `304`. 없으면 `404` |
+| GET | `/api/shows/:id` | `{ rev, updatedAt, by?, via?, show }` + `ETag: "rev"`. `If-None-Match` 가 같으면 `304`. 없으면 `404` |
 | PUT | `/api/shows/:id` | **편집**. body `{ baseRev, show }` (≤5MB) → `{ rev, updatedAt }`. `baseRev` 가 현재 rev 와 다르면 `409 { error:'conflict', rev, updatedAt, show }`. 직전 레코드는 기록으로(10분에 한 번) |
 | DELETE | `/api/shows/:id` | **편집**. `{ ok: true, trashId, trashDays }` — 레코드와 `shows/<id>/`(음원·기록·비밀번호)를 그대로 휴지통으로 옮긴다 |
 | GET | `/api/trash` | `{ days, items: [{ trashId, id, title, rev, deletedAt, expiresAt, daysLeft }] }` 최근 삭제 먼저. 보기 권한 (삭제 IP 는 `meta.json` 에만) |
@@ -130,7 +133,7 @@ DATA_DIR/trash/<id>-<삭제 ms>/             휴지통: meta.json { id, title, r
 | POST | `/api/shows/:id/edit-check` | **편집**. 키 확인 → `{ ok: true, isDefault }` |
 | POST | `/api/shows/:id/edit-password` | body `{ current, next }` (`current` 는 `X-Edit-Key` 로 줘도 됨) → `{ ok: true, isDefault }`. `next` 4~200자, 아니면 `400 bad_password`. `next` 가 `1234` 면 기본 상태로 되돌림. rev 는 그대로 |
 | POST | `/api/shows/:id/edit-password/reset` | **관리자**. 헤더 `X-Admin-Key`(URL 인코딩 가능) → `{ ok: true, isDefault: true }`. `ADMIN_KEY` 미설정이면 `404`, 틀리면 `403 admin_forbidden`, IP 당 1분 10회 실패 시 `429` |
-| GET | `/api/shows/:id/history` | `[{ rev, updatedAt, title, sceneCount, cueCount, current, restoredFrom }]` 최신순, 맨 앞이 현재 버전(`current: true`) |
+| GET | `/api/shows/:id/history` | `[{ rev, updatedAt, by, via, title, sceneCount, cueCount, current, restoredFrom }]` 최신순, 맨 앞이 현재 버전(`current: true`) |
 | GET | `/api/shows/:id/history/:rev` | **편집**. `{ rev, updatedAt, show }`. 없으면 `404` |
 | POST | `/api/shows/:id/restore` | **편집**. body `{ rev, baseRev? }` → `{ rev, updatedAt, restoredFrom, warnings }` — 그 버전의 show 를 새 rev 로 저장. 이미 같은 내용이면 `{ unchanged: true, rev }`. 지워진 음원을 가리키는 트랙은 연결을 비우고 `warnings` 로 알림. `baseRev` 가 다르면 `409`, 없는 rev 면 `404 rev_not_found` |
 | GET | `/api/shows/:id/audio` | `[{ fileKey, name, size, mime }]` |
@@ -138,7 +141,10 @@ DATA_DIR/trash/<id>-<삭제 ms>/             휴지통: meta.json { id, title, r
 | PUT | `/api/shows/:id/audio/:fileKey` | **편집**. raw body(`audio/*` 또는 `application/octet-stream`, `X-File-Name` 은 URL 인코딩, ≤100MB) → `{ fileKey, size, name }` |
 | GET | `/api/shows/:id/audio/:fileKey` | 파일. `Range` 지원(`206`, `Accept-Ranges: bytes`), `?download=1` 이면 attachment |
 | DELETE | `/api/shows/:id/audio/:fileKey` | **편집**. `{ ok: true }` |
-| POST | `/mcp` | MCP Streamable HTTP (상태 없음, JSON-RPC). 인증은 위와 같음(보통 `Authorization: Bearer`). 도구 6개 — [docs/mcp.md](docs/mcp.md). 쓰기 도구(`edit_show`·`restore_revision`)는 그 프로젝트의 편집 비밀번호(`X-Edit-Key` 헤더 또는 도구 인자 `editKey`). GET·DELETE 는 `405` |
+| GET | `/api/tokens` | `[{ id, name, createdAt, lastUsedAt }]` 사람별 MCP 토큰(해시 없음). **사이트 비밀번호만**(토큰으로는 `401`). `APP_PASSWORD` 가 없으면 `404 tokens_disabled` |
+| POST | `/api/tokens` | `ADMIN_KEY` 가 있으면 `X-Admin-Key` 도(없거나 틀리면 `403 admin_forbidden`, 실패 제한 `429`). body `{ name }`(앞뒤 공백 제거, 1~40자, 대소문자 무시 중복 불가) → `201 { token, id, name, createdAt }` — `token`(`cue_…`) 원문은 이 응답에만. 이름 오류 `400 bad_name`, 중복 `409 name_taken`(둘 다 `message`) |
+| DELETE | `/api/tokens/:id` | `ADMIN_KEY` 가 있으면 `X-Admin-Key` 도. `{ ok: true }` — 그 토큰은 바로 `401`. 없으면 `404` |
+| POST | `/mcp` | MCP Streamable HTTP (상태 없음, JSON-RPC). 사이트 비밀번호(위의 세 방식) 또는 사람별 토큰(`Authorization: Bearer cue_…` 만). 도구 6개 — [docs/mcp.md](docs/mcp.md). 쓰기 도구(`edit_show`·`restore_revision`)는 토큰으로 붙어도 그 프로젝트의 편집 비밀번호(`X-Edit-Key` 헤더 또는 도구 인자 `editKey`). GET·DELETE 는 `405` |
 
 검증: `:id` 는 `[A-Za-z0-9_-]{1,32}`(서버가 생성), `:fileKey` 는 `[A-Za-z0-9_-]{1,64}` — 아니면 `400`.
 `show` 는 `parts` 배열과 숫자 `version` 이 있어야 하고 parts·scenes·items·cues 가 객체 배열이어야 한다(`400 invalid_show`, `message` 에 경로). 필드 단위 엄격 검증은 업로드 스크립트가 한다(`lib/validate.js`). 본문 초과는 `413 too_large`.

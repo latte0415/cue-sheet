@@ -5,8 +5,10 @@
 //   /mcp         원격 MCP 서버 (에이전트용 읽기·부분 수정). docs/mcp.md — 이 경로만 npm 의존성(MCP SDK)을 쓴다
 // 환경변수: PORT, DATA_DIR(기본 ./data), APP_PASSWORD(설정 시 /api·/mcp 에 X-App-Key, Authorization: Bearer 또는 ?key= 필요),
 //          HISTORY_KEEP(프로젝트별 보관할 이전 버전 수, 기본 100), TRUST_PROXY(1 이면 X-Forwarded-For 로 IP 판별. Railway 에서는 자동),
-//          TRASH_DAYS(삭제한 프로젝트를 휴지통에 두는 일수, 기본 30), ADMIN_KEY(설정 시에만 편집 비밀번호 초기화 POST …/edit-password/reset)
+//          TRASH_DAYS(삭제한 프로젝트를 휴지통에 두는 일수, 기본 30), ADMIN_KEY(설정 시에만 편집 비밀번호 초기화 POST …/edit-password/reset, 그리고 MCP 토큰 발급·폐기에도 필요)
 // 권한 두 단계: APP_PASSWORD = 보기(읽기·새 프로젝트), 프로젝트별 편집 비밀번호(X-Edit-Key) = 그 프로젝트를 바꾸는 모든 쓰기 (/mcp 쓰기 도구 포함)
+// 사람별 MCP 토큰(lib/tokens.js, /api/tokens 로 발급): /mcp 의 Bearer 로만, APP_PASSWORD 대신 '보기' 단계 + 이름(기록의 by).
+//   토큰은 편집 비밀번호를 대신하지 않는다 — /mcp 쓰기 도구는 토큰으로 붙어도 그 프로젝트의 편집 비밀번호가 필요하다
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -14,6 +16,7 @@ const crypto = require('crypto');
 const { Store, ID_RE, KEY_RE, invalidShow } = require('./lib/store');
 const { createMcp } = require('./lib/mcp');
 const { hashKey, verifyKey, badNewKey, FailLimiter } = require('./lib/editkey');
+const { Tokens, TokenError } = require('./lib/tokens');
 
 const INDEX = path.join(__dirname, 'index.html');
 const JSON_LIMIT = 5 * 1024 * 1024;
@@ -81,13 +84,18 @@ function createServer(opts) {
   // 관리자 복구 키: 설정했을 때만 켜진다. 편집 비밀번호를 잊었거나 누가 바꿔 잠갔을 때 1234 로 되돌린다
   const adminKey = opts.adminKey !== undefined ? opts.adminKey : (process.env.ADMIN_KEY || '');
   const adminDigest = adminKey ? digest(adminKey) : null;
-  const ready = store.init();
+  const tokens = new Tokens(opts.dataDir || process.env.DATA_DIR || './data');
+  const ready = Promise.all([store.init(), tokens.init()]);
   // 휴지통 정리: 시작할 때(init) + 6시간마다
   const purgeT = setInterval(() => { store.trashPurge().catch(e => console.error('trash purge:', e)); }, 6 * 60 * 60 * 1000);
   if (purgeT.unref) purgeT.unref();
   const mcp = createMcp({ store, checkEdit: (req, id, given) => editCheck(req, id, given ? [given] : editKeysOf(req)) });
+  // 기록(by·via)에 남는 이름. 사이트 비밀번호(APP_PASSWORD)로 붙은 MCP 는 '사이트 비밀번호'(팀 공용이라 누군지 모름), 비밀번호 없는 서버의 MCP 는 누군지 모르므로 '익명'.
+  // 브라우저(/api 쓰기)는 편집 비밀번호가 프로젝트 공용이라 사람을 구분할 수 없어 '브라우저'
+  const MASTER = { kind: 'master', name: '사이트 비밀번호' }, OPEN = { kind: 'open', name: '익명' };
+  const BROWSER = { by: '브라우저', via: 'browser' };
 
-  // /api 와 /mcp 가 같이 쓴다. X-App-Key(프런트), Authorization: Bearer(MCP 클라이언트), ?key= 중 하나
+  // 사이트 비밀번호인가. /api 와 /mcp 가 같이 쓴다. X-App-Key(프런트), Authorization: Bearer(MCP 클라이언트), ?key= 중 하나
   function authed(req, query) {
     if (!pwDigest) return true;
     const given = [];
@@ -106,6 +114,15 @@ function createServer(opts) {
     let ok = false;
     for (const g of given) if (crypto.timingSafeEqual(digest(g), pwDigest)) ok = true;
     return ok;
+  }
+  // /mcp 의 호출자: 사이트 비밀번호 → MASTER, 사람별 토큰(Bearer 만) → { kind: 'token', id, name }, 아니면 null.
+  // 토큰은 ?key=·X-App-Key 로 받지 않는다(주소는 로그·기록에 남기 쉽다)
+  function mcpActor(req, query) {
+    if (!pwDigest) return OPEN;
+    if (authed(req, query)) return MASTER;
+    const m = /^Bearer\s+(\S+)\s*$/i.exec(String(req.headers.authorization || '').trim());
+    const t = m ? tokens.lookup(m[1]) : null;
+    return t ? { kind: 'token', id: t.id, name: t.name } : null;
   }
   async function needShow(id) {
     if (!ID_RE.test(id)) throw new HttpError(400, 'bad_id');
@@ -155,6 +172,19 @@ function createServer(opts) {
     if (r.status) throw new HttpError(403, 'edit_forbidden');
     return r.auth;
   }
+  // 관리자 키(X-Admin-Key, URL 인코딩 가능) 확인 — ADMIN_KEY 가 있을 때만 부른다. 틀리면 403 admin_forbidden,
+  // IP 당 실패 제한(편집 비밀번호와 같은 창). 편집 비밀번호 초기화와 토큰 발급·폐기가 같이 쓴다
+  function needAdmin(req) {
+    const rk = clientIp(req) + '|#admin';
+    const wait = limiter.blocked(rk);
+    if (wait) throw new HttpError(429, 'too_many_attempts', { retryAfter: wait, headers: { 'Retry-After': String(wait) } });
+    const v = req.headers['x-admin-key'];
+    const cands = v ? [String(v)] : [];
+    if (v) { try { cands.push(decodeURIComponent(String(v))); } catch (e) { /* 원문 그대로 */ } cands.push(Buffer.from(String(v), 'latin1').toString('utf8')); }
+    let ok = false;
+    for (const c of cands) if (crypto.timingSafeEqual(digest(c), adminDigest)) ok = true;
+    if (!ok) { if (v) limiter.fail(rk); throw new HttpError(403, 'admin_forbidden'); }
+  }
   function needKey(k) { if (!KEY_RE.test(k)) throw new HttpError(400, 'bad_file_key'); return k; }
   function checkShow(show) { const why = invalidShow(show); if (why) throw new HttpError(400, 'invalid_show', { message: why }); }
 
@@ -178,6 +208,7 @@ function createServer(opts) {
       if (!r) throw new HttpError(404, 'not_found');
       return sendJson(res, 200, r);
     }
+    if (parts[0] === 'tokens') return tokensApi(req, res, parts);
     if (parts[0] !== 'shows') throw new HttpError(404, 'not_found');
     const [, id, sub, key, extra] = parts;
     if (extra !== undefined) throw new HttpError(404, 'not_found');
@@ -187,7 +218,7 @@ function createServer(opts) {
       if (M === 'POST') {
         const body = await readJson(req, JSON_LIMIT);
         checkShow(body && body.show);
-        return sendJson(res, 201, await store.create(body.show));
+        return sendJson(res, 201, await store.create(body.show, BROWSER));
       }
       throw new HttpError(405, 'method_not_allowed');
     }
@@ -205,7 +236,7 @@ function createServer(opts) {
         await needEdit(req, id);
         const body = await readJson(req, JSON_LIMIT);
         checkShow(body && body.show);
-        const r = await store.put(id, body.baseRev, body.show);
+        const r = await store.put(id, body.baseRev, body.show, BROWSER);
         if (!r) throw new HttpError(404, 'not_found');
         if (r.conflict) return sendJson(res, 409, { error: 'conflict', rev: r.conflict.rev, updatedAt: r.conflict.updatedAt, show: r.conflict.show }, { ETag: `"${r.conflict.rev}"` });
         return sendJson(res, 200, r, { ETag: `"${r.rev}"` });
@@ -221,7 +252,7 @@ function createServer(opts) {
     }
     if (sub === 'duplicate' && key === undefined) {
       if (M !== 'POST') throw new HttpError(405, 'method_not_allowed');
-      const r = await store.duplicate(id);
+      const r = await store.duplicate(id, BROWSER);
       if (!r) throw new HttpError(404, 'not_found');
       return sendJson(res, 201, r);
     }
@@ -236,15 +267,7 @@ function createServer(opts) {
       if (!adminDigest) throw new HttpError(404, 'not_found');
       if (M !== 'POST') throw new HttpError(405, 'method_not_allowed');
       await needShow(id);
-      const rk = clientIp(req) + '|#admin';
-      const wait = limiter.blocked(rk);
-      if (wait) throw new HttpError(429, 'too_many_attempts', { retryAfter: wait, headers: { 'Retry-After': String(wait) } });
-      const v = req.headers['x-admin-key'];
-      const cands = v ? [String(v)] : [];
-      if (v) { try { cands.push(decodeURIComponent(String(v))); } catch (e) { /* 원문 그대로 */ } cands.push(Buffer.from(String(v), 'latin1').toString('utf8')); }
-      let ok = false;
-      for (const c of cands) if (crypto.timingSafeEqual(digest(c), adminDigest)) ok = true;
-      if (!ok) { if (v) limiter.fail(rk); throw new HttpError(403, 'admin_forbidden'); }
+      needAdmin(req);
       await store.setAuth(id, null);
       return sendJson(res, 200, { ok: true, isDefault: true });
     }
@@ -275,7 +298,7 @@ function createServer(opts) {
       await needShow(id);
       await needEdit(req, id);
       const body = await readJson(req, 64 * 1024);
-      const r = await store.restore(id, Number(body && body.rev), body && body.baseRev);
+      const r = await store.restore(id, Number(body && body.rev), body && body.baseRev, { by: BROWSER.by, via: 'restore' });
       if (!r) throw new HttpError(404, 'not_found');
       if (r.missing) throw new HttpError(404, 'rev_not_found');
       if (r.conflict) return sendJson(res, 409, { error: 'conflict', rev: r.conflict.rev, updatedAt: r.conflict.updatedAt, show: r.conflict.show }, { ETag: `"${r.conflict.rev}"` });
@@ -309,6 +332,39 @@ function createServer(opts) {
     }
     if (M === 'GET' || M === 'HEAD') return sendAudio(req, res, id, key, query);
     throw new HttpError(405, 'method_not_allowed');
+  }
+
+  // 사람별 MCP 토큰 관리 — 위의 authed 를 지난 뒤라 사이트 비밀번호만 온다(/api 는 토큰을 받지 않는다).
+  // ADMIN_KEY 가 있으면 발급·폐기는 관리자 키(X-Admin-Key)도 있어야 한다 — 토큰 이름이 기록의 "누가" 이므로, 사이트 비밀번호를 아는
+  // 아무나 남의 이름으로 발급하거나 남의 토큰을 폐기하지 못하게. 목록은 사이트 비밀번호만. ADMIN_KEY 가 없으면 예전처럼 사이트 비밀번호로 다 된다
+  //   GET /api/tokens → [{ id, name, createdAt, lastUsedAt }]   POST { name } → 201 { token, id, name, createdAt }   DELETE /api/tokens/:id
+  async function tokensApi(req, res, parts) {
+    const M = req.method, [, id, extra] = parts;
+    if (extra !== undefined) throw new HttpError(404, 'not_found');
+    if (!pwDigest) {
+      throw new HttpError(404, 'tokens_disabled', { message: 'APP_PASSWORD 가 없는 서버는 인증 없이 열려 있어 토큰이 필요 없습니다' });
+    }
+    if (id === undefined) {
+      if (M === 'GET') return sendJson(res, 200, tokens.list());
+      if (M === 'POST') {
+        if (adminDigest) needAdmin(req);
+        const body = await readJson(req, 4096);
+        try { return sendJson(res, 201, await tokens.create(body && body.name)); } catch (e) {
+          if (e instanceof TokenError) throw new HttpError(e.status, e.code, { message: e.message });
+          throw e;
+        }
+      }
+      throw new HttpError(405, 'method_not_allowed');
+    }
+    if (M !== 'DELETE') throw new HttpError(405, 'method_not_allowed');
+    if (adminDigest) needAdmin(req);
+    let gone;
+    try { gone = await tokens.revoke(id); } catch (e) {
+      console.error('tokens revoke:', e);
+      throw new HttpError(500, 'save_failed', { message: '폐기를 파일에 저장하지 못했습니다 — 지금 실행 중인 서버에서는 막혔지만, 재시작 전에 다시 폐기하세요' });
+    }
+    if (!gone) throw new HttpError(404, 'not_found');
+    return sendJson(res, 200, { ok: true });
   }
 
   async function sendAudio(req, res, id, key, query) {
@@ -375,11 +431,12 @@ function createServer(opts) {
       res.setHeader('Cache-Control', 'no-store');
       try {
         await ready;
-        if (!authed(req, u.searchParams)) {
+        const actor = mcpActor(req, u.searchParams);
+        if (!actor) {
           await settleUnreadBody(req, res);
-          return sendJson(res, 401, { error: 'unauthorized', message: 'Authorization: Bearer <APP_PASSWORD> 헤더가 필요합니다' }, { 'WWW-Authenticate': 'Bearer realm="cue-sheet"' });
+          return sendJson(res, 401, { error: 'unauthorized', message: 'Authorization: Bearer <토큰> 헤더가 필요합니다 — 사이트의 에이전트 연결에서 토큰을 발급받으세요' }, { 'WWW-Authenticate': 'Bearer realm="cue-sheet"' });
         }
-        await mcp(req, res);
+        await mcp(req, res, actor);
       } catch (e) {
         console.error(e);
         if (res.headersSent) { res.destroy(); return; }
@@ -404,6 +461,7 @@ function createServer(opts) {
   server.on('close', () => clearInterval(purgeT));
   server.ready = ready;
   server.store = store;
+  server.tokens = tokens;
   return server;
 }
 
@@ -414,6 +472,6 @@ if (require.main === module) {
   const server = createServer();
   server.ready.then(() => {
     server.listen(PORT, '0.0.0.0', () => console.log(`cue-sheet listening on :${PORT} (data: ${server.store.dir}${process.env.APP_PASSWORD ? ', password on' : ''})`));
-  }, err => { console.error('DATA_DIR 를 만들 수 없습니다:', err); process.exit(1); });
+  }, err => { console.error('DATA_DIR 를 준비할 수 없습니다:', err); process.exit(1); });
   process.on('SIGTERM', () => server.close(() => process.exit(0)));
 }

@@ -2,32 +2,50 @@
 
 Claude Code·Codex 같은 AI 에이전트가 사이트의 큐시트를 **읽고 일부만 고칠 수 있게** 하는 원격 MCP 서버.
 "3번 씬 끝에 박대훈 퇴장 큐 넣어 줘", "BGM 3 을 5번으로 바꿔 줘", "아까 수정 되돌려 줘" 같은 요청을 에이전트가 처리한다.
-구현은 `lib/mcp.js`(도구), `lib/ops.js`(수정 적용), `lib/view.js`(개요·검색), `lib/labels.js`(큐 번호), `lib/store.js`(저장·기록).
+구현은 `lib/mcp.js`(도구), `lib/ops.js`(수정 적용), `lib/view.js`(개요·검색), `lib/labels.js`(큐 번호), `lib/store.js`(저장·기록),
+`lib/tokens.js`(사람별 토큰).
 
 ## 연결하기 (개발자가 아니어도 됨)
 
-필요한 것: 사이트 주소(예: `https://cue-sheet.example.app`), 팀 비밀번호(서버의 `APP_PASSWORD` — 읽기), 그리고 고치게 하려면
-그 공연(프로젝트)의 **편집 비밀번호**(사이트의 "편집 비밀번호 변경"으로 정한 것, 처음엔 `1234`).
+필요한 것: 사이트 주소(예: `https://cue-sheet.example.app`), **내 토큰**(팀 비밀번호 `APP_PASSWORD` 를 아는 사람이 사이트에서 발급 — 읽기),
+그리고 고치게 하려면 그 공연(프로젝트)의 **편집 비밀번호**(사이트의 "편집 비밀번호 변경"으로 정한 것, 처음엔 `1234`).
+토큰은 "누구인지"(기록에 남는 이름)와 읽기 권한이고, 편집 비밀번호를 대신하지 않는다.
 
-**가장 쉬운 방법:** 사이트에서 그 공연을 열고 **편집 잠금을 해제한 뒤** 데이터 메뉴 → **에이전트 연결** 을 열면 사이트 주소·팀 비밀번호·
-그 공연의 편집 비밀번호(`X-Edit-Key` 헤더)가 들어간 명령·설정이 나온다. **복사** 버튼으로 복사해 붙여 넣으면 된다. 잠긴 상태에서 열면
-편집 비밀번호 줄이 빠져 에이전트는 읽기만 한다. 비밀번호에 `$` `` ` `` `"` `\` `'` 같은 기호가 있어도 복사 버튼이 셸·TOML 용으로 알맞게 감싸 준다.
+**가장 쉬운 방법:** 사이트에서 그 공연을 열고 **편집 잠금을 해제한 뒤** 데이터 메뉴 → **에이전트 연결** 에서 토큰을 발급하면
+사이트 주소·토큰·그 공연의 편집 비밀번호(`X-Edit-Key` 헤더)가 들어간 명령·설정이 나온다. 잠긴 상태에서 열면 편집 비밀번호 줄이 빠져
+에이전트는 읽기만 한다. 비밀번호에 `$` `` ` `` `"` `\` `'` 같은 기호가 있어도 복사 버튼이 셸·TOML 용으로 알맞게 감싸 준다.
 
-손으로 쓰려면 아래 `<사이트>` 와 `<비밀번호>` 를 바꿔 넣는다. 셸 명령은 헤더 전체를 **작은따옴표**로 감싼다(큰따옴표 안에서는
-`$`·`` ` `` 가 해석돼 비밀번호가 바뀌거나 명령이 실행된다). 비밀번호에 `'` 가 있으면 그 자리를 `'\''` 로 바꾼다.
+### 토큰 발급 (사이트에서)
+
+1. 사이트 메뉴 **데이터 → 에이전트 연결** 을 연다(서버 모드에서만 보인다).
+2. **토큰 발급** 칸에 쓸 사람 이름(예: `김민수`)을 넣고 **발급**. 이름은 1~40자, 이미 있는 이름(대소문자 무시)이나 기록에 따로 쓰는
+   `관리자`·`사이트 비밀번호`·`브라우저`·`익명` 은 쓸 수 없다. 비교는 전각·반각과 대소문자를 무시하고(NFKC), 줄바꿈·제어 문자·폭 없는 공백 같은
+   보이지 않는 문자가 든 이름은 거부한다.
+3. 바로 아래에 그 사람의 토큰(`cue_…`)과 Claude Code 명령·Codex 설정이 나온다. **이 토큰은 지금 한 번만 표시된다** — 서버는
+   토큰 원문을 저장하지 않으므로(해시만) 창을 닫으면 다시 볼 수 없다. **복사** 해서 그 사람에게 전한다. 잃어버렸으면 폐기하고 새로 발급한다.
+   서버에 `ADMIN_KEY` 가 설정돼 있으면 발급·폐기 때 **관리자 키** 칸이 나온다 — 서버 관리자가 넣는다.
+4. **발급한 토큰** 표에 이름·발급 시각·마지막 사용 시각이 나온다. **폐기** 를 누르면(한 번 더 눌러 확인) 그 토큰은 바로 `401` 로
+   끊긴다. 다른 사람의 토큰과 팀 비밀번호는 그대로다.
+
+**사이트 비밀번호로 연결** (접혀 있음): 토큰 없이 팀 비밀번호(`APP_PASSWORD`)를 그대로 넣는 방법. 기록에는 `사이트 비밀번호` 로 남고(누군지 구분되지 않음),
+비밀번호를 바꾸기 전에는 끊을 수 없어 개인용으로는 권하지 않는다. 비밀번호가 없는 서버(로컬 개발)는 토큰 없이 연결되고 기록은 `익명`.
+
+복사 버튼은 토큰·비밀번호에 `$` `` ` `` `"` `\` `'` 같은 기호가 있어도 셸·TOML 용으로 알맞게 감싼다(토큰은 영문·숫자·`-`·`_` 뿐이다).
+손으로 쓰려면 아래 `<사이트>` 와 `<토큰>` 을 바꿔 넣는다. 셸 명령은 헤더 전체를 **작은따옴표**로 감싼다. 비밀번호(사이트·편집)를 넣을 때
+비밀번호에 `'` 가 있으면 그 자리를 `'\''` 로 바꾼다.
 
 ### Claude Code
 
 터미널에서 한 줄:
 
 ```sh
-claude mcp add --transport http cue-sheet 'https://<사이트>/mcp' --header 'Authorization: Bearer <비밀번호>' --header 'X-Edit-Key: <편집 비밀번호>'
+claude mcp add --transport http cue-sheet 'https://<사이트>/mcp' --header 'Authorization: Bearer <토큰>' --header 'X-Edit-Key: <편집 비밀번호>'
 ```
 
 읽기만 시킬 거면 `--header 'X-Edit-Key: …'` 를 빼도 된다.
 
 - Claude Code 를 열고 `/mcp` 를 입력하면 `cue-sheet` 가 **connected** 로 보여야 한다. 실패로 나오면 주소 끝의 `/mcp`,
-  비밀번호 앞의 `Bearer ` (한 칸 띄움)를 확인한다.
+  토큰 앞의 `Bearer ` (한 칸 띄움), 토큰이 폐기되지 않았는지를 확인한다.
 - 기본은 지금 폴더(프로젝트)에서만 쓰인다. 어느 폴더에서나 쓰려면 `--scope user` 를 붙인다.
 - 지우기: `claude mcp remove cue-sheet`
 
@@ -38,10 +56,10 @@ claude mcp add --transport http cue-sheet 'https://<사이트>/mcp' --header 'Au
 ```toml
 [mcp_servers.cue-sheet]
 url = "https://<사이트>/mcp"
-http_headers = { "Authorization" = "Bearer <비밀번호>", "X-Edit-Key" = "<편집 비밀번호>" }
+http_headers = { "Authorization" = "Bearer <토큰>", "X-Edit-Key" = "<편집 비밀번호>" }
 ```
 
-TOML 의 `"…"` 안에서는 비밀번호의 `\` 를 `\\`, `"` 를 `\"` 로 쓴다.
+비밀번호(사이트·편집)를 넣을 때는 TOML 의 `"…"` 안에서 비밀번호의 `\` 를 `\\`, `"` 를 `\"` 로 쓴다.
 
 Codex 를 다시 시작한 뒤 `/mcp` 로 `cue-sheet` 와 도구 6개가 보이는지 확인한다.
 
@@ -53,9 +71,12 @@ Codex 를 다시 시작한 뒤 `/mcp` 로 `cue-sheet` 와 도구 6개가 보이�
 - "Q11 다음에 '(테이블 정리)' 지문 넣고 무대 큐 달아 줘" → `edit_show`
 - "방금 수정 취소해 줘" → `list_revisions` → `restore_revision`
 
-팀 비밀번호(`APP_PASSWORD`)만 있으면 읽기만 된다. 고치기(`edit_show`·`restore_revision`)는 그 공연의 편집 비밀번호가 있어야 하고,
-없거나 틀리면 아무것도 저장하지 않고 "edit password required" 로 알려 준다. 둘 중 하나를 바꾸면 위 설정도 바꿔야 한다.
+토큰(또는 팀 비밀번호)만 있으면 읽기만 된다. 고치기(`edit_show`·`restore_revision`)는 그 공연의 편집 비밀번호가 있어야 하고,
+없거나 틀리면 아무것도 저장하지 않고 "edit password required" 로 알려 준다. 편집 비밀번호를 바꾸면 위 설정도 바꿔야 한다.
 편집 비밀번호가 다른 공연을 여러 개 고치게 하려면 헤더 대신 도구 인자 `editKey` 로 줄 수 있다(대화에 비밀번호가 남는다는 점에 주의).
+
+에이전트가 저장한 수정·복원은 **연결한 사람의 이름(토큰 이름)** 으로 기록에 남는다 — "누가 Q12 바꿨어?" 하면 에이전트가
+`list_revisions` 로 확인할 수 있다. 토큰은 그 사람의 비밀번호와 같으니 다른 사람과 나눠 쓰지 않는다.
 음원 파일은 MCP 로 올리거나 지울 수 없다 — 웹 앱에서 한다.
 
 ## 설계
@@ -67,9 +88,9 @@ Codex 를 다시 시작한 뒤 `/mcp` 로 `cue-sheet` 와 도구 6개가 보이�
 | `list_shows` | 공연 목록 `{ id, title, rev, updatedAt, sceneCount, cueCount }` | 읽기 |
 | `get_show { showId, view?, partId?, sceneId? }` | `outline`(기본): 한 줄에 하나씩 id·큐 번호·화자 이름·잘린 본문·큐 한 줄 요약(무대 큐는 소품 동작 포함) + 사람·소품·트랙 목록. `full`: 고른 파트/씬(또는 전체)의 JSON 그대로 | 읽기 |
 | `search_show { showId, query }` | 대본·화자·큐(trigger·memo·무대/출연 내용·무대 큐 소품 이름·트랙 제목)·코멘트·씬 제목/세팅·사람·소품·공연 전 무대 소품·트랙에서 대소문자 무시 부분 일치. `Q12`/`12` 는 큐 번호. 최대 50개, id·위치·발췌 | 읽기 |
-| `edit_show { showId, ops, dryRun?, expectRev?, editKey? }` | ops 를 원자적으로 적용 → 새 rev, 바뀐 내용 요약(새로 매긴 큐 번호 포함), 경고. `dryRun` 은 저장하지 않으므로 편집 비밀번호 없이도 된다 | 쓰기 (편집 비밀번호) |
-| `list_revisions { showId }` | 저장 기록, 최신 먼저(맨 앞이 현재) | 읽기 |
-| `restore_revision { showId, rev, editKey? }` | 그 버전을 새 버전으로 저장(복원도 되돌릴 수 있음). 이미 같은 내용이면 아무것도 안 함 | 쓰기 (편집 비밀번호) |
+| `edit_show { showId, ops, dryRun?, expectRev?, editKey? }` | ops 를 원자적으로 적용 → 새 rev, 바뀐 내용 요약(새로 매긴 큐 번호 포함), 경고, 저장한 사람 `by`. `dryRun` 은 저장하지 않으므로 편집 비밀번호 없이도 된다 | 쓰기 (편집 비밀번호) |
+| `list_revisions { showId }` | 저장 기록, 최신 먼저(맨 앞이 현재). 버전마다 누가(`by`)·어떤 경로로(`via`) 저장했는지, 복원이면 `restoredFrom` | 읽기 |
+| `restore_revision { showId, rev, editKey? }` | 그 버전을 새 버전으로 저장(복원도 되돌릴 수 있음), 결과에 `by`. 이미 같은 내용이면 아무것도 안 함 | 쓰기 (편집 비밀번호) |
 
 결과는 모두 사람이 읽는 텍스트와 `structuredContent`(JSON)를 함께 준다. 실패(없는 id, 틀린 값, 충돌 …)는 프로토콜 오류가
 아니라 `isError: true` 결과로, **무엇을 어떻게 고치면 되는지** 문장으로 돌려준다(예: `"조예준" is a name, use id "p-yejun"`).
@@ -179,16 +200,47 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
 실패 제한(IP+프로젝트당 1분 10회, 같은 카운터)을 받는다. 도구 처리기는 `AsyncLocalStorage` 로 지금 HTTP 요청의 헤더·IP 를 본다.
 검사 함수가 없으면 쓰기를 막는다(fail-closed). 읽기 도구(`list_shows`·`get_show`·`search_show`·`list_revisions`)는 아래 사이트 인증만.
 
-**사이트 인증.** `/api` 와 같은 검사 하나(`server.js` 의 `authed`)를 쓴다: `Authorization: Bearer <APP_PASSWORD>`, `X-App-Key`(URL 인코딩 가능),
-`?key=` 중 하나. 헤더에 한글 비밀번호를 UTF-8 그대로 실어 보내는 클라이언트도 통과한다. 틀리거나 없으면
-`401 {"error":"unauthorized"}` + `WWW-Authenticate: Bearer`. 401 때 길이를 아는 작은 본문(≤64KB)만 비우고, 길이를 모르거나 큰 본문은
-읽지 않고 응답 뒤 연결을 닫는다(`/api` 도 같음). 서버의 `keepAliveTimeout` 은 65초(프록시 유휴 시간보다 길게). `APP_PASSWORD` 가 없으면 `/api` 처럼 인증 없이 열린다(로컬 개발용).
-OAuth 는 없다 — 팀 공용 비밀번호 하나.
+**사이트 인증** — 누구인지. 두 가지를 받는다 (`server.js` 의 `mcpActor`):
+
+- **사이트 비밀번호** (`APP_PASSWORD`): `/api` 와 같은 검사(`authed`) — `Authorization: Bearer <APP_PASSWORD>`, `X-App-Key`(URL 인코딩 가능),
+  `?key=` 중 하나. 헤더에 한글 비밀번호를 UTF-8 그대로 실어 보내는 클라이언트도 통과한다. 기록에는 `사이트 비밀번호`.
+- **사람별 토큰** (`lib/tokens.js`): `/mcp` 에서 `Authorization: Bearer cue_…` 로만. `X-App-Key`·`?key=` 로는 받지 않고(주소는 로그에
+  남기 쉽다), `/api` 에서는 어떤 방식으로도 받지 않는다 — 토큰으로는 MCP 로 읽기(그리고 편집 비밀번호를 함께 줄 때 MCP 쓰기)만 되고, 프로젝트 삭제·음원·토큰 관리는 안 된다. 토큰은 편집 비밀번호를 대신하지 않는다 — 사이트 비밀번호만 있으면 누구나 토큰을 발급할 수 있으므로, 토큰이 편집 권한을 주면 프로젝트별 편집 비밀번호가 무력해진다.
+  기록에는 토큰 이름.
+
+틀리거나 없으면 `401 {"error":"unauthorized"}` + `WWW-Authenticate: Bearer`. 401 때 길이를 아는 작은 본문(≤64KB)만 비우고, 길이를 모르거나 큰 본문은
+읽지 않고 응답 뒤 연결을 닫는다(`/api` 도 같음). 서버의 `keepAliveTimeout` 은 65초(프록시 유휴 시간보다 길게). `APP_PASSWORD` 가 없으면 `/api` 처럼
+인증 없이 열리고(로컬 개발용) 토큰 관리 API 는 `404 tokens_disabled`. OAuth 는 없다.
+
+**토큰 저장.** `DATA_DIR/tokens.json` 에 `[{ id, name, hash, createdAt, lastUsedAt }]`. 토큰은 `cue_` + 무작위 32바이트 base64url 이고,
+원문은 발급 응답(`POST /api/tokens`)에서 한 번만 돌려준 뒤 버린다 — 파일에는 sha256 hex 만. 쓰기는 `store.js` 처럼 임시 파일 → rename,
+한 큐로 직렬화. 파일은 이 프로세스만 쓰므로 시작할 때 읽어 메모리에 두고, 깨져 있으면 서버가 시작하지 않는다(빈 목록으로 덮어써
+토큰이 사라지지 않게). `lastUsedAt` 은 토큰마다 1분에 한 번만 파일에 쓴다.
+**조회가 시간 차이로 새지 않는 이유:** 받은 문자열의 sha256 으로 Map 을 찾는다. 조회 시간이 달라져도 드러나는 건 "입력의 해시가
+저장된 해시와 얼마나 닮았나" 뿐이고, 해시에서 토큰을 되돌리거나 원하는 해시 접두어가 나오는 입력을 고를 수 없다(sha256 역상 저항).
+토큰 원문을 한 글자씩 비교하는 경로가 없으므로 `timingSafeEqual` 이 필요 없다. 사이트 비밀번호 비교는 지금처럼 `timingSafeEqual`.
+
+**관리 API** (README 의 API 표): `GET /api/tokens`(해시 없이 목록, 사이트 비밀번호), `POST /api/tokens {name}` → `201 { token, id, name, createdAt }`,
+`DELETE /api/tokens/:id`. 폐기는 요청을 받는 즉시(쓰기 대기열을 기다리기 전에) 메모리에서 막으므로 바로 다음 요청부터 `401`.
+파일 쓰기가 실패하면 `500 save_failed` — 그 서버 프로세스에서는 계속 막혀 있고 목록에도 남지만, 파일에는 아직 있어 **다시 폐기하거나 다른 토큰 쓰기가
+성공하기 전에 재시작하면 그 토큰이 다시 통한다**(실패를 알려 주는 이유). 메모리는 파일 쓰기가 성공한 뒤에만 바뀐다.
+**`APP_PASSWORD` 를 바꿔도 이미 발급한 토큰은 그대로 통한다** — 토큰은 사이트 비밀번호와 따로 저장된다. 사람을 내보낼 때는 그 사람의 토큰을 따로 폐기한다.
+**`ADMIN_KEY` 가 설정된 서버는 발급·폐기에 관리자 키(`X-Admin-Key`)도 필요하다** (편집 비밀번호 초기화와 같은 검사·같은 실패 제한, `server.js` 의 `needAdmin`).
+토큰 이름이 기록의 "누가" 이므로, 팀 공용 사이트 비밀번호만 아는 사람이 남의 이름으로 발급하거나 남의 토큰을 폐기하지 못하게 하려는 것.
+`ADMIN_KEY` 가 없는 서버는 예전처럼 사이트 비밀번호로 발급·폐기한다(호환). 에이전트 연결 패널은 `403 admin_forbidden` 을 받으면 관리자 키 칸을 띄운다(키는 저장하지 않음).
+지운 공연은 휴지통(`DATA_DIR/trash/`)으로 옮겨져 `shows/` 에 없으므로 MCP 의 모든 도구에서 "없는 공연" 이다. 되살리면 기록(by·via 포함)과 함께 돌아온다. `tokens.json` 은 휴지통과 무관.
+
+**누가 고쳤는지 (기록의 by·via).** 기록은 하나(`store` 의 레코드·스냅숏, `/api/shows/:id/history` 와 `list_revisions` 가 같이 읽는다)라 by·via 도 거기 한 곳에만 있다. 공연 파일과 기록 스냅숏은 `{ rev, updatedAt, by, via, show[, restoredFrom] }` — `by`·`via` 는 **그 버전을 만든 쓰기**의
+사람과 경로다. `by`: 토큰 이름 | `사이트 비밀번호` | `브라우저` | `익명`(비밀번호 없는 서버의 MCP), `via`: `mcp`(edit_show) | `restore`(restore_revision) |
+`browser`(웹 앱의 저장·새 프로젝트·복제 — `/api` 쓰기). 웹 앱의 버전 복원(`POST /api/shows/:id/restore`)은 `브라우저`·`restore`. 편집 비밀번호는 프로젝트 공용이라 사람을 구분하지 못해 웹 앱 쓰기의 이름은 모두 `브라우저`.
+이 필드가 생기기 전 파일에는 없고 `list_revisions` 에서 `null` 로 보인다(형식은 그대로 호환). 인증한 신원은 `server.js` 가
+`mcp(req, res, actor)` 로 넘기고, `lib/mcp.js` 가 `req.auth` → SDK `authInfo` → 요청마다 부르는 factory 의 `ctx.authInfo` 로 받아 그 요청의
+`McpServer` 에 묶는다(상태 없는 방식이라 요청 사이에 섞이지 않는다 — `test/tokens.test.js` 가 두 토큰 동시 수정으로 확인).
 
 ## 확인 방법
 
 ```sh
-npm test                                  # test/ops·store·labels·mcp.test.js 포함
+npm test                                  # test/ops·store·labels·mcp·tokens.test.js 포함
 # 손으로: 서버를 띄우고 JSON-RPC 한 번
 curl -s http://localhost:3000/mcp -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
   -H 'Authorization: Bearer <비밀번호>' \
