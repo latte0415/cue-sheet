@@ -1484,6 +1484,12 @@ async function serverBoot(h) {
   Srv.hasPassword = !!h.hasPassword;
   if (h.hasPassword && !Srv.key) await askPassword(false);
   await refreshList();
+  // ?show=<id> (scripts/upload.js 가 알려 주는 주소): 그 프로젝트로 바로 연다. 새로고침 때 다시 끌려가지 않게 주소에서 지운다
+  const qShow = new URLSearchParams(location.search).get('show');
+  if (qShow) {
+    if (Srv.list.some(x => x.id === qShow)) Srv.showId = qShow;
+    try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) { /* 무시 */ }
+  }
   if (Srv.showId && Srv.list.some(x => x.id === Srv.showId)) await openShow(Srv.showId);
   else if (Srv.list.length) showGate('pick');
   else showGate('first');

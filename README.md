@@ -40,6 +40,11 @@ npm test                               # 서버 API 테스트 (node --test, 의�
 
 비밀번호를 바꾸려면 `APP_PASSWORD` 만 바꾸면 된다. 열려 있던 기기는 다음 요청에서 401 을 받고 비밀번호를 다시 묻는다.
 
+## 원문 큐시트 올리기 (에이전트용)
+
+원문을 큐시트 JSON 으로 바꾼 뒤 `node scripts/upload.js <파일.json> [--project <id|제목>] [--url <서버>] [--key <비밀번호>] [--dry-run]`.
+검증에 실패하면 어느 행·필드가 틀렸는지 출력하고 올리지 않는다. 형식과 옵션은 [docs/cue-format.md](docs/cue-format.md).
+
 ## 데이터 구조
 
 ```
@@ -71,6 +76,6 @@ DATA_DIR/shows/<id>/audio/<fileKey>.json  { fileKey, name, mime, size }
 | DELETE | `/api/shows/:id/audio/:fileKey` | `{ ok: true }` |
 
 검증: `:id` 는 `[A-Za-z0-9_-]{1,32}`(서버가 생성), `:fileKey` 는 `[A-Za-z0-9_-]{1,64}` — 아니면 `400`.
-`show` 는 `parts` 배열과 숫자 `version` 이 있어야 한다(`400 invalid_show`). 본문 초과는 `413 too_large`.
+`show` 는 `parts` 배열과 숫자 `version` 이 있어야 하고 parts·scenes·items·cues 가 객체 배열이어야 한다(`400 invalid_show`, `message` 에 경로). 필드 단위 엄격 검증은 업로드 스크립트가 한다(`lib/validate.js`). 본문 초과는 `413 too_large`.
 
 그 밖에 `/`(index.html), `/healthz`(text `ok`)는 인증 없이 열린다.

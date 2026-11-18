@@ -1,0 +1,161 @@
+# 큐시트 JSON 형식 (show v5)과 업로드
+
+원문 큐시트(대본 + 조명·음향·무대·출연 큐)를 이 JSON 으로 바꿔 `scripts/upload.js` 로 올린다.
+사이트의 "내보내기"가 만드는 JSON 과 같은 형식이다. 기준 구현은 `index.html` 의 `migrate()`, 검증은 `lib/validate.js`.
+
+## 올리기
+
+```sh
+node scripts/upload.js cues/show.json --dry-run                 # 검증만
+node scripts/upload.js cues/show.json                           # 새 프로젝트로 → id·주소 출력
+node scripts/upload.js cues/show.json --project <id|제목>        # 그 프로젝트를 덮어쓰기 (없으면 --create 로 그 제목으로 생성)
+```
+
+- 서버: `--url https://…` 또는 `$CUE_URL`. 기본 `http://localhost:$PORT`(3000).
+- 비밀번호(서버의 `APP_PASSWORD`): `--key …` 또는 `$CUE_KEY`.
+- `--json`: 결과를 stdout 에 JSON 한 줄로 `{ ok, action, id, rev, url, title, errors, warnings }` (실패 시 `{ ok:false, error }`).
+- 종료 코드: `0` 성공 · `1` 데이터 오류(서버에 아무것도 보내지 않음) · `2` 사용법·연결·인증·서버 오류.
+- 출력된 `열기:` 주소(`/?show=<id>`)로 그 프로젝트가 바로 열린다.
+- 덮어쓰기 때: 서버의 이전 버전을 임시 폴더(`$TMPDIR/cue-sheet-backup-…json`)에 남기고, 사이트에서 올린 음원 연결
+  (`tracks[].fileKey`)은 같은 `no` 트랙에서 이어받는다. 그 사이 사이트에서 저장되면(409) 다시 실행하면 된다.
+- 파일 최상위는 show 객체 그대로, 또는 `{ "show": {…} }` 둘 다 된다. `id` 는 빼도 된다(위치 기반으로 자동 부여).
+
+검증 결과는 `오류 <경로>: <이유> [파트 › 씬 › #문단]` 형식이다. **오류**는 사이트가 불러올 때 뜻이 바뀌거나 사라지는 값이라
+업로드를 막는다. **경고**는 사이트가 알아서 채우거나 고치는 값(숫자 문자열, 빠진 id, 모르는 필드 등)이라 올라간다.
+
+## 구조
+
+```
+show
+├─ title, version: 5, preShowSetup, revision
+├─ people[]  { id, name, role, note }
+├─ tracks[]  { id, no, title, durationSec, fileName, fileKey, note, loop }
+└─ parts[]   { id, name, scenes[] }                       ← 1부, 2부 …
+   └─ scenes[] { id, type, title, cast[], durationSec, setup, comments[], items[] }
+      └─ items[] { id, kind, speaker, text, label, isCue, cues[], comments[] }   ← 대본 한 문단
+         └─ cues[] { id, dept, trigger, offsetSec, memo, status, <dept>: {…} }
+```
+
+빈 값은 `null`(숫자·참조) 또는 `""`(문자열). 표에 없는 필드는 불러올 때 버려진다(경고).
+
+### show
+
+| 필드 | 타입 | 뜻 |
+|---|---|---|
+| `title` | string | 공연(프로젝트) 제목 |
+| `version` | number | **필수**, `5` |
+| `preShowSetup` | string | 공연 전 무대 세팅 (런 보기 첫 화면) |
+| `revision` | string | 판 표시, 40자까지 |
+| `people` / `tracks` / `parts` | array | 아래. `parts` 는 **필수** |
+
+### people[] — 출연자·스태프
+
+| 필드 | 타입 | 뜻 |
+|---|---|---|
+| `id` | string | 다른 곳에서 이 사람을 가리키는 값. **화자·출연자·출연 큐는 이름이 아니라 이 id 를 쓴다** |
+| `name` | string | 표시 이름 |
+| `role` | `performer` `mc` `light` `sound` `stage` `other` | 기본 `other` |
+| `note` | string | 메모 (예: "MC 겸 공연자") |
+
+### tracks[] — 음원(BGM)
+
+| 필드 | 타입 | 뜻 |
+|---|---|---|
+| `no` | number | 트랙 번호. 음향 큐의 `sound.track` 이 이 값을 가리킨다. 겹치면 오류 |
+| `title` | string | 곡 이름 |
+| `loop` | boolean | 반복 재생 (하우스 음악 등) |
+| `durationSec`, `note` | number\|null, string | 길이(초), 메모 |
+| `fileName`, `fileKey` | null | 사이트에서 파일을 올리면 채워진다. **변환 시 `null`** |
+
+### parts[] / scenes[]
+
+| 필드 | 타입 | 뜻 |
+|---|---|---|
+| part `name` | string | "1부" |
+| scene `type` | `mc` \| `act` | `mc` = 진행·멘트·전환 구간, `act` = 마술 액트 |
+| scene `title` | string | 액트 이름 (mc 구간은 보통 `""`) |
+| scene `cast` | string[] | 이 씬에 나오는 사람 `people[].id` |
+| scene `durationSec` | number\|null | 예상 길이(초) |
+| scene `setup` | string | 씬 시작 전 무대 세팅 |
+
+### items[] — 대본 문단
+
+| 필드 | 타입 | 뜻 |
+|---|---|---|
+| `kind` | `line` \| `action` | `line` = 대사, `action` = 지문·동작 |
+| `speaker` | string\|null | 대사의 화자 `people[].id`. `action` 은 `null` |
+| `text` | string | 대사 본문(화자 이름 빼고) 또는 지문. **지문은 `(` 또는 `*` 로 시작** — `"(암전)"`, `"* 액트 도중 조예준 인"` |
+| `label` | string\|null | 큐 번호. **보통 `null`** — 사이트가 큐 붙은 문단에 순서대로 매긴다 |
+| `isCue` | boolean | 큐 유무. 생략 가능(큐가 있으면 자동 true) |
+| `cues` | array | 이 문단 시점에 나가는 큐들 |
+
+### cues[] — 공통
+
+| 필드 | 타입 | 뜻 |
+|---|---|---|
+| `dept` | `cast` `light` `sound` `stage` | **필수**. 같은 이름의 객체 하나가 내용 |
+| `trigger` | string | 언제 — "암전 후", "'소개합니다 박대훈' 후", "예준 스냅 주면" |
+| `offsetSec` | number\|null | trigger 뒤 지연(초). "암전 7초 후" → `trigger:"암전 후", offsetSec:7` |
+| `memo` | string | 메모 |
+| `status` | `set` \| `tbd` | 원문이 "미정"이면 `tbd`. 기본 `set` |
+
+| dept | 내용 객체 |
+|---|---|
+| `light` | `{ channels: [{ ch, action, dim, color, colorName, timeSec }], anim }` — `ch`: `back` `top` `front` `house`(객석). `action`: `on` `off` `fadeIn` `fadeOut` `anim`. `dim` 0–100(%)·null, `color` `"#rrggbb"`·null, `colorName` 색 이름·null, `timeSec` 페이드 초·null. 암전 = 네 채널 모두 `off`. 상세 미정이면 `channels: []` + `status:"tbd"` |
+| `sound` | `{ track, action, timeSec, level }` — `track` = `tracks[].no`. `action`: `play` `fadeIn` `fadeOut` `stop` `volume`. `timeSec` 페이드/변화 초·null, `level` 0–100·null |
+| `stage` | `{ text }` — 무대 작업 ("탑햇테이블에 탑햇 세팅") |
+| `cast` | `{ personId, move, text }` — `personId` = `people[].id`, `move`: `in` `out` `move`, `text` 보충 |
+
+## 변환 요령
+
+- 원문의 지문 한 줄 = `action` 문단 하나, 대사 한 줄 = `line` 문단 하나. 큐는 그 큐가 나가는 시점의 문단 `cues` 에 단다.
+  큐만 있고 대본이 없는 지점(예: "하우스 오픈")은 지문 문단 `"(하우스 오픈 — 하우스 음악 시작)"` 을 만들어 거기에 단다.
+- 액트 본편처럼 대본이 없는 씬은 `items: []` 로 둬도 된다.
+- 등장하는 사람은 모두 `people` 에 넣고 id 를 정한다(예: `"p-yejun"`). 음향 큐가 쓰는 트랙 번호는 모두 `tracks` 에 넣는다.
+- 원문에 없는 값은 지어내지 말고 `null` / `""` / `status:"tbd"` + `memo` 로 남긴다.
+- comments(`{ author, text, createdAt(ISO), resolved }`)는 원문의 확인 요청·메모를 남길 때만 쓴다.
+
+## 최소 예시
+
+```json
+{
+  "title": "1부 (초안)",
+  "version": 5,
+  "preShowSetup": "탑햇테이블",
+  "people": [
+    { "id": "p-yejun", "name": "조예준", "role": "mc", "note": "MC 겸 공연자" },
+    { "id": "p-daehoon", "name": "박대훈", "role": "performer", "note": "" }
+  ],
+  "tracks": [
+    { "id": "tr-1", "no": 1, "title": "하우스 음악", "durationSec": null, "fileName": null, "fileKey": null, "note": "", "loop": true }
+  ],
+  "parts": [{
+    "id": "pt-1", "name": "1부",
+    "scenes": [
+      { "id": "s-1", "type": "mc", "title": "", "cast": ["p-yejun"], "durationSec": null, "setup": "", "comments": [],
+        "items": [
+          { "id": "i-1", "kind": "action", "speaker": null, "text": "(암전)", "label": null, "comments": [],
+            "cues": [
+              { "id": "q-1", "dept": "light", "trigger": "하우스 페이드 아웃 후", "offsetSec": null, "memo": "", "status": "set",
+                "light": { "channels": [
+                  { "ch": "back", "action": "off", "dim": null, "color": null, "colorName": null, "timeSec": null },
+                  { "ch": "top", "action": "off", "dim": null, "color": null, "colorName": null, "timeSec": null },
+                  { "ch": "front", "action": "off", "dim": null, "color": null, "colorName": null, "timeSec": null },
+                  { "ch": "house", "action": "off", "dim": null, "color": null, "colorName": null, "timeSec": null }
+                ], "anim": "" } },
+              { "id": "q-2", "dept": "sound", "trigger": "암전 후", "offsetSec": 7, "memo": "", "status": "set",
+                "sound": { "track": 1, "action": "fadeOut", "timeSec": 3, "level": null } }
+            ] },
+          { "id": "i-2", "kind": "line", "speaker": "p-yejun", "text": "소개합니다 박대훈", "label": null, "comments": [],
+            "cues": [
+              { "id": "q-3", "dept": "cast", "trigger": "멘트 후", "offsetSec": null, "memo": "", "status": "set",
+                "cast": { "personId": "p-daehoon", "move": "in", "text": "" } },
+              { "id": "q-4", "dept": "stage", "trigger": "이 대사 즈음", "offsetSec": null, "memo": "시점 리허설 때 확정", "status": "tbd",
+                "stage": { "text": "탑햇테이블에 탑햇 세팅" } }
+            ] }
+        ] },
+      { "id": "s-2", "type": "act", "title": "멘탈", "cast": ["p-daehoon"], "durationSec": 180, "setup": "", "comments": [], "items": [] }
+    ]
+  }]
+}
+```
