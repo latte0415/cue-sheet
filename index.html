@@ -185,7 +185,7 @@ input[type=color]{padding:0 2px;width:40px;height:30px;cursor:pointer}
 .g:hover,.g:focus-within{z-index:2}
 .g-del{font-size:11px;color:var(--red);border-bottom:1px solid var(--red);margin-top:2px;white-space:nowrap;background:var(--paper)}
 .doc{outline:0;font-family:var(--sans);font-size:16px;line-height:1.7;caret-color:var(--accent);min-height:1.7em}
-.doc p{margin:0 0 4px;white-space:pre-wrap;overflow-wrap:anywhere;position:relative;padding:2px 4px 2px 0}
+.doc p{margin:0 0 4px;white-space:pre-wrap;overflow-wrap:anywhere;position:relative;padding:2px 4px 2px 10px} /* 왼쪽 10px = 큐 줄의 부서 괘선(2px)+들여쓰기(8px)와 글자 줄 맞춤 */
 .doc p.k-action{color:var(--ink-2)}
 .doc .spk{font-weight:600;font-size:14px;letter-spacing:0}
 .doc .paren{color:var(--ink-3)}
@@ -194,7 +194,7 @@ input[type=color]{padding:0 2px;width:40px;height:30px;cursor:pointer}
 .doc p.dim{color:var(--ink-3)}
 .ro{--gut:52px}
 .ro .g-open{font-size:10px;padding-top:7px}
-.doc[data-empty]::before{content:attr(data-empty);position:absolute;left:0;top:2px;color:var(--ink-3);pointer-events:none}
+.doc[data-empty]::before{content:attr(data-empty);position:absolute;left:10px;top:2px;color:var(--ink-3);pointer-events:none}
 .ro .g{padding-right:5px}
 /* 큐 블록: 큐가 달린 문단 위에 한 큐 한 줄 — [부서 열] 내용(진하게) 미정 시점 · 메모(작게 회색). 그 아래 문단 본문은 보통 굵기 */
 .qlayer{position:absolute;left:0;right:0;top:0;height:0;z-index:1}
@@ -217,6 +217,11 @@ input[type=color]{padding:0 2px;width:40px;height:30px;cursor:pointer}
 .ql .qn{font-family:var(--mono);font-size:11px;color:var(--accent);white-space:nowrap}
 .ql.other .qt{font-weight:400;color:var(--ink-3)}
 .ql.other .qd{color:var(--ink-3);font-weight:400}
+/* 대본 큐 줄의 부서 구분: 줄마다 왼쪽 2px 부서색 괘선 (거터의 파란 선과 떨어진 본문 안쪽), 글자는 8px 들여 씀 — 본문 문단도 같은 폭만큼 들인다 */
+.qb .ql{border-left:2px solid var(--dc, var(--rule-2));padding-left:8px}
+.qb .ql.d-cast{--dc:var(--q-cast)}.qb .ql.d-light{--dc:var(--q-light)}.qb .ql.d-sound{--dc:var(--q-sound)}.qb .ql.d-stage{--dc:var(--q-stage)}
+.qb .ql.other{--dc:var(--rule-2)}
+.qb .ql+.ql{margin-top:1px}
 .qb:hover .qt{text-decoration:underline;text-decoration-color:var(--rule-2);text-underline-offset:3px}
 /* 끌어 옮기기 (편집 모드): 문단 손잡이는 본문 바로 왼쪽의 점선 두 줄, 놓을 곳은 문단 사이 가로 괘선 하나, 큐를 놓을 문단은 옅은 바탕 + 왼쪽 선 */
 .dnd-h{position:absolute;left:-14px;z-index:3;width:14px;height:27px;display:flex;align-items:center;justify-content:center;color:var(--rule-2);cursor:grab;touch-action:none}
