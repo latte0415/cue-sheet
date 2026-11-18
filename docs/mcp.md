@@ -152,10 +152,11 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
 
 ### 큐 번호
 
-`item.label`(화면의 Q12)은 `lib/labels.js` 가 매긴다. index.html 의 `assignLabels` 를 그대로 옮긴 것이고
-`test/labels.test.js` 가 index.html 의 함수를 직접 떼어 와 같은 결과인지 대조한다. 규칙: 큐가 처음 붙은 문단에만, 한 번 정하면
-바뀌지 않는다(큐를 다 지워도 남는다). 맨 뒤면 다음 정수, 번호 붙은 문단 사이면 앞 번호의 정수부 + `.k`(맨 앞이면 `0.k`).
-그래서 `label` 은 set 으로 바꿀 수 없다.
+`item.label`(화면의 Q12)은 `lib/labels.js` 가 매긴다. index.html 의 "큐 번호" 구간(`relabel`·`fillLabels` 등)을 그대로 옮긴 것이고
+`test/labels.test.js` 가 index.html 의 함수를 직접 떼어 와 같은 결과인지 대조한다. 규칙: 늘 1, 2, 3 … 대본 순서대로, 큐가 없는 문단은 `null`
+(소수 번호 없음). op 를 적용한 뒤 어긋나 있으면 전부 다시 매긴다 — 큐 추가·삭제·이동, 큐 달린 문단의 이동·삭제 뒤에는 그 뒤 번호가 바뀐다.
+사이트도 편집을 저장할 때 같은 규칙으로 다시 매긴다. 읽기(`get_show`·사이트에서 열기)는 번호를 바꾸지 않는다.
+`edit_show` 결과의 `labels` 는 번호가 바뀐 문단 `{ id, label, was }` 목록이다. 번호는 바뀌므로 op 에서는 id 로 가리키고, `label` 은 set 으로 바꿀 수 없다.
 
 ### 동시 편집
 

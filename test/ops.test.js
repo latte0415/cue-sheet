@@ -5,11 +5,11 @@ const fs = require('fs');
 const path = require('path');
 const { applyOps, OpError } = require('../lib/ops');
 const { validateShow } = require('../lib/validate');
-const { assignLabels } = require('../lib/labels');
+const { fillLabels } = require('../lib/labels');
 
 const backstage = () => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cues', 'backstage-part1.json'), 'utf8'));
 // 문서 예시는 label 이 null — 사이트에 한 번 올라간 상태처럼 번호(1, 2)를 매겨 둔다
-const docExample = () => { const s = JSON.parse(/```json\n([\s\S]*?)```/.exec(fs.readFileSync(path.join(__dirname, '..', 'docs', 'cue-format.md'), 'utf8'))[1]); assignLabels(s); return s; };
+const docExample = () => { const s = JSON.parse(/```json\n([\s\S]*?)```/.exec(fs.readFileSync(path.join(__dirname, '..', 'docs', 'cue-format.md'), 'utf8'))[1]); fillLabels(s); return s; };
 const items = s => s.parts.flatMap(p => p.scenes.flatMap(sc => sc.items));
 const find = (s, id) => {
   for (const p of s.parts) for (const sc of p.scenes) {
@@ -126,9 +126,9 @@ test('add: 브라우저와 같은 id 접두어·기본값, 자식 포함, 위치
   assert.equal(mid.kind, 'action', '"(" 로 시작하면 action');
   assert.equal(mid.isCue, true);
   assert.deepEqual(mid.cues[0], { id: mid.cues[0].id, dept: 'stage', trigger: '', offsetSec: null, memo: '', status: 'set', stage: { text: '탑햇테이블에 탑햇', props: [] } }); // saveCue 와 같은 v6 모양
-  // 번호: 맨 앞 → 0.1, 1 과 2 사이 → 1.1, 기존 1·2 그대로, 새 씬 끝 → 3
-  assert.deepEqual(items(r.show).map(i => i.label), ['0.1', '1', '1.1', '2', null, '3', null].slice(0, items(r.show).length));
-  assert.deepEqual(r.labels.map(l => l.label).sort(), ['0.1', '1.1', '3']);
+  // 번호: 늘 1부터 연속 — 맨 앞·사이에 끼운 큐 문단 때문에 뒤 번호가 밀린다 (i-1: 1→2, i-2: 2→4)
+  assert.deepEqual(items(r.show).map(i => i.label), ['1', '2', '3', '4', null, '5']);
+  assert.deepEqual(r.labels.map(l => [l.was, l.label]).sort(), [[null, '1'], [null, '3'], [null, '5'], ['1', '2'], ['2', '4']]);
   assert.equal(sc.items[3].cues[2].light.channels[0].action, 'on', '채널 기본값');
   const p = r.show.people[2];
   assert.match(p.id, /^p-/); assert.deepEqual([p.name, p.role, p.note], ['라태형', 'performer', '']);
@@ -140,7 +140,8 @@ test('add: 브라우저와 같은 id 접두어·기본값, 자식 포함, 위치
   assert.match(cm.id, /^c-/); assert.equal(cm.author, '조명'); assert.equal(cm.resolved, false); assert.ok(!isNaN(Date.parse(cm.createdAt)));
   assert.deepEqual(validateShow(r.show).errors, []);
   // 바뀐 내용 요약
-  assert.ok(r.changes.some(c => c.op === 'label' && c.label === '0.1'));
+  assert.ok(r.changes.some(c => c.op === 'label' && c.label === '1' && c.was == null));
+  assert.ok(r.changes.some(c => c.op === 'label' && c.id === 'i-2' && c.was === '2' && c.label === '4' && /Q2 → Q4/.test(c.text)));
   assert.ok(r.changes.some(c => c.op === 'add' && c.kind === 'scene' && /2 items, 1 cues/.test(c.text)));
 });
 
@@ -208,11 +209,14 @@ test('remove: 참조 중인 사람·트랙은 거부(목록 포함), force 면 �
   assert.equal(find(r3.show, 'i-2').cues.length, 1);
 });
 
-test('remove: 문단·큐·씬 — 큐를 다 지워도 번호는 남고 isCue 는 false', () => {
-  const r = applyOps(docExample(), [{ op: 'remove', id: 'q-1' }, { op: 'remove', id: 'q-2', kind: 'cue' }, { op: 'remove', id: 's-2' }]);
+test('remove: 문단·큐·씬 — 큐를 다 지우면 isCue false, 번호도 없어지고 뒤 번호가 당겨진다', () => {
+  const r = applyOps(docExample(), [{ op: 'remove', id: 'q-1' }, { op: 'remove', id: 'q-2', kind: 'cue' }]);
   const it = find(r.show, 'i-1');
-  assert.deepEqual([it.cues.length, it.isCue, it.label], [0, false, '1']);
-  assert.equal(r.show.parts[0].scenes.length, 1);
+  assert.deepEqual([it.cues.length, it.isCue, it.label], [0, false, null]);
+  assert.equal(find(r.show, 'i-2').label, '1');
+  assert.ok(r.changes.some(c => c.op === 'label' && c.id === 'i-1' && c.label === null && /cleared/.test(c.text)));
+  const r2 = applyOps(docExample(), [{ op: 'remove', id: 's-2' }]);
+  assert.equal(r2.show.parts[0].scenes.length, 1);
 });
 
 test('move: 순서 바꾸기, 다른 부모로, 큐를 다른 문단으로', () => {
@@ -224,18 +228,21 @@ test('move: 순서 바꾸기, 다른 부모로, 큐를 다른 문단으로', () 
   assert.equal(r.show.parts[0].scenes[0].id, sc[3].id);
   r = applyOps(s, [{ op: 'move', id: sc[0].id }]);
   assert.equal(r.show.parts[0].scenes.at(-1).id, sc[0].id, 'after 없으면 맨 뒤');
-  // 문단을 다른 씬 맨 앞으로 (번호는 고정)
+  const inOrder = sh => items(sh).filter(i => i.cues.length).map(i => i.label).join() === items(sh).filter(i => i.cues.length).map((_, k) => String(k + 1)).join();
+  assert.ok(inOrder(r.show), '씬을 옮겨도 번호는 1부터 연속');
+  // 문단을 다른 씬 맨 앞으로 — 번호는 새 자리 순서대로
   const it = sc[1].items[0];
   r = applyOps(s, [{ op: 'move', id: it.id, parent: sc[2].id, after: 'first' }]);
   assert.equal(r.show.parts[0].scenes[2].items[0].id, it.id);
-  assert.equal(r.show.parts[0].scenes[2].items[0].label, it.label);
-  // 큐를 큐 없는 문단으로 → 그 문단에 사이 번호, 원래 문단은 isCue false
+  assert.ok(inOrder(r.show));
+  // 큐를 큐 없는 문단으로 → 원래 문단은 isCue false·번호 없음, 번호는 1부터 연속 (소수 없음)
   const src = items(s).find(i => i.cues.length === 1);
   const plainItem = items(s).find(i => !i.cues.length && i.label == null);
   r = applyOps(s, [{ op: 'move', id: src.cues[0].id, parent: plainItem.id }]);
   const moved = find(r.show, plainItem.id);
-  assert.equal(moved.cues.length, 1); assert.equal(moved.isCue, true); assert.match(moved.label, /^\d+\.1$/);
-  assert.equal(find(r.show, src.id).isCue, false);
+  assert.equal(moved.cues.length, 1); assert.equal(moved.isCue, true); assert.match(moved.label, /^\d+$/);
+  assert.equal(find(r.show, src.id).isCue, false); assert.equal(find(r.show, src.id).label, null);
+  assert.ok(inOrder(r.show));
   assert.deepEqual(validateShow(r.show).errors, []);
   rejects(() => applyOps(s, [{ op: 'move', id: it.id, parent: s.parts[0].id }]), 'not_found', /is a part, not a scene/);
   rejects(() => applyOps(s, [{ op: 'move', id: 'tr-1', after: 'first' }]), 'bad_op', /ordered by "no"/);
@@ -265,8 +272,11 @@ test('큰 공연(backstage-part1) 전체에 여러 op — 결과 검증 통과, 
   ]);
   assert.deepEqual(validateShow(r.show).errors, []);
   assert.deepEqual(r.warnings, []);
-  assert.equal(r.labels.length, 1);
-  assert.match(r.labels[0].label, new RegExp(`^${String(at.it.label).split('.')[0]}\\.\\d+$`));
+  // 사이에 끼운 큐 문단은 다음 번호, 그 뒤 번호는 하나씩 밀린다 (소수 없음)
+  const added = r.labels.find(l => l.was == null);
+  assert.equal(added.label, String(Number(at.it.label) + 1));
+  assert.equal(r.labels.length, labeled.length - labeled.indexOf(at)); // 새 문단 + 그 뒤 번호 붙은 문단 전부
+  assert.ok(r.labels.filter(l => l.was != null).every(l => Number(l.label) === Number(l.was) + 1));
 });
 
 test('표기 규칙(docs/cue-format.md): 괄호 지문 (…) 을 어기는 수정은 저장하되 action-format 경고로 알린다', () => {

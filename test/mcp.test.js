@@ -89,7 +89,7 @@ function fixtureFacts(show) {
   const person = id => show.people.find(p => p.id === id);
   const firstLabeled = items.find(x => x.it.label != null && x.it.cues.length);
   const line = items.find(x => x.it.kind === 'line' && person(x.it.speaker));
-  // 제목 있는 씬 중, 큐 번호 붙은 문단이 있고 그 뒤(다른 씬 포함)에도 번호 붙은 문단이 있는 씬 → 사이에 끼우면 소수 번호
+  // 제목 있는 씬 중, 큐 번호 붙은 문단이 있고 그 뒤(다른 씬 포함)에도 번호 붙은 문단이 있는 씬 → 사이에 끼우면 뒤 번호가 밀린다
   const labeledIdx = items.map((x, k) => (x.it.label != null && x.it.cues.length ? k : -1)).filter(k => k >= 0);
   const k = labeledIdx.find((k, n) => items[k].sc.title && n < labeledIdx.length - 1);
   const insert = items[k];
@@ -159,14 +159,17 @@ test('e2e: 도구 목록·annotations, list_shows → get_show → search → ed
     assert.match(text(r), /dry run — nothing saved/);
     assert.equal((await S.server.store.get(id)).rev, 1);
 
-    // 저장: 번호 붙은 문단 사이에 끼운 새 큐 문단 → "앞 번호 정수부.k" 
+    // 저장: 번호 붙은 문단 사이에 끼운 새 큐 문단 → 바로 다음 번호, 그 뒤 번호는 하나씩 밀린다 (늘 1부터 연속)
     r = await c.callTool({ name: 'edit_show', arguments: { showId: id, ops, expectRev: 1 } });
     assert.ok(!r.isError, text(r));
     assert.equal(r.structuredContent.rev, 2);
-    const newLabel = r.structuredContent.labels.map(l => l.label);
-    assert.equal(newLabel.length, 1);
-    assert.match(newLabel[0], new RegExp(`^${esc(String(F.insert.it.label).split('.')[0])}\\.\\d+$`));
-    assert.ok(text(r).includes(`Q${newLabel[0]} assigned`));
+    const lb = r.structuredContent.labels;
+    const added = lb.filter(l => l.was == null);
+    assert.equal(added.length, 1);
+    assert.equal(added[0].label, String(Number(F.insert.it.label) + 1));
+    assert.ok(lb.length > 1 && lb.filter(l => l.was != null).every(l => Number(l.label) === Number(l.was) + 1));
+    assert.ok(text(r).includes(`Q${added[0].label} assigned`));
+    assert.ok(/renumbered Q\d+ → Q\d+/.test(text(r)));
     assert.match(text(r), /restore_revision \{"showId":"[^"]+","rev":1\}/);
     const api = await (await fetch(`${S.base}/api/shows/${id}`, { headers: { Authorization: `Bearer ${PW}` } })).json();
     assert.equal(api.rev, 2, '브라우저가 폴링하는 API 에 바로 보인다');

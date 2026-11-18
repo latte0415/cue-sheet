@@ -751,7 +751,6 @@ body.has-player .app{padding-bottom:calc(var(--player-h) + env(safe-area-inset-b
           <button type="button" role="menuitem" id="menu-agent" data-act="agent-open" hidden>에이전트 연결</button>
           <button type="button" role="menuitem" id="menu-trash" data-act="trash-open" hidden>휴지통 — 지운 프로젝트 되살리기</button>
           <button type="button" role="menuitem" id="menu-undo-del" data-act="undo-del" data-confirm="정말? (삭제 이후의 변경도 함께 되돌아감)">마지막 삭제 되돌리기</button>
-          <button type="button" role="menuitem" id="menu-renumber" data-act="renumber" data-confirm="정말 다시 매기기? (1부터 순서대로)">큐 번호 다시 매기기</button>
           <button type="button" role="menuitem" id="menu-reset" data-act="reset" data-confirm="정말 초기화? (현재 데이터 삭제)">샘플로 초기화</button>
           <button type="button" role="menuitem" id="menu-audio-clear" data-act="audio-clear" data-confirm="정말 음원 파일 전부 삭제?">음원 전체 삭제</button>
           <p class="menu-note" role="note">브라우저 인쇄(Ctrl+P)로 인쇄용 레이아웃이 적용됩니다 — 큐시트·대본 보기에서. 출연자 시점이면 내 대사가 굵게 인쇄됩니다</p>
@@ -939,36 +938,25 @@ function sampleShow() {
   return show;
 }
 
-/* ================= 큐 번호 (고정 라벨) ================= */
-// Item.label 은 처음 큐가 붙을 때 정해지고 바뀌지 않는다. 사이에 끼운 큐는 앞 번호의 정수부 + ".k"
+/* ================= 큐 번호 ================= */
+// Item.label = 큐가 붙은 문단의 번호. 늘 1부터 빈틈없이 순서대로 (소수 번호 없음, 큐 없는 문단은 null).
+// 사용자가 편집해 저장할 때(save) 어긋나 있으면 다시 매긴다 — 큐 추가·삭제·이동(패널·끌어 옮기기), 문단 삭제·순서 변경 모두.
+// 불러오기·렌더는 저장된 번호를 그대로 보인다(서버 MCP 가 매긴 번호도 편집 전에는 바꾸지 않는다). 번호가 빠진 문단이 있을 때만
+// 화면용으로 채우고(fillLabels) 저장하지 않는다 — 다음 편집 때 함께 저장된다
 function showItems(show) { const out = []; show.parts.forEach(p => p.scenes.forEach(s => s.items.forEach(i => out.push(i)))); return out; }
 function renumberLabels(show) {
   let n = 0;
   showItems(show).forEach(i => { i.label = i.cues.length ? String(++n) : null; });
 }
-function labelRoot(l) { return String(l).split('.')[0]; }
-function assignLabels(show) {
-  const all = showItems(show);
-  if (!all.some(i => i.cues.length && i.label == null)) return false;
-  const used = new Set(all.filter(i => i.label != null).map(i => i.label));
-  const maxInt = () => { let m = 0; used.forEach(l => { const v = parseInt(labelRoot(l), 10); if (v > m) m = v; }); return m; };
-  all.forEach((it, k) => {
-    if (!it.cues.length || it.label != null) return;
-    let prev = null;
-    for (let j = k - 1; j >= 0; j--) if (all[j].cues.length && all[j].label != null) { prev = all[j].label; break; }
-    const hasNext = all.slice(k + 1).some(x => x.cues.length && x.label != null);
-    let lab;
-    if (!hasNext) lab = String(maxInt() + 1); // 맨 뒤에 붙이면 다음 정수
-    else {
-      const root = prev == null ? '0' : labelRoot(prev);
-      let m = 0;
-      used.forEach(l => { const a = String(l).split('.'); if (a[0] === root && a.length > 1) { const v = parseInt(a[1], 10); if (v > m) m = v; } });
-      lab = root + '.' + (m + 1);
-    }
-    it.label = lab; used.add(lab);
-  });
-  return true;
+// 이미 1, 2, 3 … 순서대로인가 (큐 없는 문단은 번호 없음)
+function labelsInOrder(show) {
+  let n = 0;
+  return showItems(show).every(i => i.cues.length ? i.label === String(++n) : i.label == null);
 }
+// 편집 저장 때: 어긋나 있으면 다시 매기고 true
+function relabel(show) { if (labelsInOrder(show)) return false; renumberLabels(show); return true; }
+// 불러오기·렌더 때: 큐가 있는데 번호가 없는 문단(번호 없이 올린 파일)이 있을 때만 화면용으로 채운다. 그 밖의 번호는 그대로
+function fillLabels(show) { if (!showItems(show).some(i => i.cues.length && i.label == null)) return false; renumberLabels(show); return true; }
 
 /* ================= 마이그레이션 / 정규화 ================= */
 function migrate(raw) {
@@ -1081,7 +1069,7 @@ function migrate(raw) {
     preShowSetup: String(src.preShowSetup || ''), people, props, preShowProps, tracks, parts
   };
   // v3 → v4: 지금 보이는 순서대로 번호를 고정
-  if (ver < 4) renumberLabels(show); else assignLabels(show);
+  if (ver < 4) renumberLabels(show); else fillLabels(show);
   return show;
 }
 function validateImport(txt) {
@@ -2038,7 +2026,8 @@ let saveT = null;
 function save(keepTime) {
   clearTimeout(saveT); saveT = null;
   if (!state.show) return;
-  assignLabels(state.show);
+  // 큐 번호는 편집 저장 때만 1부터 다시 매긴다 (시작·가져오기 저장은 받은 번호 그대로). 바뀌었으면 거터·큐 블록 번호도 다시 그린다
+  if (!keepTime && relabel(state.show)) { buildIndex(); if (mountedView === 'script') queuePaint(); }
   if (!keepTime) state.show.updatedAt = new Date().toISOString();
   Store.saveShow();
   renderRev(); renderSync();
@@ -2068,7 +2057,7 @@ function commit() { save(); render(); }
 // runSeq: 런에서 멈추는 지점 — 공연 전(세팅이 있을 때) · 씬 시작 · 문단. seq = 전체 씬 순번, ord = 문단 순번
 function buildIndex() {
   const entries = [], byItem = new Map(), byScene = new Map(), byPart = new Map(), runSeq = [], stopById = new Map();
-  assignLabels(state.show);
+  fillLabels(state.show); // 렌더는 번호를 다시 매기지 않는다 — 빠진 번호만 화면용으로
   let q = 0, seq = 0;
   const addStop = x => { x.rord = runSeq.length; runSeq.push(x); stopById.set(x.id, x); };
   if (state.show.preShowSetup) addStop({ kind: 'pre', id: 'pre', seq: -1, first: 0 });
@@ -4881,7 +4870,6 @@ function act(a, el) {
       else if (el.dataset.track) { setView('tracks'); render(); const r = document.getElementById('track-' + el.dataset.track); if (r) r.scrollIntoView({ block: 'center' }); }
       break;
     }
-    case 'renumber': renumberLabels(S); state.menuOpen = false; commit(); toast('큐 번호를 1부터 다시 매겼습니다'); break;
     case 'theme':
       if (state.booth) state.booth = false;
       else state.theme = THEMES[(THEMES.indexOf(state.theme) + 1) % THEMES.length];
