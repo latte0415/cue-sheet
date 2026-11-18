@@ -584,10 +584,20 @@ tr.cmt-hit{animation:none}
 .ag-once{margin:0 0 10px;padding-left:10px;border-left:2px solid var(--accent);font-size:13px}
 .ag-tbl td:last-child{text-align:right;padding-right:0}
 .ag-tbl .n{text-align:left;padding-right:10px;white-space:nowrap}
-.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + var(--player-h, 0px) + env(safe-area-inset-bottom, 0px));z-index:80;background:var(--ink);color:var(--paper);padding:8px 14px;font-size:13px;max-width:calc(100vw - 32px)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + var(--player-h, 0px) + var(--pv-h, 0px) + env(safe-area-inset-bottom, 0px));z-index:80;background:var(--ink);color:var(--paper);padding:8px 14px;font-size:13px;max-width:calc(100vw - 32px)}
 body.has-player{--player-h:44px}
 /* --player-h 는 플레이어가 보이는 동안 실제 높이로 덮어쓴다(ResizeObserver) — 폭에 따라 한 줄·두 줄 */
-body.has-player .app{padding-bottom:var(--player-h)}
+body.has-player .app,body.has-preview .app{padding-bottom:calc(var(--player-h, 0px) + var(--pv-h, 0px))}
+/* 미리듣기 띠: 공연 플레이어와 다른 것임을 한눈에 — 점선 괘선 + "미리듣기" + 진행 선. 플레이어가 보이면 그 바로 위 */
+.pv-bar{position:fixed;left:0;right:0;bottom:var(--player-h, env(safe-area-inset-bottom, 0px));z-index:46;background:var(--paper);border-top:1px dashed var(--ink-3);display:flex;align-items:center;gap:14px;padding:6px max(16px, env(safe-area-inset-right, 0px)) 6px max(16px, env(safe-area-inset-left, 0px));font-size:13px;white-space:nowrap}
+.pv-k{font-weight:600}
+.pv-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.pv-time{font-family:var(--mono);font-size:12px;color:var(--ink-2)}
+.pv-line{position:absolute;left:0;right:0;top:-1px;height:2px;pointer-events:none}
+.pv-line i{display:block;height:100%;width:0;background:var(--ink)}
+.tr-table tr.pv-on td:first-child{box-shadow:inset 3px 0 0 var(--ink)}
+.tr-table button[aria-pressed="true"]{color:var(--ink);font-weight:600}
+@media print{.pv-bar{display:none!important}}
 .player{position:fixed;left:0;right:0;bottom:0;z-index:45;background:var(--paper);border-top:1px solid var(--rule-2);display:flex;flex-wrap:wrap;align-items:center;gap:6px 20px;padding:8px max(16px, env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));font-size:13px}
 .pl-g{display:flex;align-items:center;gap:12px;min-width:0}
 .pl-tr{gap:14px}
@@ -965,6 +975,7 @@ body.has-player .app{padding-bottom:var(--player-h)}
   <audio id="player-audio" preload="auto"></audio>
 </div>
 <audio id="preview-audio" preload="auto"></audio>
+<div class="pv-bar" id="pv-bar" role="status" aria-label="미리듣기 — 공연 플레이어와 별도" hidden><span class="pv-k">미리듣기</span><span class="pv-t" id="pv-t"></span><span class="pv-time" id="pv-time"></span><button type="button" class="tb" id="pv-stop" data-act="pv-stop" title="미리듣기 정지">정지</button><span class="pv-line" aria-hidden="true"><i id="pv-fill"></i></span></div>
 <div class="cd" id="cd" role="timer" aria-live="off" hidden><div class="cd-n" id="cd-n"></div><div class="cd-l" id="cd-l"></div><button type="button" class="btn" data-act="cd-stop">닫기 (Esc)</button></div>
 <div id="modal-root"></div>
 <div class="gate" id="gate" hidden></div>
@@ -2079,6 +2090,7 @@ function stopAllAudio() {
   stopCountdown(); cancelRamp(); disarmRestart();
   [audioEl(), previewEl()].forEach(a => { if (!a) return; a.pause(); a.removeAttribute('src'); a.dataset.key = ''; });
   AU.shown = false; AU.trackNo = null; AU.gain = 1; AU.muted = false; PL.list = false;
+  PV.trackId = null; updatePreview();
 }
 async function openShow(id) {
   const r = await api('GET', showPath(id));
@@ -2630,15 +2642,32 @@ function cueRun(c) {
   cuePlay(c);
   return true;
 }
-/* 미리듣기: 공연용 플레이어와 별도 <audio>. 공연 플레이어가 재생 중이면 막는다 */
+/* 미리듣기: 공연용 플레이어와 별도 <audio>. 공연 플레이어가 재생 중이면 막는다(공연 큐·플레이어를 틀면 미리듣기는 멈춘다 — loadTrack·plToggle).
+   듣는 동안은 화면 아래 "미리듣기" 띠(#pv-bar — 점선 괘선, 하단 플레이어 바로 위)를 띄워 공연 플레이어와 헷갈리지 않게 한다.
+   멈추면(정지·끝·공연 재생·프로젝트 바꾸기) 띠도 사라진다 — 미리듣기에는 일시정지가 없다 */
 const PV = { trackId: null };
 function previewEl() { return document.getElementById('preview-audio'); }
 function previewOn(t) { const pv = previewEl(); return !!(pv && t && PV.trackId === t.id && !pv.paused && !pv.ended); }
-function stopPreview() { const pv = previewEl(); if (pv && !pv.paused) pv.pause(); }
+function stopPreview() { const pv = previewEl(); if (pv && !pv.paused) pv.pause(); updatePreview(); }
+function previewTrack() { return PV.trackId && state.show ? state.show.tracks.find(x => x.id === PV.trackId) || null : null; }
+function updatePreview() {
+  const bar = document.getElementById('pv-bar'), pv = previewEl(); if (!bar || !pv) return;
+  const t = previewTrack(), playing = !pv.paused && !pv.ended && !!pv.getAttribute('src');
+  if (playing && !t) pv.pause(); // 듣던 트랙이 지워졌다
+  const on = playing && !!t;
+  if (bar.hidden !== !on) { bar.hidden = !on; document.body.classList.toggle('has-preview', on); }
+  if (!on) { document.body.style.removeProperty('--pv-h'); return; }
+  if (bar.offsetHeight) document.body.style.setProperty('--pv-h', bar.offsetHeight + 'px');
+  const txt = `BGM ${t.no == null ? '?' : t.no} ${t.title || t.fileName || ''}`.trim();
+  const tt = $('#pv-t'); if (tt.textContent !== txt) tt.textContent = txt;
+  const d = isFinite(pv.duration) && pv.duration > 0 ? pv.duration : t.durationSec;
+  $('#pv-time').textContent = fmtDur(pv.currentTime) + ' / ' + fmtDur(d);
+  $('#pv-fill').style.width = (d ? Math.min(100, pv.currentTime / d * 100) : 0) + '%';
+}
 function previewToggle(t) {
   const pv = previewEl();
   if (previewOn(t)) { pv.pause(); return; }
-  if (audioPlaying()) { toast('공연 플레이어 재생 중 — 미리듣기 불가'); return; }
+  if (audioPlaying()) { toast(`하단 공연 플레이어가 BGM ${AU.trackNo == null ? '-' : AU.trackNo} 재생 중이라 미리듣기를 할 수 없습니다 — 플레이어를 멈춘 뒤 다시`); return; }
   const url = trackUrl(t); if (!url) return;
   if (pv.dataset.key !== t.fileKey || pv.getAttribute('src') !== url) { pv.src = url; pv.dataset.key = t.fileKey; }
   try { pv.currentTime = 0; } catch (e) { /* 메타데이터 전 */ }
@@ -4806,14 +4835,15 @@ function viewTracks() {
     const id = esc(t.id), url = trackUrl(t), uses = trackUses(t), busy = trackBusy.has(t.id);
     const pend = rn && rn.id === t.id;
     const noVal = pend ? rn.to : t.no;
-    h += `<tr class="${url ? '' : 'no-file'} ${playingNo === t.no ? 'playing' : ''}" id="track-${id}">
+    const pvOn = previewOn(t);
+    h += `<tr class="${url ? '' : 'no-file'} ${playingNo === t.no ? 'playing' : ''}${pvOn ? ' pv-on' : ''}" id="track-${id}">
       <td class="n">${ed ? `<input type="number" id="trno-${id}" class="in-num" value="${noVal == null ? '' : noVal}" min="0" data-act="track-field" data-k="no" data-track="${id}" aria-label="트랙 번호">` : (t.no == null ? '?' : t.no)}</td>
       <td>${ed ? `<input type="text" id="trtitle-${id}" value="${esc(t.title)}" data-act="track-field" data-k="title" data-track="${id}" aria-label="제목">` : esc(t.title) || '<span class="muted">제목 없음</span>'}</td>
       <td class="tr-file">${busy ? (trackProg.has(t.id) ? `<span class="tr-prog" id="trprog-${id}">업로드 중 ${trackProg.get(t.id)}%</span>` : '<span class="note">저장 중…</span>') : url ? esc(t.fileName || '') : `<span class="muted">파일 없음${t.fileName ? ' (' + esc(t.fileName) + ' — ' + (Store.mode === 'server' ? '서버에' : '이 브라우저에') + ' 없음)' : ''}</span>`}</td>
       <td class="n">${fmtDur(t.durationSec)}</td>
       <td>${ed ? `<label class="chk" for="trloop-${id}"><input type="checkbox" id="trloop-${id}" data-act="track-field" data-k="loop" data-track="${id}" ${t.loop ? 'checked' : ''}>반복</label>` : t.loop ? '반복' : '<span class="muted">—</span>'}</td>
       <td>${uses.length ? `<button type="button" class="tb" data-act="track-uses" data-track="${id}" aria-expanded="${state.trackOpen === t.id}">${uses.length}개</button>` : '<span class="muted">0</span>'}</td>
-      <td>${url ? `<button type="button" class="tb" id="trplay-${id}" data-act="track-play" data-track="${id}" title="공연용 플레이어와 별도로 재생">${previewOn(t) ? '미리듣기 정지' : '미리듣기'}</button>` : '<span class="muted">—</span>'}</td>
+      <td>${url ? `<button type="button" class="tb" id="trplay-${id}" data-act="track-play" data-track="${id}" aria-pressed="${pvOn}" title="${pvOn ? '미리듣기 정지' : '공연 플레이어와 별도로 미리듣기'}">${pvOn ? '■ 미리듣기 정지' : '▶\uFE0E 미리듣기'}</button>` : '<span class="muted">—</span>'}</td>
       <td style="white-space:nowrap"><label class="tb" for="trfile-${id}" style="cursor:pointer">업로드<input type="file" id="trfile-${id}" class="sr-only" accept="audio/*" data-act="track-file" data-track="${id}"></label>${url ? ` &nbsp;<a class="tb" id="trdl-${id}" href="${esc(Store.mode === 'server' ? audioUrl(t.fileKey, true) : url)}" download="${esc(t.fileName || 'bgm-' + t.no)}" title="아티팩트 안에서는 다운로드가 막힐 수 있습니다">저장</a>` : ''}</td>
       <td>${ed ? `<input type="text" id="trnote-${id}" value="${esc(t.note)}" data-act="track-field" data-k="note" data-track="${id}" aria-label="메모">` : esc(t.note)}</td>
       ${ed ? `<td><button type="button" class="tb red" data-act="track-del" data-track="${id}">삭제</button></td>` : ''}
@@ -6340,6 +6370,7 @@ function act(a, el) {
       break;
     }
     case 'm-pr-del': state.modal.draft.stage.props.splice(Number(el.dataset.i), 1); renderModal(); break;
+    case 'pv-stop': stopPreview(); break;
     case 'track-play': {
       const t = S.tracks.find(x => x.id === el.dataset.track); if (!t) break;
       const au = audioEl();
@@ -6849,6 +6880,8 @@ document.addEventListener('drop', ev => {
   if (window.ResizeObserver) new ResizeObserver(() => { if (AU.shown && pl.offsetHeight) document.body.style.setProperty('--player-h', pl.offsetHeight + 'px'); }).observe(pl);
   const pv = previewEl();
   ['play', 'pause', 'ended'].forEach(n => pv.addEventListener(n, () => { if (state.view === 'tracks') render(); }));
+  ['play', 'playing', 'pause', 'ended', 'timeupdate', 'loadedmetadata', 'emptied'].forEach(n => pv.addEventListener(n, updatePreview));
+  if (window.ResizeObserver) new ResizeObserver(() => { const b = $('#pv-bar'); if (!b.hidden && b.offsetHeight) document.body.style.setProperty('--pv-h', b.offsetHeight + 'px'); }).observe($('#pv-bar'));
 })();
 
 /* ================= 끌어 옮기기: 모델 ================= */
