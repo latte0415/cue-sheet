@@ -5673,7 +5673,7 @@ function openItem(id, focus) {
 
 /* ================= 도움말 ================= */
 // 상단 "?"(F1 · ?) → 오른쪽 패널(코멘트 패널과 같은 자리·모양): 글 목록(역할 순) · 찾기 · 용어 · 역할별 한 장 안내 인쇄.
-// 내용은 이 파일 안 <script id="help-data"> JSON — 원본은 작업 폴더 help/*.json · crew-guide.md (화면 용어와 같게 맞춘 것)
+// 내용은 이 파일 안 <script id="help-data"> JSON — 원본은 docs/help/*.json · crew-guide.md, 넣기는 node scripts/embed-help.js (test/help.test.js 가 어긋나면 실패)
 // 빈 화면 안내 · 패널 · 런 등에는 그 글로 가는 작은 "도움말" 글자 단추(helpA), 큐 모달은 칸에 포커스가 갈 때만 회색 한 줄 팁
 const HELPD = (() => { try { return JSON.parse(document.getElementById('help-data').textContent || '{}'); } catch (e) { return {}; } })();
 const HROLES = ['연출·작성', '출연자', '조명·음향', '무대'];

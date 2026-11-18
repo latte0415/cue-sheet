@@ -88,6 +88,11 @@ npm test                               # 서버 API·MCP 테스트 (node --test)
 화면은 늘 네트워크 먼저 받으므로 연결돼 있으면 새 배포가 바로 적용되고, 오프라인 사본으로 떴다가 다시 연결됐을 때 새 배포가 있으면
 "새 화면이 배포되었습니다" 바를 띄운다. 켠 프로젝트가 하나도 없으면 해제한다. 로컬 모드(파일로 열기·아티팩트)에서는 등록하지 않는다.
 
+## 도움말 고치기
+
+앱 안 도움말(상단 "?" · F1)의 원본은 `docs/help/`(글 `articles.json` · 용어 `glossary.json` · 큐 창 팁 `modal-tips.json` · 빈 화면 문구 `empty-states.json` · 크루 한 장 안내 `crew-guide.md`)다.
+고친 뒤 `node scripts/embed-help.js` 로 `index.html` 의 `#help-data` 에 다시 넣는다. 넣지 않았거나 "함께 보기"·글 id 가 끊기면 `npm test`(test/help.test.js)가 실패한다.
+
 ## 원문 큐시트 올리기 (에이전트용)
 
 원문을 큐시트 JSON 으로 바꾼 뒤 `node scripts/upload.js <파일.json> [--project <id|제목> --edit-key <편집 비밀번호>] [--url <서버>] [--key <비밀번호>] [--dry-run]`.
