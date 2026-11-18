@@ -915,7 +915,7 @@ body.has-player .app{padding-bottom:var(--player-h)}
           <button type="button" role="menuitem" id="menu-lock" data-act="edit-lock" hidden>이 기기에서 편집 잠그기</button>
           <button type="button" role="menuitem" id="menu-agent" data-act="agent-open" hidden>에이전트 연결</button>
           <button type="button" role="menuitem" id="menu-trash" data-act="trash-open" hidden>휴지통 — 지운 프로젝트 되살리기</button>
-          <button type="button" role="menuitem" id="menu-undo-del" data-act="undo-del" data-confirm="정말? (삭제 이후의 변경도 함께 되돌아감)">마지막 삭제 되돌리기</button>
+          <button type="button" role="menuitem" id="menu-undo-del" data-act="undo-del">마지막 삭제 되돌리기</button>
           <button type="button" role="menuitem" id="menu-reset" data-act="reset" data-confirm="정말 초기화? (현재 데이터 삭제)">샘플로 초기화</button>
           <button type="button" role="menuitem" id="menu-audio-clear" data-act="audio-clear" data-confirm="정말 음원 파일 전부 삭제?">음원 전체 삭제</button>
           <button type="button" role="menuitem" id="menu-sm-prepare" data-act="sm-prepare" hidden>공연 모드 준비 — 음원을 이 기기에</button>
@@ -1378,6 +1378,35 @@ function snapDiff(snap, it) {
 function applySnap(it, snap) {
   it.kind = snap.kind; it.speaker = snap.speaker || null; it.text = snap.text;
   it.cues = clone(snap.cues); it.isCue = it.cues.length > 0;
+}
+
+/* ================= 삭제 되돌리기: 모델 (순수 함수 — test/del-undo.test.js) ================= */
+// 삭제 기록 하나 = { before, after, seq } — 지우기 직전·직후 show 의 JSON, 순서 번호(UNDO_SEQ). 화면 쪽은 "데이터 조작"의 DEL.
+// 되돌리기는 3-way 병합(lib/merge.js): 기준 = 직후, 내 것 = 지금, 상대 = 직전. 그래서 지운 것(과 함께 지운 참조)만 제자리에
+// 되살아나고, 삭제 뒤에 이 기기·다른 기기가 바꾼 것은 그대로 남는다. 겹친 곳(지운 것 안을 그 뒤에 또 고침 등)은 삭제 전 것.
+// 병합 모듈이 없으면(M = null — 아티팩트·file://) 삭제 뒤 바뀐 것이 없을 때만 그대로(직전 show) 되돌린다.
+// → { ok, show, conflicts, stale } — stale: 병합 없이 직전 show 로 통째 되돌려야 해서 삭제 뒤의 변경도 사라진다(부르는 쪽이 정한다)
+function delUnchanged(entry, cur) {
+  const a = JSON.parse(entry.after); a.updatedAt = cur.updatedAt; // 수정 시각만 다른 것은 같은 내용
+  return JSON.stringify(a) === JSON.stringify(cur);
+}
+function delRestore(entry, cur, M, relabel) {
+  const before = JSON.parse(entry.before);
+  if (!M) return { ok: true, show: before, conflicts: 0, stale: !delUnchanged(entry, cur) };
+  const r = M.mergeShows(JSON.parse(entry.after), cur, before, relabel ? { relabel } : undefined);
+  if (!r.ok) return { ok: false, error: r.error };
+  const show = r.show;
+  show.id = cur.id; show.version = cur.version; show.updatedAt = cur.updatedAt; // 병합은 이 셋을 "상대"(직전) 것으로 둔다
+  return { ok: true, show, conflicts: r.conflicts.length, stale: false };
+}
+// 기록에 넣고 최대 n 개만 남긴다 — 밀려난(가장 오래된) 기록을 돌려준다
+function histPush(list, e, n) { list.push(e); return list.length > n ? list.splice(0, list.length - n) : []; }
+// 편집기·입력칸 밖 Ctrl+Z 가 되돌릴 쪽: 끌어 옮기기 기록(mv)과 삭제 기록(del)의 맨 위 중 순서 번호가 큰 것 → 'mv' | 'del' | null
+function undoPick(mv, del) {
+  if (!mv && !del) return null;
+  if (!mv) return 'del';
+  if (!del) return 'mv';
+  return (del.seq || 0) > (mv.seq || 0) ? 'del' : 'mv';
 }
 
 /* ================= 상태 ================= */
@@ -1947,12 +1976,13 @@ function applyRemote(d, force, merged) {
 // Srv.base = 마지막으로 서버와 맞춘 내용(열기·저장 성공·서버 내용 반영 때). 409 면 기준·내 것·서버 것을 id 단위로 합친다
 const MERGE_TRIES = 3; // 다시 저장해도 또 409 면 몇 번까지 다시 합칠지
 // 이 기기의 show 를 서버 내용(또는 병합 결과)으로 바꿀 때마다 불린다(applyRemote·openShow) — 바뀐 show 와 맞지 않는 이 기기 전용
-// 기록은 모두 여기서 비운다: DEL(삭제 되돌리기 = show 통째 스냅샷이라 남기면 병합된 서버 변경까지 되돌린다), UNDO(편집기 되돌리기).
+// 기록은 여기서 비운다: UNDO(편집기 되돌리기). DEL(삭제 되돌리기)은 남긴다 — 되돌리기가 3-way 병합(delRestore)이라 그사이 합쳐진
+// 서버 변경을 지우지 않는다. 병합 모듈이 없을 때만 비운다(통째 되돌리기가 되므로). 다른 프로젝트를 열 때는 openShow 가 먼저 비운다.
 // keepScene: 부분 반영 때 편집 중이라 그대로 둔 씬 — 그 씬의 편집기 되돌리기만 남긴다(서버가 그 씬을 안 바꿨을 때만 부분 반영된다).
 // 끌어 옮기기 기록(MV)은 씬과 상관없이 모두 비운다 — 옮긴 문단·큐의 "원래 자리"가 합쳐진 서버 순서와 맞지 않는다.
 // UNDO_SEQ 는 순서 번호일 뿐이라 그대로 둔다(남긴 씬의 스냅숏과 앞으로 쌓을 기록의 앞뒤가 유지된다)
 function localReplaced(keepScene) {
-  DEL.length = 0;
+  if (!window.CueMerge) delClear(); // 삭제 되돌리기는 3-way 일 때만 남긴다 (병합 없이 통째 되돌리면 합쳐진 서버 변경까지 되돌린다)
   mvClear();
   if (keepScene == null) UNDO.clear();
   else Array.from(UNDO.keys()).forEach(k => { if (k !== keepScene) UNDO.delete(k); });
@@ -2062,12 +2092,13 @@ async function openShow(id) {
   Object.assign(Srv, { showId: id, rev: r.data.rev, etag: r.etag || `"${r.data.rev}"`, audioKeys: null, audioSizes: null, dirty: false, inflight: false, conflict: null, err: false, gone: false, deferred: false, locked: false, editDefault: row ? !!row.editDefault : editKey(id) === DEFAULT_EDIT_KEY });
   // 편집 비밀번호를 모르는 프로젝트는 보기로 연다 (편집을 누르면 묻는다)
   if (!editKey(id)) state.edit = false;
+  delClear(); // 삭제 되돌리기는 프로젝트마다 — 바꾸기 전 show 로 음원 참조를 본다
   state.show = show; state.show.updatedAt = r.data.updatedAt;
   Srv.base = idsOk(r.data.show) ? clone(show) : null; Srv.mergeWait = null; Srv.mergeTries = 0; localReplaced();
   state.selItem = null; state.sceneEdit = null; state.moveCue = null; state.trackRenum = null; state.panelScene = null;
   state.menuOpen = false; state.projOpen = false; state.curScene = null;
   state.runItemId = typeof Srv.runPos[id] === 'string' ? Srv.runPos[id] : null;
-  SETUP_DONE.clear(); trackErr.clear(); trackBusy.clear(); trackProg.clear(); // DEL·UNDO 는 위 localReplaced()
+  SETUP_DONE.clear(); trackErr.clear(); trackBusy.clear(); trackProg.clear(); // DEL 은 위 delClear(), UNDO·MV 는 localReplaced()
   mountedView = null;
   hideGate(); savePrefs(); render(); renderSync(); renderSyncBar(); renderProj();
   loadAudioFiles(); smLoad(); startPoll();
@@ -3497,6 +3528,7 @@ function restoreSnap(doc, s) {
   syncDoc(doc);
 }
 function undo(doc, redo) {
+  if (!redo && delUndoTurn(doc)) return; // 이 씬을 건드린 삭제가 가장 최근이면 그것부터
   if (dndUndoTurn(doc, redo)) return; // 이 씬에서 가장 최근 일이 끌어 옮기기면 그것부터
   const u = undoBox(doc);
   const from = redo ? u.redo : u.stack, to = redo ? u.stack : u.redo;
@@ -3619,7 +3651,7 @@ function partRest(p, pi) {
     <button type="button" class="tb" data-act="part-add" data-part="${id}">+ 파트</button>
     <button type="button" class="tb" data-act="part-up" data-part="${id}" ${pi === 0 ? 'disabled' : ''} aria-label="파트 위로">↑</button>
     <button type="button" class="tb" data-act="part-down" data-part="${id}" ${pi === last ? 'disabled' : ''} aria-label="파트 아래로">↓</button>
-    <button type="button" class="tb red" data-act="part-del" data-part="${id}" data-confirm="정말 삭제?">삭제</button></span>`;
+    <button type="button" class="tb red" data-act="part-del" data-part="${id}">삭제</button></span>`;
 }
 function sceneMeta(s) {
   const a = s.type === 'act' ? ['액트'] : [];
@@ -3645,7 +3677,7 @@ function sceneRest(s) {
     <button type="button" class="tb" data-act="scene-add" data-scene="${id}">+ 씬</button>
     <button type="button" class="tb" data-act="scene-up" data-scene="${id}" aria-label="씬 위로">↑</button>
     <button type="button" class="tb" data-act="scene-down" data-scene="${id}" aria-label="씬 아래로">↓</button>
-    <button type="button" class="tb red" data-act="scene-del" data-scene="${id}" data-confirm="정말 삭제?">삭제</button></span>`;
+    <button type="button" class="tb red" data-act="scene-del" data-scene="${id}">삭제</button></span>`;
   return h;
 }
 function sceneSetup(s) { return s.setup ? `<div class="sc-setup">세팅 · ${esc(s.setup)}</div>` : ''; }
@@ -3768,7 +3800,7 @@ function gutterHtml(s) {
     if (nC) inner += `<span class="g2"><span class="gc ${open ? 'open' : ''}">※${nC}</span></span>`;
     const empty = it.kind !== 'cue' && !(it.text || '').trim() && !(it.kind === 'line' && it.speaker); // 큐 지점은 큐를 지워야 사라진다 — [삭제] 없음
     const label = `큐 ${it.cues.length}개${tbd ? ' (미정 포함)' : ''}, 코멘트 ${nC}개 — 상세 열기${state.edit && it.cues.length ? ' · 끌면 큐 전부 옮기기, Alt+위/아래 화살표로 한 문단씩' : ''}`;
-    return `<div class="${cls}" data-for="${id}"><button type="button" class="g-open" data-act="open-item" data-item="${id}" aria-label="${label}" title="${label}">${inner}</button>${empty && state.edit ? `<button type="button" class="g-del" data-act="item-del" data-item="${id}" data-confirm="정말?" title="큐 ${it.cues.length}·코멘트 ${nC}개와 함께 삭제">삭제</button>` : ''}</div>`;
+    return `<div class="${cls}" data-for="${id}"><button type="button" class="g-open" data-act="open-item" data-item="${id}" aria-label="${label}" title="${label}">${inner}</button>${empty && state.edit ? `<button type="button" class="g-del" data-act="item-del" data-item="${id}" title="큐 ${it.cues.length}·코멘트 ${nC}개와 함께 삭제">삭제</button>` : ''}</div>`;
   }).join('');
 }
 function layoutGutter(sheet) {
@@ -4467,7 +4499,7 @@ function viewProps() {
         <td>${ed ? `<input type="text" id="prm-${id}" value="${esc(p.note)}" data-act="prop-field" data-k="note" data-prop="${id}" aria-label="메모">` : esc(p.note)}</td>
         <td class="n">${uses.length ? `<button type="button" class="tb mono" id="pru-${id}" data-act="prop-uses" data-prop="${id}" aria-expanded="${!!open}" title="쓰는 큐 ${open ? '접기' : '펼치기'}">${uses.length} ${open ? '▴' : '▾'}</button>` : '<span class="muted">0</span>'}</td>
         <td>${pre ? esc(pre.at || '무대') : '<span class="muted">—</span>'}</td>
-        ${ed ? `<td style="white-space:nowrap"><button type="button" class="tb red" id="prd-${id}" data-act="prop-del" data-prop="${id}" data-confirm="정말 삭제?">삭제</button></td>` : ''}</tr>`;
+        ${ed ? `<td style="white-space:nowrap"><button type="button" class="tb red" id="prd-${id}" data-act="prop-del" data-prop="${id}">삭제</button></td>` : ''}</tr>`;
       if (open) h += `<tr class="tr-uses"><td colspan="${ed ? 5 : 4}">${uses.map(u => `<button type="button" class="ref-link" data-act="comment-goto" data-item="${esc(u.e.item.id)}">${u.e.q ? 'Q' + esc(u.e.q) + ' · ' : ''}${esc(sceneTitle(u.e.scene))} — ${esc(cueText(u.c))}</button>`).join('')}</td></tr>`;
     });
     h += '</tbody></table></div>';
@@ -4724,7 +4756,7 @@ function viewPeople() {
         <td class="n">${st.lines ? `<button type="button" class="tb mono" id="plt-${id}" data-act="person-lines" data-person="${id}" aria-expanded="${open}" aria-controls="pl-${id}" title="대사 목록 ${open ? '접기' : '펼치기'}">${st.lines} ${open ? '▴' : '▾'}</button>` : '0'}</td><td class="n">${st.acts}</td><td class="n">${st.castCues}</td>
         <td class="pp-scenes">${st.scenes.length ? st.scenes.map(s => `<button type="button" data-act="goto-scene" data-scene="${esc(s.id)}">${esc(sceneTitle(s))}</button>`).join('') : '<span class="muted">없음</span>'}</td>
         <td>${ed ? `<input type="text" id="pm-${id}" value="${esc(p.note)}" data-act="person-field" data-k="note" data-person="${id}" aria-label="메모">` : esc(p.note)}</td>
-        <td style="white-space:nowrap"><button type="button" class="tb" data-act="role-pick" data-person="${id}">${sel === p.id ? '시점 해제' : '이 사람 시점'}</button>${ed ? ` &nbsp;<button type="button" class="tb red" data-act="person-del" data-person="${id}" data-confirm="정말 삭제?">삭제</button>` : ''}</td></tr>`;
+        <td style="white-space:nowrap"><button type="button" class="tb" data-act="role-pick" data-person="${id}">${sel === p.id ? '시점 해제' : '이 사람 시점'}</button>${ed ? ` &nbsp;<button type="button" class="tb red" data-act="person-del" data-person="${id}">삭제</button>` : ''}</td></tr>`;
       // 펼친 사람: 대사 목록 (씬 · Q · 대사) — 누르면 대본의 그 문단으로
       if (open) h += `<tr class="pp-lines" id="pl-${id}"><td colspan="8"><div class="pl-box"><ol class="pl-list">${IDX.entries.filter(e => isMyLine(e.item, p.id)).map(e =>
         `<li><button type="button" class="ref-link" data-act="line-goto" data-item="${esc(e.item.id)}"><span class="pl-s">${esc(sceneTitle(e.scene))}${e.q ? ' · <span class="mono">Q' + esc(e.q) + '</span>' : ''}</span><span class="pl-t">${parenHtml(e.item.text) || '<span class="muted">(빈 대사)</span>'}</span></button></li>`).join('')}</ol></div></td></tr>`;
@@ -4784,7 +4816,7 @@ function viewTracks() {
       <td>${url ? `<button type="button" class="tb" id="trplay-${id}" data-act="track-play" data-track="${id}" title="공연용 플레이어와 별도로 재생">${previewOn(t) ? '미리듣기 정지' : '미리듣기'}</button>` : '<span class="muted">—</span>'}</td>
       <td style="white-space:nowrap"><label class="tb" for="trfile-${id}" style="cursor:pointer">업로드<input type="file" id="trfile-${id}" class="sr-only" accept="audio/*" data-act="track-file" data-track="${id}"></label>${url ? ` &nbsp;<a class="tb" id="trdl-${id}" href="${esc(Store.mode === 'server' ? audioUrl(t.fileKey, true) : url)}" download="${esc(t.fileName || 'bgm-' + t.no)}" title="아티팩트 안에서는 다운로드가 막힐 수 있습니다">저장</a>` : ''}</td>
       <td>${ed ? `<input type="text" id="trnote-${id}" value="${esc(t.note)}" data-act="track-field" data-k="note" data-track="${id}" aria-label="메모">` : esc(t.note)}</td>
-      ${ed ? `<td><button type="button" class="tb red" data-act="track-del" data-track="${id}" data-confirm="정말 삭제?">삭제</button></td>` : ''}
+      ${ed ? `<td><button type="button" class="tb red" data-act="track-del" data-track="${id}">삭제</button></td>` : ''}
     </tr>`;
     if (pend) h += `<tr class="tr-confirm" id="trconfirm-${id}"><td colspan="${cols}">BGM ${t.no} → ${rn.to} · 이 번호를 쓰는 큐가 ${rn.n}개 있습니다
       <button type="button" class="btn" id="trrenum-${id}" data-act="track-renum" data-track="${id}">큐 ${rn.n}개도 함께 바꿈</button><button type="button" class="tb" data-act="track-renum-cancel">취소</button></td></tr>`;
@@ -4873,8 +4905,13 @@ function renderTop() {
   smMenu();
   $('#btn-data').setAttribute('aria-expanded', String(state.menuOpen));
   const ud = $('#menu-undo-del'), last = DEL[DEL.length - 1];
-  ud.disabled = !last;
-  if (!ud.classList.contains('armed')) ud.textContent = last ? `마지막 삭제 되돌리기 (${last.label})` : '마지막 삭제 되돌리기';
+  ud.disabled = !last || !state.edit;
+  if (!ud.classList.contains('armed')) {
+    ud.textContent = last ? `마지막 삭제 되돌리기 (${last.label})` : '마지막 삭제 되돌리기';
+    // 병합 모듈 없는 로컬 모드에서 삭제 뒤에 바뀐 것이 있으면 통째 되돌리기 — 그때만 한 번 더 묻는다 (undoDelete 'menu')
+    const whole = state.menuOpen && last && last.after && Store.mode !== 'server' && !window.CueMerge && !delUnchanged(last, state.show);
+    if (whole) ud.dataset.confirm = '정말? (삭제 이후의 변경도 함께 되돌아감)'; else delete ud.dataset.confirm;
+  }
   $('#app').classList.toggle('hide-cues', state.view === 'script' && state.hideCues && !ml);
   renderRev();
   // 큐 이동 모드 안내 바
@@ -4913,7 +4950,7 @@ function commentLi(x, withRef) {
     <div class="cmt-h"><span><b>${esc(c.author)}</b>${isNewCmt(c) ? '<span class="new">새</span>' : ''} <span class="${c.resolved ? 'muted' : 'red'}">${res}</span></span><time class="mono" datetime="${esc(c.createdAt)}">${fmtTime(c.createdAt)}</time></div>
     <p>${esc(c.text)}</p>
     <div class="cmt-a"><button type="button" class="tb" data-act="comment-resolve" ${ids} aria-pressed="${c.resolved}">${c.resolved ? '미해결로' : '해결로 표시'}</button>${cmtRevertBtn(x, ids)}
-    <button type="button" class="tb red" data-act="comment-del" ${ids} data-confirm="정말 삭제?">삭제</button></div></li>`;
+    <button type="button" class="tb red" data-act="comment-del" ${ids}>삭제</button></div></li>`;
 }
 function renderPanel() {
   const panel = $('#panel');
@@ -4955,7 +4992,7 @@ function renderPanel() {
           <div class="pc-a">${playBtn(c, it)}${state.edit ? `<button type="button" class="tb" data-act="cue-edit" ${ids}>수정</button>
             <button type="button" class="tb ${state.moveCue && state.moveCue.cueId === c.id ? 'on' : ''}" data-act="cue-move" ${ids}>다른 문단으로 이동</button>
             <button type="button" class="tb ${c.status === 'tbd' ? 'red' : ''}" data-act="cue-status" ${ids}>${c.status === 'tbd' ? '확정으로' : '미정으로'}</button>
-            <button type="button" class="tb red" data-act="cue-del" ${ids} data-confirm="정말 삭제?">삭제</button>` : ''}</div></li>`;
+            <button type="button" class="tb red" data-act="cue-del" ${ids}>삭제</button>` : ''}</div></li>`;
       }).join('')}</ol>`;
       else h += '<p class="empty">이 문단에는 큐가 없습니다.</p>';
       if (state.edit) h += `<div class="pn-adds"><button type="button" class="btn" id="pn-cue-add" data-act="cue-new" data-item="${iid}">+ 큐 추가</button><button type="button" class="tb" id="pn-cuept-add" data-act="cuept-new" data-item="${iid}" title="이 문단 바로 뒤에 본문 없는 큐 지점을 만든다">+ 이 문단 뒤에 큐 지점</button></div>`;
@@ -4964,7 +5001,7 @@ function renderPanel() {
       const se0 = IDX.byScene.get(e.scene.id);
       h += it.comments.length ? `<ul class="cmts">${it.comments.map(c => commentLi({ e, se: se0, c }, false)).join('')}</ul>` : '';
       h += form + '</section>';
-      if (state.edit && hasAttach(it)) h += `<div class="pn-del"><button type="button" class="tb red" data-act="item-del" data-item="${iid}" data-confirm="정말 삭제? (큐·코멘트 함께)">이 문단 삭제</button></div>`;
+      if (state.edit && hasAttach(it)) h += `<div class="pn-del"><button type="button" class="tb red" data-act="item-del" data-item="${iid}">이 문단 삭제</button></div>`;
     }
   } else {
     h += `<p><label class="chk" for="filter-unresolved"><input type="checkbox" id="filter-unresolved" data-act="filter-unresolved" ${state.unresolvedOnly ? 'checked' : ''}>미해결만</label></p>`;
@@ -5033,13 +5070,13 @@ function revertBody(m) {
     <p class="rv-ref">${esc(e.part.name)} › ${esc(sceneTitle(e.scene))}${e.q ? ' · Q' + esc(e.q) : ''}</p>
     ${d.same ? '<p class="empty">코멘트를 단 뒤로 바뀐 것이 없습니다.</p>' : `<table class="rv-t"><thead><tr><th></th><th>지금</th><th>코멘트 당시 (되돌린 뒤)</th></tr></thead><tbody>${rows.join('')}</tbody></table>`}
     ${c.resolved ? '' : '<label class="chk" for="rv-resolve"><input type="checkbox" id="rv-resolve">되돌린 뒤 이 코멘트를 해결로 표시</label>'}
-    <p class="note">되돌린 뒤에도 메뉴의 "마지막 삭제 되돌리기"나 알림의 [되돌리기]로 바로 전 상태로 돌아갈 수 있습니다.</p>`;
+    <p class="note">되돌린 뒤에도 Ctrl+Z · 알림의 [되돌리기] · 메뉴의 "마지막 삭제 되돌리기"로 바로 전 상태로 돌아갈 수 있습니다.</p>`;
 }
 function revertCmt(itemId, cmtId, resolve) {
   const e = IDX.byItem.get(itemId), c = e && e.item.comments.find(x => x.id === cmtId);
   state.modal = null; renderModal();
   if (!c || !c.snapshot) { toast('삭제된 문단입니다 — 되돌리지 못했습니다'); return; }
-  delSnap('코멘트 당시 복원'); // 통째 취소: 메뉴 · 알림 [되돌리기]
+  delSnap('코멘트 당시 복원', [e.scene.id]); // 통째 취소: Ctrl+Z · 메뉴 · 알림 [되돌리기]
   const doc = mountedView === 'script' && $(`#script .doc[data-scene="${cssq(e.scene.id)}"]`);
   if (doc) pushUndo(doc, true); // 편집기 Ctrl+Z 로는 문장만 되돌아간다
   applySnap(e.item, c.snapshot);
@@ -5048,7 +5085,7 @@ function revertCmt(itemId, cmtId, resolve) {
   const p = doc && doc.querySelector(`p[data-id="${cssq(itemId)}"]`);
   if (p) { setPara(p, itemToRaw(e.item)); p._raw = textOf(p); queuePaint(); }
   cmtJump({ item: itemId });
-  toast('코멘트 당시로 되돌렸습니다' + (resolve ? ' · 해결로 표시' : ''), { undo: true, ms: 8000 });
+  delToast('코멘트 당시로 되돌렸습니다' + (resolve ? ' · 해결로 표시' : ''));
 }
 
 /* ================= 렌더 ================= */
@@ -5404,7 +5441,7 @@ function renderModal(focusFirst) {
   if (m.type === 'cue') {
     title = m.newPoint ? '큐 지점 추가' : m.cueId ? '큐 수정' : '큐 추가';
     body = cueModalBody();
-    foot = `${m.cueId ? '<button type="button" class="tb red left" id="m-del" data-act="m-del" data-confirm="정말 삭제?">큐 삭제</button>' : ''}
+    foot = `${m.cueId ? '<button type="button" class="tb red left" id="m-del" data-act="m-del">큐 삭제</button>' : ''}
       <button type="button" class="btn" data-act="modal-close">취소</button><button type="button" class="btn strong" id="m-save" data-act="m-save">저장</button>`;
   } else if (m.type === 'export') {
     title = 'JSON 내보내기';
@@ -5803,25 +5840,90 @@ function gotoItem(id, focus) {
 function focusTitle(sceneId) {
   requestAnimationFrame(() => { const t = $(`#script .sc-title[data-scene="${cssq(sceneId)}"]`); if (t) { t.focus(); t.scrollIntoView({ block: 'center' }); } });
 }
-/* ===== 삭제 되돌리기: 씬·파트·문단·큐를 지우기 직전의 show 전체를 메모리에 (최대 10개, 편집기 Ctrl+Z 와 별개) ===== */
-const DEL = [];
-function delSnap(label) {
+/* ===== 삭제 되돌리기: 지우기 직전·직후의 show 를 메모리에 (최대 DEL_MAX 개 — 모델은 "삭제 되돌리기: 모델" delRestore) ===== */
+// 삭제는 확인 없이 바로 하고, Ctrl+Z(⌘Z) · 알림 [되돌리기] · 메뉴 "마지막 삭제 되돌리기" 로 되돌린다.
+// 순서: 끌어 옮기기 기록(MV)·편집기 스냅숏(UNDO)과 같은 UNDO_SEQ 를 단다 — 편집기·입력칸 밖 Ctrl+Z 는 이동과 삭제 중 더 최근 것부터
+//  (undoPick), 편집기 안 Ctrl+Z 는 그 씬을 건드린 삭제가 그 씬의 글 고치기·이동보다 최근이면 그것부터 (delUndoTurn).
+// 비우는 곳: 다른 프로젝트 열기(openShow)·샘플 초기화·가져오기 (delClear). 서버 내용을 반영할 때(localReplaced)는 남긴다 — 되돌리기가
+//  3-way 라 그사이 들어온 다른 기기 변경을 지우지 않는다. 병합 모듈이 없으면(통째 되돌리기뿐) 그때도 비운다.
+// 트랙 삭제의 음원 파일은 기록이 남아 있는 동안 지우지 않는다(e.files) — 기록이 밀려나거나 비워질 때·페이지를 닫을 때 지운다 (delDrop)
+const DEL = [], DEL_MAX = 30;
+// scenes: 이 삭제가 건드린 씬 id — 그 씬 편집기의 Ctrl+Z 도 이 삭제를 되돌린다
+function delSnap(label, scenes) {
   flushSave();
-  DEL.push({ json: JSON.stringify(state.show), label: cut(label, 24) });
-  if (DEL.length > 10) DEL.shift();
+  const e = { before: JSON.stringify(state.show), after: null, label: cut(label, 24), scenes: scenes || [], files: [], doc: state.show.id, sid: Srv.showId, seq: ++UNDO_SEQ };
+  delDrop(histPush(DEL, e, DEL_MAX));
+  mvBox().redo = []; // 새로 한 일 — 되돌린 이동을 다시 실행하지 않는다
+  e.scenes.forEach(sid => { const u = UNDO.get(sid); if (u) { u.redo = []; u.t = 0; } }); // 다음 입력은 새 스냅숏부터 (순서가 삭제 뒤로)
+  return e;
 }
-function delToast(msg) { toast(msg, { undo: true, ms: 8000 }); }
-function undoDelete() {
-  const s = DEL.pop();
-  if (!s) { toast('되돌릴 삭제가 없습니다'); return; }
-  state.show = JSON.parse(s.json);
+// 삭제를 반영(commit)한 뒤에 부른다 — 직후 show 를 적고 알림
+function delToast(msg) {
+  const e = DEL[DEL.length - 1]; if (e && e.after == null && state.show) e.after = JSON.stringify(state.show);
+  toast(msg, { undo: true, ms: 8000 });
+}
+// 기록에서 빠진 삭제의 음원 파일 지우기 — 지금 show 의 트랙이 아직(또는 다시) 쓰고 있으면 두고. keepalive: 페이지를 닫는 중
+function delDrop(list, keepalive) {
+  list.forEach(e => e.files.forEach(key => {
+    if (state.show && state.show.id === e.doc && state.show.tracks.some(t => t.fileKey === key)) return;
+    if (Store.mode !== 'server') { LocalStore.delFile(key); return; }
+    if (!e.sid) return;
+    if (e.sid === Srv.showId && Srv.audioKeys) Srv.audioKeys.delete(key);
+    const p = showPath(e.sid) + '/audio/' + enc(key);
+    if (keepalive) fetch('/api' + p, { method: 'DELETE', headers: Object.assign(keyHeaders(), editHeaders(e.sid)), keepalive: true }).catch(() => {});
+    else api('DELETE', p).catch(() => {});
+  }));
+}
+function delClear() { delDrop(DEL.splice(0)); }
+// e 를 되돌린다 (없으면 맨 위). 지금 show 를 병합 결과로 바꾸고 보통 편집처럼 저장 — 409 면 늘 하던 병합. 되돌렸으면 true
+// how: 'key'(편집기 안 Ctrl+Z — 로컬 모드에서 통째 되돌리기뿐이면 조용히 false, 편집기는 글 되돌리기로 넘어간다) · 'menu'(메뉴 — 병합 모듈
+//  없는 로컬 모드면 통째 되돌리기 허용, 그때는 메뉴 버튼이 먼저 한 번 더 묻는다: renderTop) · 없음(알림 [되돌리기] · 편집기 밖 Ctrl+Z)
+function undoDelete(e, how) {
+  if (!state.show || !state.edit) return false;
+  e = e || DEL[DEL.length - 1];
+  if (!e || !e.after) { if (how !== 'key') toast('되돌릴 삭제가 없습니다'); return false; }
+  if (e.doc !== state.show.id) { delDrop(DEL.splice(DEL.indexOf(e), 1)); toast('다른 프로젝트의 삭제라 되돌리지 않았습니다'); return false; }
+  flushSave();
+  const old = state.show, M = window.CueMerge || null;
+  let r;
+  try { r = delRestore(e, JSON.parse(JSON.stringify(old)), M, relabel); } catch (err) { console.error('undo-del', err); r = { ok: false }; }
+  // 병합 모듈이 없고(로컬 모드·서버에서 못 읽음) 삭제 뒤에 바뀐 것이 있으면 통째 되돌리기뿐 — 그 뒤의 변경이 사라진다.
+  // 서버 모드는 다른 기기 변경까지 지우므로 하지 않고, 로컬 모드도 Ctrl+Z·알림으로는 하지 않는다(메뉴로만)
+  if (r.ok && r.stale && (Store.mode === 'server' || how !== 'menu')) {
+    if (how !== 'key' || Store.mode === 'server') toast(Store.mode === 'server' ? '되돌리지 못했습니다 — 병합 모듈이 없어 삭제 뒤에 바뀐 내용과 합칠 수 없습니다'
+      : '삭제 뒤에 바뀐 내용이 있어 되돌리지 않았습니다 — 메뉴 "마지막 삭제 되돌리기"는 그 변경까지 함께 되돌립니다');
+    return false;
+  }
+  if (!r.ok) { toast('되돌리지 못했습니다 — 삭제 뒤에 바뀐 내용과 합치지 못했습니다'); return false; }
+  DEL.splice(DEL.indexOf(e), 1);
+  state.show = r.show;
+  // 이동 기록은 id 로 찾아 옮기므로 그대로 둔다(삭제보다 최근 이동은 이미 먼저 되돌렸다). 다시 실행할 이동은 버린다
+  if (MV.show === old) MV.show = state.show;
+  MV.redo = [];
+  // 편집기 스냅숏: 통째 되돌렸으면 모두, 아니면 이 삭제가 건드린 씬에서 삭제 뒤에 찍힌 것만 버린다(되살린 문단이 빠진 모양이라)
+  if (r.stale) UNDO.clear();
+  else e.scenes.forEach(sid => { const u = UNDO.get(sid); if (u) { u.stack = u.stack.filter(y => (y.seq || 0) < e.seq); u.redo = []; u.t = 0; } });
   state.selItem = null; state.sceneEdit = null; state.moveCue = null; state.trackRenum = null;
-  UNDO.clear(); mountedView = null;
-  commit(); toast(`되돌렸습니다 — ${s.label}`);
+  mountedView = null;
+  commit();
+  toast(`되돌렸습니다 — ${e.label}` + (r.stale ? ' (삭제 뒤의 변경도 함께 되돌림)' : r.conflicts ? ` · 그 뒤에 고친 ${r.conflicts}곳은 삭제 전 내용으로` : ''));
+  return true;
+}
+// 편집기 안 Ctrl+Z: 이 씬을 건드린 삭제가 이 씬의 마지막 글 고치기·이동보다 최근이면 그 삭제를 되돌리고 true
+function delUndoTurn(doc) {
+  if (!state.edit) return false;
+  const sid = doc.dataset.scene;
+  let e = null; for (let k = DEL.length - 1; k >= 0; k--) if (DEL[k].scenes.includes(sid) && DEL[k].after) { e = DEL[k]; break; }
+  if (!e) return false;
+  const u = undoBox(doc), top = u.stack[u.stack.length - 1];
+  if (top && (top.seq || 0) > e.seq) return false;
+  const m = mvBox(); for (let k = m.undo.length - 1; k >= 0; k--) if (m.undo[k].scenes.includes(sid)) { if (m.undo[k].seq > e.seq) return false; break; }
+  syncDoc(doc);
+  return undoDelete(e, 'key'); // 못 되돌리면(로컬 모드에서 삭제 뒤에 다른 곳을 고침) 이 씬의 글 되돌리기로
 }
 function deleteItem(id) {
   const e = IDX.byItem.get(id); if (!e) return;
-  delSnap('문단 ' + (e.q ? 'Q' + e.q : cut(e.item.text || '(빈 문단)', 12)));
+  delSnap('문단 ' + (e.q ? 'Q' + e.q : cut(e.item.text || '(빈 문단)', 12)), [e.scene.id]);
   e.scene.items.splice(e.ii, 1);
   if (state.selItem === id) state.selItem = null;
   commit(); delToast('문단을 삭제했습니다');
@@ -5829,7 +5931,7 @@ function deleteItem(id) {
 function deleteCue(itemId, cueId) {
   const e = IDX.byItem.get(itemId); if (!e) return false;
   const c = e.item.cues.find(x => x.id === cueId); if (!c) return false;
-  delSnap(`큐 ${e.q ? 'Q' + e.q + ' ' : ''}${DEPT_L[c.dept]}`);
+  delSnap(`큐 ${e.q ? 'Q' + e.q + ' ' : ''}${DEPT_L[c.dept]}`, [e.scene.id]);
   e.item.cues = e.item.cues.filter(x => x !== c); e.item.isCue = e.item.cues.length > 0;
   if (state.moveCue && state.moveCue.cueId === cueId) state.moveCue = null;
   // 큐 지점의 마지막 큐면 지점도 사라진다 (되돌리기는 delSnap 스냅숏)
@@ -5872,9 +5974,12 @@ function renumTrack(tr, to) {
 
 /* ================= 토스트 / 2단계 확인 ================= */
 let toastT = null;
+// 되돌리기 알림의 단축키 표시 (키보드 없는 기기는 [되돌리기] 를 누른다)
+const UNDO_KEY = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '') ? '⌘Z' : 'Ctrl+Z';
 function toast(msg, o) {
   const t = $('#toast'); t.textContent = msg; t.hidden = false;
   if (o && o.undo) {
+    t.appendChild(document.createTextNode(' · ' + UNDO_KEY));
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'toast-a'; b.id = 'toast-undo'; b.dataset.act = 'undo-del'; b.textContent = '되돌리기';
     t.appendChild(b);
@@ -5923,7 +6028,7 @@ function act(a, el) {
       savePrefs(); renderTop(); renderPanel(); break;
     }
     case 'comment-goto-scene': if (innerWidth <= 1100) state.panel = false; savePrefs(); cmtJump({ scene: el.dataset.scene }); break;
-    case 'undo-del': state.menuOpen = false; undoDelete(); break;
+    case 'undo-del': { const menu = el.id === 'menu-undo-del'; state.menuOpen = false; if (menu) renderTop(); undoDelete(null, menu ? 'menu' : undefined); break; }
     case 'cue-move': {
       state.moveCue = { itemId: el.dataset.item, cueId: el.dataset.cue };
       if (innerWidth <= 1100) { state.panel = false; savePrefs(); }
@@ -6004,7 +6109,7 @@ function act(a, el) {
           if (!cur) { renderProj(); return; }
           Srv.showId = null; state.projOpen = false; renderProj(); stopAllAudio(); clearInterval(Srv.pollT);
           if (list.length) return openShow(list[0].id);
-          state.show = null; savePrefs(); showGate('first');
+          delClear(); state.show = null; savePrefs(); showGate('first');
         });
       }).catch(e => toast('삭제 실패: ' + e.message));
       break;
@@ -6044,7 +6149,7 @@ function act(a, el) {
     case 'import': state.menuOpen = false; renderTop(); state.modal = { type: 'import', text: '', err: '' }; renderModal(true); break;
     case 'reset':
       state.show = sampleShow(); state.selItem = null; state.runItemId = null; state.menuOpen = false; state.sceneEdit = null;
-      state.moveCue = null; state.trackRenum = null; state.panelScene = null; DEL.length = 0; SETUP_DONE.clear();
+      state.moveCue = null; state.trackRenum = null; state.panelScene = null; delClear(); SETUP_DONE.clear();
       UNDO.clear(); if (rolePerson()) state.role = 'all';
       mountedView = null; savePrefs(); commit(); toast('샘플 데이터로 초기화했습니다'); break;
     case 'goto-scene': gotoScene(el.dataset.scene); break;
@@ -6113,7 +6218,7 @@ function act(a, el) {
       break;
     }
     case 'part-up': case 'part-down': { const p = IDX.byPart.get(el.dataset.part); if (p && moveIn(S.parts, p.pi, a === 'part-up' ? -1 : 1)) commit(); break; }
-    case 'part-del': { const p = IDX.byPart.get(el.dataset.part); if (p) { delSnap('파트 ' + (p.part.name || '이름 없음')); S.parts.splice(p.pi, 1); commit(); delToast('파트를 삭제했습니다'); } break; }
+    case 'part-del': { const p = IDX.byPart.get(el.dataset.part); if (p) { delSnap('파트 ' + (p.part.name || '이름 없음'), p.part.scenes.map(x => x.id)); S.parts.splice(p.pi, 1); commit(); delToast('파트를 삭제했습니다'); } break; }
     case 'scene-add': {
       const s = { id: uid('s'), type: 'act', title: '', cast: [], durationSec: null, setup: '', items: [], comments: [] };
       if (el.dataset.scene) { const se = IDX.byScene.get(el.dataset.scene); if (!se) break; se.part.scenes.splice(se.si + 1, 0, s); }
@@ -6132,7 +6237,7 @@ function act(a, el) {
       requestAnimationFrame(() => { const x = document.getElementById('sc-' + se.scene.id); if (x) x.scrollIntoView({ block: 'nearest' }); });
       break;
     }
-    case 'scene-del': { const se = IDX.byScene.get(el.dataset.scene); if (se) { delSnap('씬 ' + sceneTitle(se.scene)); se.part.scenes.splice(se.si, 1); commit(); delToast('씬을 삭제했습니다'); } break; }
+    case 'scene-del': { const se = IDX.byScene.get(el.dataset.scene); if (se) { delSnap('씬 ' + sceneTitle(se.scene), [se.scene.id]); se.part.scenes.splice(se.si, 1); commit(); delToast('씬을 삭제했습니다'); } break; }
     case 'scene-props': state.sceneEdit = state.sceneEdit === el.dataset.scene ? null : el.dataset.scene; refreshSceneHeads(); break;
     case 'scene-type': { const se = IDX.byScene.get(el.dataset.scene); if (se) { se.scene.type = el.dataset.type === 'mc' ? 'mc' : 'act'; save(); refreshSceneHeads(); renderNav(); } break; }
     // 카운트다운이 떠 있는 동안에는 위치를 옮기지 않는다 (Esc 로 취소만)
@@ -6166,7 +6271,12 @@ function act(a, el) {
       c.resolvedAt = c.resolved ? new Date().toISOString() : null;
       commit(); break;
     }
-    case 'comment-del': { const o = cmtOwner(el); if (o) { o.comments = o.comments.filter(x => x.id !== el.dataset.cmt); commit(); } break; }
+    case 'comment-del': {
+      const o = cmtOwner(el), c = o && o.comments.find(x => x.id === el.dataset.cmt); if (!c) break;
+      const sc = el.dataset.item ? IDX.byItem.get(el.dataset.item).scene : o;
+      delSnap('코멘트 ' + cut(c.text || '', 12), [sc.id]);
+      o.comments = o.comments.filter(x => x !== c); commit(); delToast('코멘트를 삭제했습니다'); break;
+    }
     case 'comment-goto': if (innerWidth <= 1100) state.panel = false; savePrefs(); cmtJump({ item: el.dataset.item }); break;
     case 'cmt-jump': {
       const sl = getSelection && getSelection(); if (sl && !sl.isCollapsed && el.contains(sl.anchorNode)) break; // 글자 고르기는 이동 아님
@@ -6176,11 +6286,12 @@ function act(a, el) {
     case 'revert-do': { const m = state.modal; if (m && m.type === 'revert') revertCmt(m.itemId, m.cmtId, !!($('#rv-resolve') && $('#rv-resolve').checked)); break; }
     case 'person-add': state.modal = { type: 'person', draft: { name: '', role: 'performer', note: '' }, err: '' }; renderModal(true); break;
     case 'person-del': {
-      const id = el.dataset.person;
+      const id = el.dataset.person, pp = S.people.find(p => p.id === id); if (!pp) break;
+      delSnap('사람 ' + (pp.name || ''));
       S.people = S.people.filter(p => p.id !== id);
       S.parts.forEach(p => p.scenes.forEach(s => { s.cast = s.cast.filter(x => x !== id); }));
       if (state.role === 'p:' + id) { state.role = 'all'; savePrefs(); }
-      commit(); toast('삭제했습니다 — 대사·큐의 참조는 "(삭제된 사람)" 으로 표시됩니다'); break;
+      commit(); delToast('삭제했습니다 — 대사·큐의 참조는 "(삭제된 사람)" 으로 표시됩니다'); break;
     }
     case 'person-save': {
       const m = state.modal, name = m.draft.name.trim();
@@ -6198,11 +6309,12 @@ function act(a, el) {
       closeModal(true); commit(); toast(`${name} 추가됨`); break;
     }
     case 'prop-del': {
-      const id = el.dataset.prop;
+      const id = el.dataset.prop, pr = S.props.find(p => p.id === id); if (!pr) break;
+      delSnap('소품 ' + (pr.name || ''));
       S.props = S.props.filter(p => p.id !== id);
       S.preShowProps = S.preShowProps.filter(x => x.propId !== id);
       if (state.propOpen === id) state.propOpen = null;
-      commit(); toast('삭제했습니다 — 무대 큐의 참조는 "(삭제된 소품)" 으로 표시됩니다'); break;
+      commit(); delToast('삭제했습니다 — 무대 큐의 참조는 "(삭제된 소품)" 으로 표시됩니다'); break;
     }
     case 'prop-uses': state.propOpen = state.propOpen === el.dataset.prop ? null : el.dataset.prop; render(); break;
     case 'pre-prop-add': {
@@ -6212,7 +6324,11 @@ function act(a, el) {
       const f = document.getElementById('pp-at-' + (S.preShowProps.length - 1)); if (f) f.focus();
       break;
     }
-    case 'pre-prop-del': S.preShowProps.splice(Number(el.dataset.i), 1); commit(); break;
+    case 'pre-prop-del': {
+      const i = Number(el.dataset.i), x = S.preShowProps[i]; if (!x) break;
+      const pr = S.props.find(p => p.id === x.propId);
+      delSnap('공연 전 소품 ' + (pr ? pr.name || '' : '')); S.preShowProps.splice(i, 1); commit(); delToast('공연 전 소품을 뺐습니다'); break;
+    }
     case 'sv-go': { const pts = stagePoint().pts, k = pts.findIndex(x => x.id === el.dataset.pt); if (k >= 0) stageGo(k); break; }
     case 'sv-prev': stageGo(stagePoint().i - 1); break;
     case 'sv-next': stageGo(stagePoint().i + 1); break;
@@ -6234,8 +6350,10 @@ function act(a, el) {
     case 'track-add': { const max = S.tracks.reduce((m, x) => Math.max(m, x.no || 0), 0); S.tracks.push({ id: uid('tr'), no: max + 1, title: '', durationSec: null, fileName: null, fileKey: null, note: '' }); commit(); break; }
     case 'track-del': {
       const t = S.tracks.find(x => x.id === el.dataset.track); if (!t) break;
-      if (t.fileKey && !S.tracks.some(x => x !== t && x.fileKey === t.fileKey)) Store.delFile(t.fileKey);
-      S.tracks = S.tracks.filter(x => x !== t); commit(); break;
+      const e = delSnap(`BGM ${t.no}${t.title ? ' ' + t.title : ''}`);
+      // 음원 파일은 되돌릴 수 있는 동안 남긴다 — 기록에서 빠질 때 지운다 (delDrop)
+      if (t.fileKey && !S.tracks.some(x => x !== t && x.fileKey === t.fileKey)) e.files.push(t.fileKey);
+      S.tracks = S.tracks.filter(x => x !== t); commit(); delToast(`트랙을 삭제했습니다 (BGM ${t.no})`); break;
     }
     case 'sm-prepare': state.menuOpen = false; renderTop(); smPrepare(); break;
     case 'sm-cancel': if (SM.ctl) SM.ctl.abort(); break;
@@ -6328,7 +6446,7 @@ function act(a, el) {
         renderModal(); break;
       }
       state.show = r.show; state.selItem = null; state.sceneEdit = null; state.moveCue = null; state.trackRenum = null; state.panelScene = null;
-      UNDO.clear(); DEL.length = 0; mountedView = null;
+      UNDO.clear(); delClear(); mountedView = null;
       closeModal(true); save(true); render();
       toast(`가져왔습니다 — 파트 ${r.show.parts.length}, 사람 ${r.show.people.length}${r.show.revision ? ' · ' + r.show.revision : ''}`); break;
     }
@@ -6684,7 +6802,10 @@ window.addEventListener('resize', () => { if (mountedView === 'script') queuePai
     if (p) spkMenu(doc, p);
   });
 })();
-window.addEventListener('pagehide', () => { flushSave(); if (Store.mode === 'server' && pendingLocal()) backupLocal(); });
+window.addEventListener('pagehide', ev => {
+  flushSave(); if (Store.mode === 'server' && pendingLocal()) backupLocal();
+  if (!ev.persisted) delDrop(DEL.splice(0), true); // 닫으면 삭제 되돌리기도 끝 — 남겨 둔 트랙 음원을 지운다(뒤로 가기 캐시로 들어가면 남긴다)
+});
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') { flushSave(); clearInterval(Srv.pollT); Srv.pollT = null; }
   else if (Store.mode === 'server' && Srv.showId) { poll(); startPoll(); }
@@ -6824,12 +6945,12 @@ function restoreLabels(show, m) {
 //        누르기만 하면 상세 열기, Q 번호에 포커스가 있으면 Alt+↑/↓ 로 이전·다음 문단에
 //  끄는 동안 화면 위·아래 가장자리에 가면 저절로 스크롤. 놓으면 큐 번호를 다시 매기고 저장. Esc 취소
 // 되돌리기: 편집기 UNDO(씬별 문단 스냅숏)와 따로 MV 에 "원래 자리"를 쌓는다. 편집기 안 Ctrl+Z 는 그 씬의 스냅숏과
-//  그 씬을 건드린 이동 중 더 최근 것을 먼저 되돌린다 (둘 다 UNDO_SEQ 로 순서를 단다). 편집기 밖(손잡이·빈 곳)에서는 이동만
+//  그 씬을 건드린 이동·삭제 중 더 최근 것을 먼저 되돌린다 (모두 UNDO_SEQ 로 순서를 단다). 편집기 밖(손잡이·빈 곳)에서는 이동과 삭제(DEL)
 const MV = { undo: [], redo: [], show: null };
 const DND = { on: false, started: false, kind: null, id: null, el: null, src: null, x0: 0, y0: 0, x: 0, y: 0, pid: null, slot: null, tgt: null, raf: 0, hoverP: null, eatClick: false };
 function dndOn() { return !!state.show && state.edit && state.view === 'script' && mountedView === 'script' && !state.moveCue && !state.modal && !composing; }
-// 이동 기록 비우기: 서버 내용·병합 결과로 바꿀 때는 localReplaced() 가 부른다. 그 밖에 show 를 갈아끼우는 곳(가져오기·삭제 되돌리기·
-// 샘플 초기화 등)은 mvBox 가 show 가 바뀐 것을 보고 비운다
+// 이동 기록 비우기: 서버 내용·병합 결과로 바꿀 때는 localReplaced() 가 부른다. 그 밖에 show 를 갈아끼우는 곳(가져오기·
+// 샘플 초기화 등)은 mvBox 가 show 가 바뀐 것을 보고 비운다. 삭제 되돌리기(undoDelete)는 이동 기록을 남긴다 — MV.show 를 새 show 로 옮긴다
 function mvClear() { MV.undo = []; MV.redo = []; MV.show = state.show; }
 function mvBox() { if (MV.show !== state.show) mvClear(); return MV; }
 function dndDoc(sid) { return $(`#script .doc[data-scene="${cssq(sid)}"]`); }
@@ -7310,18 +7431,31 @@ function dndUndoTurn(doc, redo) {
   if (top && (top.seq || 0) > (redo ? e.rseq : e.seq)) return false;
   return redo ? dndRedoStep(sid) : dndUndoStep(sid);
 }
-// 편집기 밖(손잡이·빈 곳)의 Ctrl+Z / Ctrl+Y · Ctrl+Shift+Z — 끌어 옮긴 기록만
+// 편집기·입력칸 밖(손잡이·빈 곳·버튼)의 Ctrl+Z / Ctrl+Y · Ctrl+Shift+Z — 끌어 옮기기와 삭제를 한 줄의 기록처럼(UNDO_SEQ 가 더 큰 것부터).
+// 글자를 고치는 곳(입력칸·편집기·contenteditable)에서는 그곳의 되돌리기 그대로 — 대본 편집기는 undo() 가 그 씬의 삭제·이동도 본다.
+// 다시 실행은 이동만 (삭제를 다시 하려면 다시 지운다)
 document.addEventListener('keydown', ev => {
   const mod = ev.ctrlKey || ev.metaKey, k = ev.key;
-  if (!mod || ev.altKey || !(k === 'z' || k === 'Z' || k === 'y' || k === 'Y')) return;
-  // 큐시트에서도 — 이동 모드로 옮긴 큐·Q 묶음 (큐 이동은 문단 순서를 바꾸지 않아 대본 편집기 없이 되돌릴 수 있다)
-  if (!state.show || (state.view !== 'script' && state.view !== 'cuesheet') || state.modal || GATE.type) return;
+  const isZ = k === 'z' || k === 'Z' || ev.code === 'KeyZ', isY = k === 'y' || k === 'Y' || ev.code === 'KeyY'; // 한글 자판이면 key 가 'ㅋ'·'ㅛ'
+  if (!mod || ev.altKey || !(isZ || isY)) return;
+  if (!state.show || state.modal || GATE.type) return;
   const t = ev.target;
-  if (t && t.closest && (t.closest('.doc, .ce, .modal, #panel') || t.matches('input, textarea, select, [contenteditable="true"]'))) return;
-  const redo = k === 'y' || k === 'Y' || ev.shiftKey, m = mvBox();
-  if (!(redo ? m.redo : m.undo).length) return;
+  if (t && t.closest && (t.closest('.doc, .ce, .modal') || t.isContentEditable || t.matches('input, textarea, select'))) return;
+  const redo = isY || ev.shiftKey, m = mvBox();
+  // 이동 기록은 대본·큐시트에서만 (큐 이동은 문단 순서를 바꾸지 않아 대본 편집기 없이 되돌릴 수 있다). 삭제는 편집 모드면 어느 뷰에서나
+  const mvHere = state.view === 'script' || state.view === 'cuesheet';
+  if (redo) {
+    if (!mvHere || !m.redo.length) return;
+    ev.preventDefault();
+    if (!dndRedoStep(null)) toast('다시 실행할 것이 없습니다');
+    return;
+  }
+  const del = state.edit ? DEL.filter(x => x.after).slice(-1)[0] : null;
+  const pick = undoPick(mvHere ? m.undo[m.undo.length - 1] : null, del);
+  if (!pick) return;
   ev.preventDefault();
-  if (!(redo ? dndRedoStep(null) : dndUndoStep(null))) toast(redo ? '다시 실행할 것이 없습니다' : '되돌릴 것이 없습니다');
+  if (pick === 'del') undoDelete(del); // 못 되돌리면 알림으로 까닭을 (편집기 밖이라 넘겨줄 글 되돌리기가 없다)
+  else if (!dndUndoStep(null)) toast('되돌릴 것이 없습니다');
 });
 
 /* ================= 시작 ================= */
