@@ -228,6 +228,11 @@ function createServer(opts) {
 
     if (sub === undefined) {
       if (M === 'GET') {
+        // 폴링 빠른 길: 메모리의 rev(store.cachedRev — 쓰기마다 store 가 고친다)와 맞으면 파일을 읽지 않고 304.
+        // 인증(authed)·id 검사는 위에서 이미 지났다. 캐시에 없으면(시작 직후·되살린 직후) 아래에서 파일을 읽고 채운다
+        const inm = req.headers['if-none-match'];
+        const known = inm ? store.cachedRev(id) : undefined;
+        if (known !== undefined && etagMatch(inm, known)) { res.writeHead(304, { ETag: `"${known}"` }); return res.end(); }
         const rec = await needShow(id);
         const tag = `"${rec.rev}"`;
         if (etagMatch(req.headers['if-none-match'], rec.rev)) { res.writeHead(304, { ETag: tag }); return res.end(); }

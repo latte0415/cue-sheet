@@ -108,7 +108,7 @@ DATA_DIR/trash/<id>-<삭제 ms>/             휴지통: meta.json { id, title, r
 DATA_DIR/tokens.json                      사람별 MCP 토큰 [{ id, name, hash, createdAt, lastUsedAt }] — 토큰 원문은 저장하지 않음(sha256)
 ```
 
-쓰기는 임시 파일 → rename 으로 원자적이고, 한 프로세스 안에서 직렬화된다(서버 인스턴스는 하나로 둔다).
+쓰기는 임시 파일 → rename 으로 원자적이고, 한 프로세스 안에서 프로젝트별로 직렬화된다 — 같은 프로젝트는 한 줄로, 다른 프로젝트는 서로 기다리지 않는다(서버 인스턴스는 하나로 둔다). 프로젝트별 현재 rev 는 메모리에 두고, 폴링의 `If-None-Match` 가 같으면 파일을 읽지 않고 `304` 를 준다 — 그래서 서버 밖에서 `shows/*.json` 을 손으로 고치면 재시작해야 반영된다.
 
 ## API
 
