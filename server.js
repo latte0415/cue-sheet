@@ -470,6 +470,14 @@ function createServer(opts) {
         res.end(req.method === 'HEAD' ? undefined : data);
       });
     }
+    // 공연 모드 Service Worker (index.html 이 서버 모드 + 공연 모드일 때만 등록). no-cache — 브라우저가 늘 새 워커가 있는지 확인하게
+    if (pathname === '/sw.js') {
+      return fs.readFile(path.join(__dirname, 'sw.js'), (err, data) => {
+        if (err) return text(500, 'error');
+        res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache' });
+        res.end(req.method === 'HEAD' ? undefined : data);
+      });
+    }
     text(404, 'not found');
   });
   // 프록시(Railway 등)의 유휴 연결 시간보다 길게 — 서버가 먼저 닫아 재사용 중인 연결이 끊기는 경쟁을 줄인다

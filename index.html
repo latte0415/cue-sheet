@@ -317,6 +317,16 @@ tr.tbd .cs-num{border-left:2px dashed var(--red)}
 .run-hint{font-size:12px;color:var(--ink-3);margin:0;flex:1;min-width:0;text-align:right}
 .run-opts{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px;font-size:12px;padding-top:6px}
 .run-chk{font-size:12px;color:var(--red);border-bottom:1px solid var(--red)}
+/* 공연 모드 한 줄: 켜짐 = 포인트 색 글자, 꺼짐 = 회색, 받아야 할 곡이 남으면 빨강(.red) */
+.run-sm{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px;font-size:12px;padding:6px 0 4px;color:var(--ink-2);min-width:0}
+.run-sm .sm-k{font-weight:600;color:var(--ink)}
+.run-sm.on .sm-k{color:var(--accent)}
+.run-sm.off .sm-k{font-weight:500;color:var(--ink-3)}
+.run-sm .sep{color:var(--rule-2)}
+.run-sm .tb{font-size:12px}
+.run-sm .note{flex:1 1 200px;min-width:0}
+.run-sm .sm-err{flex:1 1 100%;overflow-wrap:anywhere}
+#swbar{border-bottom-color:var(--rule-2);color:var(--ink)}
 @media (hover:none) and (pointer:coarse){.run-keys{display:none}}
 kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--rule-2);padding:0 4px;color:var(--ink-2)}
 .cd{position:fixed;inset:0;z-index:70;background:var(--paper);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:16px}
@@ -783,6 +793,9 @@ body.has-player .app{padding-bottom:calc(var(--player-h) + env(safe-area-inset-b
           <button type="button" role="menuitem" id="menu-undo-del" data-act="undo-del" data-confirm="정말? (삭제 이후의 변경도 함께 되돌아감)">마지막 삭제 되돌리기</button>
           <button type="button" role="menuitem" id="menu-reset" data-act="reset" data-confirm="정말 초기화? (현재 데이터 삭제)">샘플로 초기화</button>
           <button type="button" role="menuitem" id="menu-audio-clear" data-act="audio-clear" data-confirm="정말 음원 파일 전부 삭제?">음원 전체 삭제</button>
+          <button type="button" role="menuitem" id="menu-sm-prepare" data-act="sm-prepare" hidden>공연 모드 준비 — 음원을 이 기기에</button>
+          <button type="button" role="menuitem" id="menu-sm-off" data-act="sm-off" hidden>공연 모드 끄기</button>
+          <button type="button" role="menuitem" id="menu-sm-clear" data-act="sm-clear" data-confirm="정말? (이 기기에 받은 음원만 지움 — 서버 파일은 그대로)" hidden>이 기기에서 받은 음원 지우기</button>
           <p class="menu-note" role="note">브라우저 인쇄(Ctrl+P)로 인쇄용 레이아웃이 적용됩니다 — 큐시트·대본 보기에서. 출연자 시점이면 내 대사가 굵게 인쇄됩니다</p>
         </div>
       </div>
@@ -791,6 +804,7 @@ body.has-player .app{padding-bottom:calc(var(--player-h) + env(safe-area-inset-b
   <div class="movebar" id="movebar" role="status" hidden></div>
   <div class="syncbar" id="syncbar" role="alert" hidden></div>
   <div class="syncbar" id="pwbar" role="status" hidden></div>
+  <div class="syncbar" id="swbar" role="status" hidden></div>
   <div class="namebar" id="namebar" role="status" aria-live="polite" hidden></div>
   <div class="body">
     <aside class="nav" id="nav" aria-label="파트·씬 목록"></aside>
@@ -1172,13 +1186,14 @@ const ITEMS = new Map(); // id -> Item (삭제된 것도 되돌리기용으로 �
 
 /* ================= 음원: IndexedDB ================= */
 // show JSON 에는 Track 메타만, 실제 Blob 은 IndexedDB (db 'cuesheet-audio', store 'files', key = fileKey)
-const IDB = {
+// 공연 모드가 서버 음원을 받아 두는 곳은 따로 'cuesheet-offline' (key = showId/fileKey) — 로컬 모드의 "음원 전체 삭제"와 섞이지 않게
+function idbFiles(dbName) { return {
   _p: null,
   open() {
     if (this._p) return this._p;
     const p = new Promise((res, rej) => {
       let r;
-      try { r = indexedDB.open('cuesheet-audio', 1); } catch (e) { rej(e); return; }
+      try { r = indexedDB.open(dbName, 1); } catch (e) { rej(e); return; }
       r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains('files')) r.result.createObjectStore('files'); };
       r.onsuccess = () => res(r.result);
       r.onerror = () => rej(r.error || new Error('IndexedDB 열기 실패'));
@@ -1201,8 +1216,11 @@ const IDB = {
   get(k) { return this.tx('readonly', s => s.get(k)); },
   del(k) { return this.tx('readwrite', s => s.delete(k)); },
   keys() { return this.tx('readonly', s => s.getAllKeys()); },
+  // prefix 로 시작하는 키만 (공연 모드: 한 프로젝트 것)
+  keysIn(prefix) { return this.tx('readonly', s => s.getAllKeys(IDBKeyRange.bound(prefix, prefix + '\uffff'))); },
   clear() { return this.tx('readwrite', s => s.clear()); }
-};
+}; }
+const IDB = idbFiles('cuesheet-audio');
 const fileUrls = new Map();
 const trackErr = new Map();
 const trackBusy = new Set();
@@ -1243,6 +1261,60 @@ function dropFiles(files) {
     }
     uploadToTrack(t, f);
   });
+}
+
+/* ================= 공연 모드: 계획 (순수 함수 — test/showmode.test.js) ================= */
+// 공연 모드 = 공연 전에 이 기기에 음원(IndexedDB 'cuesheet-offline')과 큐시트(localStorage)를 받아 두고, 공연 중 네트워크가 끊겨도 재생·진행.
+// 음원 키 = showId/fileKey (둘 다 [A-Za-z0-9_-] 라 '/' 가 섞이지 않는다). 파일을 바꿔 올리면 fileKey 가 새로 생기므로 "바뀜" = 지금 fileKey 를 안 받았음
+function smKey(showId, fileKey) { return showId + '/' + fileKey; }
+// 받을 것 · 건너뛸 것. tracks = show.tracks, have = Map(fileKey → 받아 둔 크기, 이 프로젝트 것만), server = Map(fileKey → 서버 크기) | null(목록 모름)
+//   get   받을 파일 [{ fileKey, size, nos }] — 같은 파일을 쓰는 트랙은 한 번만. 받아 둔 크기가 서버와 다르면(덜 받음) 다시 받는다
+//   skip  이미 받은 파일 · nofile 파일 없는 트랙 · gone 서버 목록에 없는(받을 수 없는) 파일
+//   drop  받아 뒀지만 지금 어느 트랙도 쓰지 않는 파일(교체·트랙 삭제) — 준비 끝에 지운다 · bytes = get 의 크기 합(모르는 크기는 0)
+function smPlan(tracks, have, server) {
+  const get = [], skip = [], nofile = [], gone = [], seen = new Map();
+  tracks.forEach(t => {
+    if (!t.fileKey) { nofile.push(t); return; }
+    const fk = t.fileKey;
+    if (seen.has(fk)) { seen.get(fk).nos.push(t.no); return; }
+    const size = server && server.has(fk) ? server.get(fk) : null;
+    const x = { fileKey: fk, size, nos: [t.no] };
+    seen.set(fk, x);
+    if (have.has(fk) && (size == null || have.get(fk) === size)) skip.push(x);
+    else if (server && !server.has(fk)) gone.push(x);
+    else get.push(x);
+  });
+  const drop = Array.from(have.keys()).filter(k => !seen.has(k));
+  return { get, skip, nofile, gone, drop, bytes: get.reduce((n, x) => n + (x.size || 0), 0) };
+}
+// 준비 상태 — 트랙 단위(점검 탭 "음원 파일 n/N" 과 같은 분모 = 트랙 수). prepared = { trackId: 준비할 때의 fileKey } | null
+//   ready 받아 둔 트랙 수 · nofile 파일 없는 트랙 번호 · changed 준비 뒤 파일이 바뀌었는데 아직 안 받은 트랙 · missing 파일은 있는데 안 받은 트랙(새 트랙·받기 실패)
+//   level: 'ok'(다 받음) · 'part'(파일 없는 트랙만 남음 — 받을 수 있는 건 다 받음) · 'warn'(받아야 할 것이 남음 — 오프라인이면 재생 안 됨)
+function smStatus(tracks, have, prepared) {
+  const r = { total: tracks.length, ready: 0, nofile: [], changed: [], missing: [] };
+  tracks.forEach(t => {
+    if (!t.fileKey) r.nofile.push(t.no);
+    else if (have.has(t.fileKey)) r.ready++;
+    else if (prepared && prepared[t.id] && prepared[t.id] !== t.fileKey) r.changed.push(t.no);
+    else r.missing.push(t.no);
+  });
+  r.level = r.changed.length || r.missing.length ? 'warn' : r.nofile.length ? 'part' : 'ok';
+  return r;
+}
+function smMB(b) { const m = (b || 0) / 1048576; return (m >= 10 ? Math.round(m) : Math.round(m * 10) / 10) + 'MB'; }
+function smNos(nos) { return 'BGM ' + nos.map(n => n == null ? '?' : n).join(', '); }
+// 오프라인으로 새로고침했을 때 무엇으로 열지. cache = 공연 모드가 둔 마지막 서버 판 { rev, savedAt, base, show },
+// backup = 저장 못 한 변경 백업(cueSheet.backup.<id>) { baseRev, savedAt, show }. 백업이 캐시보다 나중이고 같은(또는 새) 판 위의 것이면 백업을 열고
+// 연결되면 다시 저장한다(dirty). base = 409 병합 기준 — 캐시와 같은 판 위의 백업일 때만 캐시 내용. 열 것이 없으면 null
+function smBootPick(cache, backup) {
+  const okC = !!(cache && cache.show && Number.isFinite(cache.rev));
+  const okB = !!(backup && backup.show && Number.isFinite(backup.baseRev));
+  const t = x => Date.parse(x && x.savedAt) || 0;
+  if (okB && (!okC || (backup.baseRev >= cache.rev && t(backup) > t(cache)))) {
+    return { show: backup.show, rev: backup.baseRev, dirty: true, base: okC && cache.base && backup.baseRev === cache.rev ? cache.show : null };
+  }
+  if (!okC) return null;
+  return { show: cache.show, rev: cache.rev, dirty: false, base: cache.base ? cache.show : null };
 }
 
 /* ================= 저장 계층: Store ================= */
@@ -1329,7 +1401,10 @@ async function api(method, p, body, headers) {
     const h = Object.assign(keyHeaders(), sid ? editHeaders(sid) : {}, headers || {});
     let b;
     if (body !== undefined) { h['Content-Type'] = 'application/json'; b = JSON.stringify(body); }
-    const r = await fetch('/api' + p, { method, headers: h, body: b, cache: 'no-store' });
+    let r;
+    if (smNoNet()) { smNet(false); throw new TypeError('오프라인'); } // 공연 모드 + 기기가 오프라인: 보내 봐야 실패 — 연결되면 online 이벤트가 다시 부른다
+    try { r = await fetch('/api' + p, { method, headers: h, body: b, cache: 'no-store' }); } catch (e) { smNet(false); throw e; }
+    smNet(true);
     if (r.status === 401) { await askPassword(true); continue; }
     let data = null;
     if (r.status !== 304) { try { data = await r.json(); } catch (e) { data = null; } }
@@ -1360,6 +1435,7 @@ async function push() {
     Srv.rev = r.data.rev; Srv.etag = r.etag || `"${r.data.rev}"`; Srv.err = false;
     Srv.base = sent; Srv.mergeTries = 0;
     state.show.updatedAt = r.data.updatedAt;
+    smSaveShow(); // 공연 모드: 서버와 맞춘 판을 이 기기 사본으로
     const it = Srv.list.find(x => x.id === id); if (it) { it.rev = r.data.rev; it.updatedAt = r.data.updatedAt; it.title = state.show.title; }
   } else if (r && r.status === 409) {
     Srv.dirty = true; Srv.err = false; onConflict(r.data); // 자동 병합(→ 아래에서 다시 저장) 또는 선택 바
@@ -1392,13 +1468,15 @@ function flushServer() {
 const ServerStore = {
   mode: 'server',
   saveShow() { Srv.dirty = true; push(); },
-  fileUrl(t) { return Srv.audioKeys && !Srv.audioKeys.has(t.fileKey) ? null : audioUrl(t.fileKey); },
+  // 공연 모드이고 이 기기에 받아 둔 파일이면 objectURL(네트워크 없이 재생), 아니면 스트리밍
+  fileUrl(t) { return smUrl(t) || (Srv.audioKeys && !Srv.audioKeys.has(t.fileKey) ? null : audioUrl(t.fileKey)); },
   loadFiles() {
     const id = Srv.showId;
     return api('GET', showPath(id) + '/audio').then(r => {
       if (id !== Srv.showId) return;
       if (r.status !== 200 || !Array.isArray(r.data)) throw new Error('HTTP ' + r.status);
       Srv.audioKeys = new Set(r.data.map(x => x.fileKey)); idbError = '';
+      Srv.audioSizes = new Map(r.data.map(x => [x.fileKey, Number(x.size)])); // 공연 모드 준비: 받을 크기·덜 받은 파일 확인
     }).catch(err => { if (id === Srv.showId) idbError = '서버 음원 목록을 불러오지 못했습니다 (' + (err && err.message || err) + ')'; }).then(() => { if (state.show) render(); });
   },
   // XMLHttpRequest: fetch 로는 업로드 진행률을 못 받는다
@@ -1463,13 +1541,14 @@ function renderSync() {
   else if (Srv.gone) { t = '저장 안 됨 — 프로젝트 없음'; red = true; }
   else if (Srv.locked) { t = '저장 안 됨 — 편집 잠김'; red = true; }
   else if (Srv.conflict) { t = '저장 안 됨 — 충돌'; red = true; }
+  else if (smOffline()) t = '오프라인 · 저장은 연결되면 보냄'; // 공연 모드: 끊겨도 빨간 경고 대신 한 줄 — 백업·재시도는 그대로
   else if (Srv.err) { t = '저장 안 됨 — 재시도 중'; red = true; }
   else if (Srv.mergeWait) t = '저장 대기 — 입력을 마치면 다른 기기 변경과 합칩니다';
   else if (saveT || Srv.dirty || Srv.inflight) t = '저장 중…';
   else t = '저장됨 · rev ' + Srv.rev;
   if (el.textContent !== t) el.textContent = t;
   el.classList.toggle('red', red);
-  el.title = Store.mode === 'local' ? '서버에 연결되지 않아 이 브라우저(localStorage·IndexedDB)에만 저장합니다' : Srv.err ? `${RETRY_MS / 1000}초마다 다시 저장합니다 — 그동안 이 브라우저에도 백업` : '';
+  el.title = Store.mode === 'local' ? '서버에 연결되지 않아 이 브라우저(localStorage·IndexedDB)에만 저장합니다' : smOffline() ? '네트워크가 끊겼습니다 — 공연 모드로 받아 둔 음원·큐시트로 진행합니다. 변경은 이 브라우저에 백업하고 연결되면 서버에 보냅니다' : Srv.err ? `${RETRY_MS / 1000}초마다 다시 저장합니다 — 그동안 이 브라우저에도 백업` : '';
 }
 function renderSyncBar() {
   const b = $('#syncbar'); if (!b) return;
@@ -1572,6 +1651,7 @@ function applyRemote(d, force, merged) {
   renderSync(); renderSyncBar();
   // 다른 기기가 올린 음원: 목록을 다시 받기 전에도 바로 재생되게 낙관적으로 둔다
   if (Srv.audioKeys && state.show.tracks.some(t => t.fileKey && !Srv.audioKeys.has(t.fileKey))) { Srv.audioKeys = null; loadAudioFiles(); }
+  smSaveShow(); smPaint(); // 공연 모드: 새 판을 사본으로 · 바뀐 음원이 있으면 런 줄에 경고
   return true;
 }
 /* ---- 409 자동 병합 (lib/merge.js — docs/mcp.md "동시 편집") ---- */
@@ -1690,7 +1770,7 @@ async function openShow(id) {
   stopAllAudio();
   clearTimeout(saveT); saveT = null; clearTimeout(Srv.retryT);
   const row = Srv.list.find(x => x.id === id);
-  Object.assign(Srv, { showId: id, rev: r.data.rev, etag: r.etag || `"${r.data.rev}"`, audioKeys: null, dirty: false, inflight: false, conflict: null, err: false, gone: false, deferred: false, locked: false, editDefault: row ? !!row.editDefault : editKey(id) === DEFAULT_EDIT_KEY });
+  Object.assign(Srv, { showId: id, rev: r.data.rev, etag: r.etag || `"${r.data.rev}"`, audioKeys: null, audioSizes: null, dirty: false, inflight: false, conflict: null, err: false, gone: false, deferred: false, locked: false, editDefault: row ? !!row.editDefault : editKey(id) === DEFAULT_EDIT_KEY });
   // 편집 비밀번호를 모르는 프로젝트는 보기로 연다 (편집을 누르면 묻는다)
   if (!editKey(id)) state.edit = false;
   state.show = show; state.show.updatedAt = r.data.updatedAt;
@@ -1701,7 +1781,7 @@ async function openShow(id) {
   SETUP_DONE.clear(); trackErr.clear(); trackBusy.clear(); trackProg.clear(); // DEL·UNDO 는 위 localReplaced()
   mountedView = null;
   hideGate(); savePrefs(); render(); renderSync(); renderSyncBar(); renderProj();
-  loadAudioFiles(); startPoll();
+  loadAudioFiles(); smLoad(); startPoll();
   if (newerShow(r.data)) markOutdated();
   return true;
 }
@@ -1808,6 +1888,7 @@ async function gatePassword() {
 function bootFail(e) { showGate('error', '서버와 통신하지 못했습니다: ' + (e && e.message || e)); }
 async function detectServer() {
   if (!/^https?:$/.test(location.protocol)) return null;
+  if (smNoNet()) return null; // 공연 모드로 준비한 기기가 오프라인 — 요청 없이 바로 이 기기의 사본으로(smOfflineBoot)
   const ctl = typeof AbortController === 'function' ? new AbortController() : null;
   const to = setTimeout(() => { if (ctl) ctl.abort(); }, 4000);
   try {
@@ -1860,7 +1941,261 @@ async function serverBoot(h) {
   if (Srv.showId && Srv.list.some(x => x.id === Srv.showId)) await openShow(Srv.showId);
   else if (Srv.list.length) showGate('pick');
   else showGate('first');
+  SM.bootOffline = false; smSwSync(); smSwCheck(); // 공연 모드를 켠 프로젝트가 있을 때만 Service Worker
 }
+
+/* ================= 공연 모드: 받기 · 재생 · 오프라인 ================= */
+// 서버 모드 전용(로컬 모드는 음원이 이미 이 브라우저에 있다). 계획·상태 계산은 위 "공연 모드: 계획".
+// 켜짐 여부·준비 기록은 기기별 설정 prefs.showMode[showId] = { on, files: { trackId: 준비 때 fileKey }, at } — show 데이터(형식 버전)는 건드리지 않는다
+// SM.have = 지금 프로젝트에서 받아 둔 파일(fileKey → 크기) · SM.urls = 그 objectURL · SM.busy = 받는 중 진행 · SM.fail = 받기 실패(fileKey → 이유)
+// SM.net = 마지막 /api 요청 결과 'up' | 'down'(네트워크 오류) · SM.bootOffline = 서버 없이 이 기기의 사본으로 열었음(연결되면 목록·음원 목록을 다시 받는다)
+// 큐시트 사본: localStorage cueSheet.offline.<id> = { rev, savedAt, base, show } — 공연 모드가 켜져 있는 동안 서버와 맞출 때마다 갱신.
+// 저장 못 한 변경은 원래대로 cueSheet.backup.<id> 와 5초 재시도(push)가 맡는다
+const OFF_IDB = idbFiles('cuesheet-offline');
+const SM = { prefs: {}, showId: null, have: new Map(), urls: new Map(), busy: null, fail: new Map(), err: '', net: 'up', bootOffline: false, ctl: null, loading: null, paintT: 0 };
+const SW_ON = true; // false 로 배포하면 이미 등록된 Service Worker 도 다음 접속 때 해제된다(index.html 은 늘 네트워크 먼저라 이 값이 바로 퍼진다)
+function smPref(id) { const p = SM.prefs[id || Srv.showId]; return p && typeof p === 'object' ? p : null; }
+function smOn() { const p = Store.mode === 'server' && Srv.showId ? smPref() : null; return !!(p && p.on); }
+function smOffline() { return smOn() && SM.net === 'down'; }
+// 기기가 네트워크에 없다고 알리고(navigator.onLine === false) 지금 프로젝트가 공연 모드면 /api 요청을 보내지 않는다(실패할 요청·콘솔 오류를 만들지 않게).
+// onLine 은 "없음"만 믿을 수 있다 — true 여도 실제로 끊겨 있을 수 있어 그때는 요청이 실패하고 smNet(false)
+function smNoNet() { const p = Srv.showId ? smPref(Srv.showId) : null; return navigator.onLine === false && !!(p && p.on); }
+// fileUrl 이 먼저 묻는다: 공연 모드이고 받아 둔 파일이면 objectURL, 아니면 null(→ 서버 스트리밍)
+function smUrl(t) { return smOn() && t && t.fileKey ? SM.urls.get(t.fileKey) || null : null; }
+function smState() { const p = smPref(); return smStatus(state.show ? state.show.tracks : [], SM.have, p ? p.files : null); }
+function smInUse(u) { return [audioEl(), previewEl()].some(a => a && a.getAttribute('src') === u); }
+// 재생 중인 objectURL 은 끊지 않게 남긴다(페이지를 닫을 때 풀린다)
+function smDropUrl(fk) { const u = SM.urls.get(fk); if (u && !smInUse(u)) URL.revokeObjectURL(u); SM.urls.delete(fk); }
+function smAbort() { if (SM.ctl) { try { SM.ctl.abort(); } catch (e) { /* 무시 */ } } SM.ctl = null; SM.busy = null; }
+// 프로젝트를 열 때(openShow·오프라인 시작): 이 프로젝트에서 받아 둔 음원만 불러온다. 다른 프로젝트의 사본은 그 프로젝트를 열 때만 다룬다
+function smLoad() {
+  const id = Srv.showId;
+  smAbort(); Array.from(SM.urls.keys()).forEach(smDropUrl); SM.have.clear(); SM.fail.clear(); SM.err = ''; SM.showId = id;
+  if (Store.mode !== 'server' || !id) { SM.loading = null; return Promise.resolve(); }
+  const pre = smKey(id, '');
+  const p = OFF_IDB.keysIn(pre).then(keys => Promise.all(keys.map(k => OFF_IDB.get(k).then(v => {
+    if (id !== Srv.showId || !v || !v.blob) return;
+    const fk = String(k).slice(pre.length);
+    SM.have.set(fk, v.size); SM.urls.set(fk, URL.createObjectURL(v.blob));
+  })))).catch(err => { if (id === Srv.showId && (SM.have.size || smPref(id))) SM.err = '이 기기에 받은 음원을 읽지 못했습니다: ' + idbMsg(err); })
+    .then(() => { if (SM.loading === p) SM.loading = null; if (id === Srv.showId && state.show) { smSaveShow(); render(); } });
+  SM.loading = p;
+  return p;
+}
+// 큐시트 사본: 서버와 맞춘 내용(Srv.base)이 있으면 그것, 없으면 대기 중인 변경이 없을 때의 state.show. 대기 중인 변경은 backupLocal 이 따로 둔다
+function smSaveShow() {
+  if (!smOn() || !state.show) return;
+  const show = Srv.base || (pendingLocal() ? null : state.show);
+  if (!show) return;
+  if (!lsSet('cueSheet.offline.' + Srv.showId, JSON.stringify({ rev: Srv.rev, savedAt: new Date().toISOString(), base: !!Srv.base, show }))) SM.err = '이 브라우저 저장소가 가득 차 큐시트 사본을 두지 못했습니다';
+}
+// /api 요청이 네트워크 오류(false)·응답(true)일 때 api() 가 부른다. 다시 연결되면 기다리던 저장을 바로 보낸다
+function smNet(up) {
+  const v = up ? 'up' : 'down';
+  if (SM.net === v) return;
+  SM.net = v;
+  if (up && Store.mode === 'server' && (smOn() || SM.bootOffline)) { // 공연 모드가 꺼져 있으면 예전과 같게(5초 재시도·폴링에 맡김)
+    if (SM.bootOffline) smReconnect();
+    if (Srv.dirty && !Srv.inflight && !saveT) { clearTimeout(Srv.retryT); Srv.retryT = null; setTimeout(push, 0); }
+  }
+  renderSync(); smPaint();
+}
+window.addEventListener('offline', () => { if (Store.mode === 'server') smNet(false); });
+window.addEventListener('online', () => { if (smOn() && Srv.showId) { poll(); if (Srv.dirty && !Srv.inflight) { clearTimeout(Srv.retryT); Srv.retryT = null; push(); } } });
+// 오프라인으로 시작한 뒤 처음 연결됨: 프로젝트 목록·서버 음원 목록·형식 버전을 다시 받고, 새 화면이 배포됐는지 Service Worker 에 묻는다
+function smReconnect() {
+  SM.bootOffline = false; Srv.schemaAt = Date.now();
+  detectServer().then(h => { if (!h) return; Srv.hasPassword = !!h.hasPassword; if (Number(h.schema) > SHOW_VER) markOutdated(); });
+  refreshList().then(() => renderProj(), () => {});
+  loadAudioFiles(); smSwCheck();
+  toast('다시 연결되었습니다');
+}
+// 오프라인 새로고침: 서버가 안 보이는데 지금 프로젝트가 공연 모드이고 사본이 있으면 그것으로 연다(아니면 false → 로컬 모드)
+async function smOfflineBoot() {
+  const id = Srv.showId, p = id ? smPref(id) : null;
+  if (!p || !p.on) return false;
+  const read = k => { try { return JSON.parse(lsGet(k) || 'null'); } catch (e) { return null; } };
+  const pick = smBootPick(read('cueSheet.offline.' + id), read('cueSheet.backup.' + id));
+  if (!pick) return false;
+  let show;
+  try { show = migrate(pick.show); } catch (e) { return false; }
+  Store = ServerStore;
+  await loadMergeModule(); // Service Worker 사본에서 — 없으면 병합 없이 선택 바
+  SM.bootOffline = true; SM.net = 'down';
+  Object.assign(Srv, { showId: id, rev: pick.rev, etag: `"${pick.rev}"`, audioKeys: null, audioSizes: null, dirty: pick.dirty, inflight: false, conflict: null, err: false, gone: false, deferred: false, locked: false, schemaAt: Date.now(), editDefault: editKey(id) === DEFAULT_EDIT_KEY });
+  if (!editKey(id)) state.edit = false;
+  state.show = show;
+  Srv.base = pick.base ? migrate(pick.base) : null; Srv.mergeWait = null; Srv.mergeTries = 0;
+  state.runItemId = typeof Srv.runPos[id] === 'string' ? Srv.runPos[id] : null;
+  mountedView = null;
+  hideGate(); render(); renderSync(); renderSyncBar();
+  smLoad(); startPoll();
+  if (Srv.dirty) push(); // 실패하면 원래의 재시도·백업 경로
+  toast('오프라인 — 이 기기에 받아 둔 큐시트로 열었습니다', { ms: 5000 });
+  return true;
+}
+// 받기: 서버 음원 목록 → 계획 → 공간 확인 → 하나씩 받아 IndexedDB 에. 받은 뒤 IndexedDB 에서 다시 읽은 Blob 으로 objectURL(메모리에 들고 있지 않게)
+async function smPrepare() {
+  if (Store.mode !== 'server' || !Srv.showId || SM.busy) return;
+  const id = Srv.showId;
+  const ctl = SM.ctl = typeof AbortController === 'function' ? new AbortController() : null;
+  const stopped = () => id !== Srv.showId || (ctl && ctl.signal.aborted);
+  SM.err = ''; SM.fail.clear();
+  SM.busy = { step: '확인 중', done: 0, total: 0, got: 0, need: 0 }; smPaint();
+  let n = 0;
+  try {
+    try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch (e) { /* 거절돼도 진행 — 브라우저가 공간이 부족할 때 지울 수 있을 뿐 */ }
+    if (SM.loading) await SM.loading;
+    if (SM.ctl !== ctl) return; // 그사이 smLoad(프로젝트 전환)로 취소됨
+    await flushServer(); // 저장 대기분을 먼저 보낸다(못 보내도 진행 — 백업이 있다)
+    await poll(); // 서버의 새 판을 받아 둔다
+    await ServerStore.loadFiles();
+    if (stopped()) return;
+    if (!Srv.audioSizes) throw new Error(SM.net === 'down' ? '서버에 연결되지 않습니다 — 연결된 곳에서 준비하세요' : '서버 음원 목록을 불러오지 못했습니다');
+    const plan = smPlan(state.show.tracks, SM.have, Srv.audioSizes);
+    if (plan.bytes && navigator.storage && navigator.storage.estimate) {
+      const est = await navigator.storage.estimate().catch(() => null);
+      const free = est && est.quota ? est.quota - (est.usage || 0) : null;
+      if (free != null && free < plan.bytes + 20 * 1048576) throw new Error(`이 기기의 저장 공간이 모자랍니다 — 필요 ${smMB(plan.bytes)}, 남은 공간 ${smMB(Math.max(0, free))}`);
+    }
+    plan.gone.forEach(x => SM.fail.set(x.fileKey, '서버에 파일이 없습니다'));
+    SM.busy = { step: '', done: 0, total: plan.get.length, got: 0, need: plan.bytes, cur: 0 };
+    smPaint();
+    for (const x of plan.get) {
+      if (stopped()) break;
+      try { await smFetch(id, x, ctl); n++; } catch (e) {
+        if (stopped()) break;
+        SM.fail.set(x.fileKey, e && e.name === 'QuotaExceededError' ? '저장 공간이 부족합니다' : e && e.name === 'TypeError' ? '네트워크 오류' : (e && e.message) || String(e));
+      }
+      SM.busy.done++; SM.busy.got += SM.busy.cur || 0; SM.busy.cur = 0; smPaint();
+    }
+    if (stopped()) { if (id === Srv.showId) toast('공연 모드 준비를 멈췄습니다 — 받은 것은 남아 있습니다'); return; }
+    for (const fk of plan.drop) { await OFF_IDB.del(smKey(id, fk)).catch(() => {}); smDropUrl(fk); SM.have.delete(fk); }
+    const files = {};
+    state.show.tracks.forEach(t => { if (t.fileKey && SM.have.has(t.fileKey)) files[t.id] = t.fileKey; });
+    SM.prefs[id] = { on: true, files, at: new Date().toISOString() };
+    savePrefs(); smSaveShow(); smSwSync();
+    const st = smState();
+    toast(st.level === 'warn' ? `공연 모드 켜짐 — 음원 ${st.ready}/${st.total}, 받지 못한 곡이 있습니다` : `공연 모드 준비됨 — 음원 ${st.ready}/${st.total}${n ? ` (새로 받음 ${n})` : ''}`, { ms: 4000 });
+  } catch (e) {
+    if (!stopped()) SM.err = (e && e.message) || String(e);
+  } finally {
+    if (SM.ctl === ctl) { SM.ctl = null; SM.busy = null; }
+    if (id === Srv.showId && state.show) render();
+  }
+}
+async function smFetch(id, x, ctl) {
+  let r;
+  try { r = await fetch(audioUrl(x.fileKey), { cache: 'no-store', signal: ctl ? ctl.signal : undefined }); } catch (e) { if (!(ctl && ctl.signal.aborted)) smNet(false); throw e; }
+  smNet(true);
+  if (r.status === 401) { askPassword(true); throw new Error('비밀번호가 필요합니다 — 다시 준비하세요'); }
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const type = (r.headers.get('Content-Type') || '').split(';')[0];
+  let blob;
+  if (r.body && r.body.getReader) {
+    const rd = r.body.getReader(), parts = [];
+    for (;;) {
+      const { done, value } = await rd.read();
+      if (done) break;
+      parts.push(value); SM.busy.cur = (SM.busy.cur || 0) + value.length;
+      if (Date.now() - SM.paintT > 150) smPaint();
+    }
+    blob = new Blob(parts, { type });
+  } else { blob = await r.blob(); SM.busy.cur = blob.size; }
+  if (x.size != null && blob.size !== x.size) throw new Error(`덜 받았습니다 (${smMB(blob.size)} / ${smMB(x.size)})`);
+  const k = smKey(id, x.fileKey);
+  await OFF_IDB.put(k, { blob, size: blob.size, type, at: new Date().toISOString() });
+  const v = await OFF_IDB.get(k);
+  if (id !== Srv.showId || !v || !v.blob) return;
+  smDropUrl(x.fileKey);
+  SM.have.set(x.fileKey, v.size); SM.urls.set(x.fileKey, URL.createObjectURL(v.blob));
+}
+function smOff() {
+  const p = smPref(); if (!p) return;
+  p.on = false; savePrefs(); smSwSync(); render();
+  toast('공연 모드를 껐습니다 — 음원은 다시 서버에서 재생합니다 (받은 음원은 이 기기에 남아 있음)', { ms: 4000 });
+}
+// 이 프로젝트에서 받은 음원·큐시트 사본·준비 기록을 이 기기에서 지운다(서버 파일은 그대로)
+function smClear() {
+  const id = Srv.showId; if (!id) return;
+  smAbort();
+  OFF_IDB.keysIn(smKey(id, '')).then(keys => Promise.all(keys.map(k => OFF_IDB.del(k)))).then(() => {
+    if (id !== Srv.showId) return;
+    Array.from(SM.urls.keys()).forEach(smDropUrl); SM.have.clear(); SM.fail.clear(); SM.err = '';
+    delete SM.prefs[id]; savePrefs(); smSwSync();
+    try { localStorage.removeItem('cueSheet.offline.' + id); } catch (e) { /* 무시 */ }
+    render(); toast('이 기기에서 받은 음원을 지웠습니다 — 서버 파일은 그대로입니다');
+  }, err => { render(); toast('지우기 실패: ' + idbMsg(err)); });
+}
+function smBytes() { let b = 0; SM.have.forEach(v => { b += v || 0; }); return b; }
+function smProgText() {
+  const b = SM.busy; if (!b) return '';
+  if (b.step) return b.step;
+  const st = smState(), got = b.got + (b.cur || 0);
+  return `음원 ${st.ready}/${st.total} · ${b.need ? smMB(got) + '/' + smMB(b.need) : smMB(got)}`;
+}
+// 런 뷰 상단 한 줄. 로컬 모드는 없음
+function smLineHtml() {
+  if (Store.mode !== 'server' || !Srv.showId || !state.show) return '';
+  const on = smOn(), b = SM.busy, st = smState(), sep = '<span class="sep">·</span>';
+  let h = '', cls = 'run-sm';
+  if (b) {
+    h = `<span class="sm-k">공연 모드 준비 중</span>${sep}<span class="sm-v mono" id="sm-prog">${esc(smProgText())}</span><button type="button" class="tb" id="sm-cancel" data-act="sm-cancel">중지</button>`;
+  } else if (!on) {
+    cls += ' off';
+    h = `<span class="sm-k">공연 모드 꺼짐</span>${SM.have.size ? `${sep}<span class="sm-v">이 기기에 받음 ${st.ready}/${st.total}</span>` : ''}<button type="button" class="tb" id="sm-prepare" data-act="sm-prepare">공연 모드 준비</button><span class="note">음원·큐시트를 이 기기에 받아 두면 네트워크 없이 진행합니다</span>`;
+  } else {
+    cls += ' on';
+    const bad = [];
+    if (st.changed.length) bad.push(`${smNos(st.changed)} 바뀜`);
+    if (st.missing.length) bad.push(`${smNos(st.missing)} 안 받음`);
+    h = `<span class="sm-k">공연 모드</span>${sep}<span class="sm-v ${st.level === 'warn' ? 'red' : ''}">음원 ${st.ready}/${st.total} 준비됨</span>`;
+    if (bad.length) h += `${sep}<span class="red">${esc(bad.join(' · '))}</span>`;
+    if (st.nofile.length) h += `${sep}<span class="muted">파일 없음 ${esc(smNos(st.nofile))}</span>`;
+    if (SM.net === 'down') h += `${sep}<span class="muted" id="sm-offline">오프라인 — 받아 둔 음원으로 재생</span>`;
+    if (st.level === 'warn') h += `<button type="button" class="tb" id="sm-prepare" data-act="sm-prepare">다시 준비</button>`;
+    h += `<button type="button" class="tb" id="sm-off" data-act="sm-off">끄기</button>`;
+  }
+  const fails = Array.from(SM.fail.values());
+  if (!b && (SM.err || fails.length)) h += `<span class="red sm-err" role="alert">${esc(SM.err || `받기 실패 ${fails.length}곡 — ${fails[0]}`)}</span>`;
+  return `<div class="${cls}" id="run-sm" role="status">${h}</div>`;
+}
+// 진행 중에는 전체 render 대신 이 줄과 데이터 메뉴만
+function smPaint() {
+  SM.paintT = Date.now();
+  const el = document.getElementById('run-sm');
+  if (el) { const h = smLineHtml(); if (h && el.outerHTML !== h) el.outerHTML = h; }
+  smMenu();
+}
+function smMenu() {
+  const pr = $('#menu-sm-prepare'), off = $('#menu-sm-off'), clr = $('#menu-sm-clear');
+  if (!pr || !off || !clr) return;
+  const srv = Store.mode === 'server' && !!Srv.showId && !!state.show, on = srv && smOn();
+  pr.hidden = !srv; off.hidden = !on; clr.hidden = !srv || (!SM.have.size && !smPref());
+  pr.disabled = !!SM.busy;
+  pr.textContent = SM.busy ? '공연 모드 준비 중 — ' + smProgText() : on ? '공연 모드 다시 준비 (바뀐 음원만 받음)' : '공연 모드 준비 — 음원을 이 기기에';
+  if (!clr.classList.contains('armed')) clr.textContent = `이 기기에서 받은 음원 지우기${SM.have.size ? ` (${SM.have.size}곡 · ${smMB(smBytes())})` : ''}`;
+}
+// Service Worker(sw.js): 서버 모드에서 공연 모드를 켠 프로젝트가 하나라도 있을 때만 등록하고, 없으면 해제한다. file://·아티팩트(로컬 모드)에서는 절대 등록하지 않는다
+function smSwOk() { return Store.mode === 'server' && /^https?:$/.test(location.protocol) && 'serviceWorker' in navigator && window.isSecureContext !== false; }
+function smSwSync() {
+  if (!smSwOk()) return;
+  const want = SW_ON && Object.keys(SM.prefs).some(k => smPref(k) && smPref(k).on);
+  if (want) { navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(err => console.warn('service worker', err)); return; }
+  navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => { try { if (new URL(r.scope).pathname === '/') r.unregister(); } catch (e) { /* 무시 */ } }), () => {});
+  if (window.caches) caches.keys().then(ks => ks.filter(k => k.indexOf('cue-sheet-shell-') === 0).forEach(k => caches.delete(k)), () => {});
+}
+// 사본으로 뜬 화면이면 새 화면이 배포됐는지 묻는다 — 바뀌었으면 sw.js 가 shell-updated 를 보낸다
+function smSwCheck() {
+  if (!smSwOk() || !navigator.serviceWorker.controller) return;
+  try { navigator.serviceWorker.controller.postMessage({ type: 'check' }); } catch (e) { /* 무시 */ }
+}
+if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', ev => {
+  if (!ev.data || ev.data.type !== 'shell-updated') return; // 워커는 서버 모드에서만 등록되므로 모드는 묻지 않는다(부팅 중에 와도 보이게)
+  const b = $('#swbar'); if (!b) return;
+  b.hidden = false;
+  b.innerHTML = '<span><b>새 화면이 배포되었습니다</b> — 지금 화면은 이 기기에 저장해 둔 옛 화면입니다. 공연이 끝나면 새로고침하세요</span><button type="button" class="btn" id="sw-reload" data-act="gate-retry">새로고침</button>';
+});
 
 /* ================= 음원: 플레이어 ================= */
 // 공유 <audio> 하나. 페이드는 setInterval 로 audio.volume 을 조절 (실제 볼륨 = 사용자 볼륨 × 페이드 게인)
@@ -1885,7 +2220,7 @@ function playTrack(no, fadeSec, target) {
   if (!url) { toast(`BGM ${no == null ? '?' : no} — ${t ? '파일 없음' : '트랙 없음'} (음원 탭에서 업로드)`); return; }
   stopPreview();
   cancelRamp();
-  if (a.dataset.key !== t.fileKey) { a.src = url; a.dataset.key = t.fileKey; }
+  if (a.dataset.key !== t.fileKey || a.getAttribute('src') !== url) { a.src = url; a.dataset.key = t.fileKey; } // 공연 모드를 켜고 끄면 같은 파일도 주소가 바뀐다
   a.loop = !!t.loop;
   try { a.currentTime = 0; } catch (e) { /* 메타데이터 전 */ }
   AU.trackNo = no; AU.shown = true; AU.gain = fadeSec ? 0 : target; applyVol();
@@ -1975,7 +2310,7 @@ function previewToggle(t) {
   if (previewOn(t)) { pv.pause(); return; }
   if (audioPlaying()) { toast('공연 플레이어 재생 중 — 미리듣기 불가'); return; }
   const url = trackUrl(t); if (!url) return;
-  if (pv.dataset.key !== t.fileKey) { pv.src = url; pv.dataset.key = t.fileKey; }
+  if (pv.dataset.key !== t.fileKey || pv.getAttribute('src') !== url) { pv.src = url; pv.dataset.key = t.fileKey; }
   try { pv.currentTime = 0; } catch (e) { /* 메타데이터 전 */ }
   pv.volume = AU.vol; PV.trackId = t.id;
   const p = pv.play();
@@ -2065,6 +2400,7 @@ function loadPrefs() {
       if (typeof p.appKey === 'string') Srv.key = p.appKey;
       if (typeof p.currentShowId === 'string') Srv.showId = p.currentShowId;
       if (p.runPos && typeof p.runPos === 'object' && !Array.isArray(p.runPos)) Srv.runPos = p.runPos;
+      if (p.showMode && typeof p.showMode === 'object' && !Array.isArray(p.showMode)) SM.prefs = p.showMode;
     } catch (e) { /* 무시 */ }
   }
   // 처음 쓰는 브라우저: 지금 이후 코멘트만 "새"
@@ -2102,7 +2438,7 @@ function savePrefs() {
   if (srv && Srv.showId && state.show) Srv.runPos[Srv.showId] = state.runItemId;
   if (!srv) Srv.localRun = state.runItemId;
   lsSet(KEY_PREF, JSON.stringify({ role: state.role, author: state.author, runItemId: Srv.localRun, runMine: state.runMine, panel: state.panel, hideCues: state.hideCues, myLines: state.myLines, edit: state.edit, vol: AU.vol, theme: state.theme, booth: state.booth, autoCd: state.autoCd, lastSeenComments: state.lastSeen,
-    appKey: Srv.key, currentShowId: Srv.showId, runPos: Srv.runPos }));
+    appKey: Srv.key, currentShowId: Srv.showId, runPos: Srv.runPos, showMode: SM.prefs }));
 }
 function commit() { save(); render(); }
 
@@ -3311,6 +3647,7 @@ function viewRun() {
     <div class="run-opts">${nCheck ? `<button type="button" class="run-chk" id="run-check" data-act="view" data-view="check">점검 ${nCheck}건</button>` : ''}
       <label class="chk" for="run-booth"><input type="checkbox" id="run-booth" data-act="booth" ${state.booth ? 'checked' : ''}>부스 모드</label>
       <label class="chk" for="run-autocd"><input type="checkbox" id="run-autocd" data-act="autocd" ${state.autoCd ? 'checked' : ''}>다음 큐 +N초 자동 카운트다운</label></div>
+    ${smLineHtml()}
     <div class="run-prog" aria-hidden="true"><i style="width:${list.length ? ((i + 1) / list.length * 100).toFixed(1) : 0}%"></i></div>`;
   if (!e) return h + '<p class="empty">표시할 큐가 없습니다.</p></div>';
   const lightOn = roleDept() === 'light', lt = lightOn ? lightTimeline() : null;
@@ -3762,7 +4099,7 @@ function viewCheck() {
     h += '<ol>';
     if (g.k === 'files') {
       const fo = !!state.ckOpen.files, first = g.list[0];
-      h += `<li class="fix ${last === 'files|*' || (last && last.indexOf('files|') === 0 && !fo) ? 'last' : ''}">${ckBtn(Object.assign({}, first, { key: 'files|*' }), `음원 파일 ${v.files.have}/${v.files.total} 올림`)}<button type="button" class="tb ck-fix" data-act="ck-fold" data-k="files" aria-expanded="${fo}">${fo ? '접기' : `없는 ${g.list.length}곡 보기`}</button></li>`;
+      h += `<li class="fix ${last === 'files|*' || (last && last.indexOf('files|') === 0 && !fo) ? 'last' : ''}">${ckBtn(Object.assign({}, first, { key: 'files|*' }), `음원 파일 ${v.files.have}/${v.files.total} 올림${smOn() ? ` · 이 기기에 받음 ${smState().ready}/${v.files.total}` : ''}`)}<button type="button" class="tb ck-fix" data-act="ck-fold" data-k="files" aria-expanded="${fo}">${fo ? '접기' : `없는 ${g.list.length}곡 보기`}</button></li>`;
       if (fo) h += g.list.map(x => `<li class="ck-sub ${last === x.key ? 'last' : ''}">${ckBtn(x)}</li>`).join('');
     } else {
       h += g.list.map(x => `<li class="${x.fix ? 'fix' : ''} ${last === x.key ? 'last' : ''}">${ckBtn(x)}${x.fix && state.edit ? `<button type="button" class="tb ck-fix" data-act="cast-add" data-scene="${esc(x.fix.scene)}" data-person="${esc(x.fix.person)}">출연에 추가</button>` : ''}</li>`).join('');
@@ -3988,6 +4325,7 @@ function renderTop() {
   $('#data-menu').hidden = !state.menuOpen;
   $('#menu-agent').hidden = Store.mode !== 'server';
   $('#menu-trash').hidden = Store.mode !== 'server';
+  smMenu();
   $('#btn-data').setAttribute('aria-expanded', String(state.menuOpen));
   const ud = $('#menu-undo-del'), last = DEL[DEL.length - 1];
   ud.disabled = !last;
@@ -5231,6 +5569,10 @@ function act(a, el) {
       if (t.fileKey && !S.tracks.some(x => x !== t && x.fileKey === t.fileKey)) Store.delFile(t.fileKey);
       S.tracks = S.tracks.filter(x => x !== t); commit(); break;
     }
+    case 'sm-prepare': state.menuOpen = false; renderTop(); smPrepare(); break;
+    case 'sm-cancel': if (SM.ctl) SM.ctl.abort(); break;
+    case 'sm-off': state.menuOpen = false; smOff(); break;
+    case 'sm-clear': state.menuOpen = false; smClear(); break;
     case 'audio-clear': {
       state.menuOpen = false;
       const au = audioEl(); cancelRamp(); au.pause(); au.removeAttribute('src'); au.dataset.key = ''; AU.shown = false;
@@ -6175,7 +6517,8 @@ document.addEventListener('keydown', ev => {
 loadPrefs();
 if (/^https?:$/.test(location.protocol)) {
   showGate('loading');
-  detectServer().then(h => { if (h) serverBoot(h).catch(bootFail); else localBoot(); });
+  // 서버가 안 보여도 지금 프로젝트가 공연 모드로 준비돼 있으면 이 기기의 사본으로 연다(오프라인 새로고침 — sw.js 가 화면을 준다)
+  detectServer().then(h => { if (h) serverBoot(h).catch(bootFail); else smOfflineBoot().then(ok => { if (!ok) localBoot(); }, () => localBoot()); });
 } else localBoot();
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (mountedView === 'script') queuePaint(); });
 })();
