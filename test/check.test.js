@@ -130,14 +130,16 @@ test('실제 공연 데이터(backstage-part1): 씬 경계 IN 3건이 빠지고 
   const show = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cues', 'backstage-part1.json'), 'utf8'));
   const r = FE.checkCollect(input(show, { pname: id => (show.people.find(p => p.id === id) || {}).name, hasPerson: id => show.people.some(p => p.id === id) }));
   const all = FE.checkFilter(r, 'all');
-  assert.deepEqual(keys(all), { tbd: 6, files: 7, empty: 4, cmt: 1 });
-  assert.equal(all.total, 7);
+  // 2026-11-18 배포본(rev 84) 기준: 미정은 조명 2(암전 7초 뒤 조명 On ×2) + 음향 1(하우스 음악 VOLUME "확인 필요").
+  // 객석 조명 4개는 현장에서 확정(set)으로 바뀌어 빠졌다
+  assert.deepEqual(keys(all), { tbd: 3, files: 7, empty: 4, cmt: 1 });
+  assert.equal(all.total, 4);
   assert.equal(all.info, 5);
-  assert.equal(r.propsSkip, true);
-  // 무대 큐 3개는 소품이 없지만(v8 stage-no-props) 소품 목록이 비어 propsSkip 한 줄에 흡수 — 건수는 그대로
+  // 소품 8개를 등록하고 무대 큐 3개에 소품을 지정했다 — 소품 검사가 켜지고, 소품 미지정 무대 큐는 없다
+  assert.equal(r.propsSkip, false);
   assert.deepEqual(plain(r.groups.find(g => g.k === 'noprops').list), []);
-  assert.equal(FE.checkFilter(r, 'light').total, 6);
-  assert.equal(FE.checkFilter(r, 'sound').total, 1);
+  assert.equal(FE.checkFilter(r, 'light').total, 2);
+  assert.equal(FE.checkFilter(r, 'sound').total, 2);
   assert.equal(FE.checkFilter(r, 'stage').total, 0);
   assert.equal(FE.checkFilter(r, 'p:p-daehoon').total, 0);
 });

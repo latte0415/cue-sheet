@@ -20,7 +20,8 @@ const plain = o => JSON.parse(JSON.stringify(o));
 const migrate = s => plain(FE.migrate(s));
 const relabel = s => FE.relabel(s); // 브라우저 save 처럼 큐 번호를 1부터 연속으로
 const inOrder = s => FE.labelsInOrder(s);
-const backstage = () => migrate(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cues', 'backstage-part1.json'), 'utf8')));
+// 실공연 v5 원본의 고정 사본(test/fixtures) — 이 테스트들은 그 안의 id(i-l, s-v …)를 직접 쓴다. cues/ 의 현재 데이터는 정리되며 바뀐다
+const backstage = () => migrate(JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'backstage-part1-v5.json'), 'utf8')));
 const merge = (b, l, r) => mergeShows(b, l, r, { relabel });
 
 const scenes = s => s.parts.flatMap(p => p.scenes);
@@ -428,7 +429,7 @@ test('서버가 지운 곳으로 이 기기가 옮겨 넣은 항목: 서버에 �
 });
 
 test('hasAllIds: migrate 전 원본에 id 없는 항목이 있으면 false (브라우저는 그때 병합하지 않는다)', () => {
-  const raw = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cues', 'backstage-part1.json'), 'utf8'));
+  const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'backstage-part1-v5.json'), 'utf8'));
   assert.equal(hasAllIds(raw), true);
   for (const strip of [s => delete s.people[0].id, s => delete s.tracks[0].id, s => delete s.parts[0].scenes[3].items[0].id,
     s => delete s.parts[0].scenes[1].items[0].cues[0].id, s => { s.parts[0].scenes[3].items[0].comments.push({ text: 'x' }); }, s => delete s.parts[0].id]) {

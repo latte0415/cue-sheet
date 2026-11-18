@@ -150,8 +150,8 @@ test('소품이 있는 정상 문서는 오류·경고 없음, v5 도 경고 없
   const r = validateShow(v5);
   assert.deepEqual(r.errors, []);
   assert.deepEqual(r.warnings, [], 'v7 이하의 memo · stage.text 는 정상');
-  // 실데이터(v5, 배포 서버에 있는 파일): 소품 없는 확정 무대 큐 3개만 경고 — 올라가는 데는 문제없다
-  const real = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cues', 'backstage-part1.json'), 'utf8'));
+  // 정리 전 실데이터(v5 고정 사본 test/fixtures): 소품 없는 확정 무대 큐 3개만 경고 — 올라가는 데는 문제없다
+  const real = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'backstage-part1-v5.json'), 'utf8'));
   const rr = validateShow(unwrapShow(real));
   assert.equal(unwrapShow(real).version, 5);
   assert.deepEqual(rr.errors, []);
@@ -187,8 +187,9 @@ test('action-echo: 큐의 대상·액션·트리거만 다시 적은 지문은 "
   assert.match(v.warnings[0].msg, /큐를 다시 적은 지문 — .*큐 지점으로 바꾸세요 \(kind:"cue"/);
 });
 
-test('action-echo: 실데이터(cues/backstage-part1.json)에서 걸리는 지문 15개 — 데이터 정리 목록', () => {
-  const s = unwrapShow(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cues', 'backstage-part1.json'), 'utf8')));
+// 정리 전 실데이터(v5 고정 사본)에서 걸리던 15개 — 규칙 회귀 확인용. 현재 cues/ 데이터는 아래 테스트처럼 0개
+test('action-echo: 정리 전 실데이터(test/fixtures/backstage-part1-v5.json)에서 걸리는 지문 15개 — 데이터 정리 목록', () => {
+  const s = unwrapShow(JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'backstage-part1-v5.json'), 'utf8')));
   const its = s.parts.flatMap(p => p.scenes.flatMap(sc => sc.items));
   const byPath = w => { const m = /parts\[(\d+)\]\.scenes\[(\d+)\]\.items\[(\d+)\]/.exec(w.path); return s.parts[+m[1]].scenes[+m[2]].items[+m[3]]; };
   const got = validateShow(s).warnings.filter(w => w.code === 'action-echo').map(w => { const i = byPath(w); return `${i.id} ${i.text}`; });
@@ -200,6 +201,22 @@ test('action-echo: 실데이터(cues/backstage-part1.json)에서 걸리는 지�
   // 정보가 더 있는 지문은 걸리지 않는다
   ['(조예준 인 — 마이크 들고 들어와 라태형에게 건넴)', '(소개팅 2명 불러오기)', '(조예준 인 — 고개 절레절레 하며)'].forEach(t => assert.ok(!got.some(g => g.endsWith(' ' + t)), t));
   assert.equal(its.filter(i => i.kind === 'action' && i.cues.length).length > got.length, true);
+});
+
+test('현재 실데이터(cues/backstage-part1.json, 2026-11-18 배포본 rev 84): v8, 오류·경고 없음 — action-echo 지문 22개는 큐 지점, 무대 큐 3개는 소품 지정', () => {
+  const s = unwrapShow(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cues', 'backstage-part1.json'), 'utf8')));
+  assert.equal(s.version, SHOW_VER);
+  const v = validateShow(s);
+  assert.deepEqual(v.errors, []);
+  assert.deepEqual(v.warnings, []);
+  const its = s.parts.flatMap(p => p.scenes.flatMap(sc => sc.items));
+  const points = its.filter(i => i.kind === 'cue');
+  assert.equal(points.length, 22);
+  assert.ok(points.every(i => i.text === '' && i.speaker == null && i.cues.length));
+  const stage = its.flatMap(i => i.cues).filter(c => c.dept === 'stage');
+  assert.equal(stage.length, 3);
+  assert.ok(stage.every(c => c.stage.props.length && c.stage.props.every(x => s.props.some(p => p.id === x.propId))));
+  assert.deepEqual(s.preShowProps.map(x => x.propId).sort(), ['pr-cup', 'pr-tophat-table']);
 });
 
 test('소품 검사 — 모르는 propId 경고, 잘못된 action 오류, clean 허용, 레지스트리 id 중복 오류', () => {
@@ -265,7 +282,7 @@ test('v8: 객석(house)에 on/off 외 액션이나 밝기·색·시간이 있으
 });
 
 test('v8 migrate: memo · text → note, 소품 없는 무대 큐는 남김, 객석은 on/off 로 접고 흔적, 왕복해도 같다', () => {
-  const real = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cues', 'backstage-part1.json'), 'utf8'));
+  const real = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'backstage-part1-v5.json'), 'utf8'));
   const m = plain(FE.migrate(unwrapShow(real)));
   assert.equal(m.version, 8);
   const cues = m.parts.flatMap(p => p.scenes.flatMap(s => s.items.flatMap(i => i.cues)));
@@ -350,6 +367,6 @@ test('큐 지점(kind:"cue"): 본문·화자 없이 큐만 — 정상은 경고 
   // 사이트는 큐 없는 지점을 빈 지문으로 (코멘트·id 보존)
   assert.equal(plain(FE.migrate(e)).parts[0].scenes[0].items[0].kind, 'action');
   // 옛 데이터는 자동 변환하지 않는다 — 실데이터 중복 지문은 action 그대로(경고만)
-  const real = plain(FE.migrate(unwrapShow(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cues', 'backstage-part1.json'), 'utf8')))));
+  const real = plain(FE.migrate(unwrapShow(JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'backstage-part1-v5.json'), 'utf8')))));
   assert.ok(!real.parts.some(p => p.scenes.some(sc => sc.items.some(i => i.kind === 'cue'))));
 });

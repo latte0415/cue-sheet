@@ -7,7 +7,8 @@ const { applyOps, OpError } = require('../lib/ops');
 const { validateShow } = require('../lib/validate');
 const { fillLabels } = require('../lib/labels');
 
-const backstage = () => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cues', 'backstage-part1.json'), 'utf8'));
+// 실공연 v5 원본의 고정 사본(test/fixtures) — v5→v8 업그레이드와 원본 id 를 직접 쓰는 테스트가 있다. cues/ 의 현재 데이터는 정리되며 바뀐다
+const backstage = () => JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'backstage-part1-v5.json'), 'utf8'));
 // 문서 예시는 label 이 null — 사이트에 한 번 올라간 상태처럼 번호(1, 2)를 매겨 둔다
 const docExample = () => { const s = JSON.parse(/```json\n([\s\S]*?)```/.exec(fs.readFileSync(path.join(__dirname, '..', 'docs', 'cue-format.md'), 'utf8'))[1]); fillLabels(s); return s; };
 const items = s => s.parts.flatMap(p => p.scenes.flatMap(sc => sc.items));

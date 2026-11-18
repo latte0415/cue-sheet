@@ -98,12 +98,14 @@ function fixtureFacts(show) {
   const track = show.tracks.find(t => usedNos.has(t.no));
   // 무대 큐 글: v7 이하 원본은 stage.text, v8 은 note
   const stageText = c => String(c.note || (c.stage && c.stage.text) || '').trim();
-  const stage = items.flatMap(x => x.it.cues).find(c => c.dept === 'stage' && stageText(c).length >= 2);
+  // 글이 없으면(소품을 지정하고 note 를 비운 v8 무대 큐) 소품 이름으로 — search_show 는 stage.props 의 소품 이름도 찾는다
+  const propName = c => { const r = c.stage && Array.isArray(c.stage.props) ? c.stage.props.find(x => x && x.propId) : null; const p = r && (show.props || []).find(x => x.id === r.propId); return p ? String(p.name).trim() : ''; };
+  const stage = items.flatMap(x => x.it.cues).find(c => c.dept === 'stage' && (stageText(c).length >= 2 || propName(c)));
   return {
     firstLabeled, line, speaker: person(line.it.speaker),
     otherPerson: show.people.find(p => p.id !== line.it.speaker),
     insert, other, track, maxNo: Math.max(...show.tracks.map(t => t.no)),
-    stageWord: stageText(stage).split(/\s+/)[0]
+    stageWord: (stageText(stage) || propName(stage)).split(/\s+/)[0]
   };
 }
 const esc = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -270,7 +272,8 @@ test('편집 비밀번호: 쓰기 도구(edit_show·restore_revision)는 그 프
     const { id } = await (await fetch(E.base + '/api/shows', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, B), body: JSON.stringify({ show: backstage() }) })).json();
     let res = await fetch(`${E.base}/api/shows/${id}/edit-password`, { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, B), body: JSON.stringify({ current: '1234', next: KEY }) });
     assert.equal(res.status, 200);
-    const it = backstage().parts[0].scenes[0].items[0];
+    // 본문을 고칠 수 있는 첫 문단 (큐 지점 kind:"cue" 는 본문이 없어야 해서 제외)
+    const it = backstage().parts.flatMap(p => p.scenes.flatMap(sc => sc.items)).find(i => i.kind !== 'cue');
     const ops = n => [{ op: 'set', id: it.id, fields: { text: `(편집 키 ${n})` } }];
     const rev = async () => (await E.server.store.get(id)).rev;
 
