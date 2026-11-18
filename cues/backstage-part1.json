@@ -99,7 +99,7 @@
   ],
   "parts": [
     {
-      "id": "pt-3s",
+      "id": "pt-3q",
       "name": "1부",
       "scenes": [
         {
@@ -325,7 +325,7 @@
               "id": "i-f",
               "kind": "action",
               "speaker": null,
-              "text": "(암전 7초 후에 조명 On (조명 상세 미정))",
+              "text": "(암전 7초 후에 조명 On — 조명 상세 미정)",
               "label": "6",
               "isCue": true,
               "cues": [
@@ -384,7 +384,7 @@
           "items": []
         },
         {
-          "id": "s-w",
+          "id": "s-v",
           "type": "mc",
           "title": "예준 인사 멘트",
           "cast": [
@@ -428,24 +428,14 @@
               "id": "i-n",
               "kind": "line",
               "speaker": "p-yejun",
-              "text": "그럼 준비되셨을까요?",
+              "text": "그럼 준비되셨을까요? 소개합니다 박대훈",
               "label": null,
               "isCue": false,
               "cues": [],
               "comments": []
             },
             {
-              "id": "i-o",
-              "kind": "line",
-              "speaker": "p-yejun",
-              "text": "소개합니다 박대훈",
-              "label": null,
-              "isCue": false,
-              "cues": [],
-              "comments": []
-            },
-            {
-              "id": "i-q",
+              "id": "i-p",
               "kind": "action",
               "speaker": null,
               "text": "(조예준 아웃)",
@@ -453,7 +443,7 @@
               "isCue": true,
               "cues": [
                 {
-                  "id": "q-p",
+                  "id": "q-o",
                   "dept": "cast",
                   "trigger": "'소개합니다 박대훈' 후",
                   "offsetSec": null,
@@ -469,17 +459,17 @@
               "comments": []
             },
             {
-              "id": "i-r",
+              "id": "i-q",
               "kind": "action",
               "speaker": null,
-              "text": "(암전 없이)",
+              "text": "(암전 X)",
               "label": null,
               "isCue": false,
               "cues": [],
               "comments": []
             },
             {
-              "id": "i-t",
+              "id": "i-s",
               "kind": "action",
               "speaker": null,
               "text": "(멘트 끝나자마자 음원 시작)",
@@ -487,7 +477,7 @@
               "isCue": true,
               "cues": [
                 {
-                  "id": "q-s",
+                  "id": "q-r",
                   "dept": "sound",
                   "trigger": "멘트 끝나자마자",
                   "offsetSec": null,
@@ -504,7 +494,7 @@
               "comments": []
             },
             {
-              "id": "i-v",
+              "id": "i-u",
               "kind": "action",
               "speaker": null,
               "text": "(박대훈 인)",
@@ -512,7 +502,7 @@
               "isCue": true,
               "cues": [
                 {
-                  "id": "q-u",
+                  "id": "q-t",
                   "dept": "cast",
                   "trigger": "음원 시작 후",
                   "offsetSec": null,
@@ -530,7 +520,7 @@
           ]
         },
         {
-          "id": "s-12",
+          "id": "s-11",
           "type": "act",
           "title": "멘탈",
           "cast": [
@@ -541,15 +531,15 @@
           "comments": [],
           "items": [
             {
-              "id": "i-y",
+              "id": "i-x",
               "kind": "action",
               "speaker": null,
-              "text": "* 박대훈 손 들면 음원 페이드 아웃",
+              "text": "(박대훈이 손 들면 음원 페이드 아웃)",
               "label": "11",
               "isCue": true,
               "cues": [
                 {
-                  "id": "q-x",
+                  "id": "q-w",
                   "dept": "sound",
                   "trigger": "박대훈 손 들면",
                   "offsetSec": null,
@@ -566,15 +556,15 @@
               "comments": []
             },
             {
-              "id": "i-10",
+              "id": "i-z",
               "kind": "action",
               "speaker": null,
-              "text": "* 조예준 인",
+              "text": "(조예준 인)",
               "label": "12",
               "isCue": true,
               "cues": [
                 {
-                  "id": "q-z",
+                  "id": "q-y",
                   "dept": "cast",
                   "trigger": "음원 페이드 아웃 후",
                   "offsetSec": null,
@@ -590,10 +580,10 @@
               "comments": []
             },
             {
-              "id": "i-11",
+              "id": "i-10",
               "kind": "action",
               "speaker": null,
-              "text": "* 조예준이 박대훈 입 테이프 뜯음",
+              "text": "(조예준이 박대훈 입 테이프 뜯음)",
               "label": null,
               "isCue": false,
               "cues": [],
@@ -602,7 +592,7 @@
           ]
         },
         {
-          "id": "s-1l",
+          "id": "s-1k",
           "type": "mc",
           "title": "",
           "cast": [
@@ -614,7 +604,7 @@
           "comments": [],
           "items": [
             {
-              "id": "i-13",
+              "id": "i-12",
               "kind": "line",
               "speaker": "p-daehoon",
               "text": "와 답답해서 죽는 줄 알았네요 박대훈입니다. 이게 진짜 입 막고 있는 게 생각보다 고통이에요 (계속 주절주절)",
@@ -624,7 +614,7 @@
               "comments": []
             },
             {
-              "id": "i-15",
+              "id": "i-14",
               "kind": "line",
               "speaker": "p-yejun",
               "text": "다음 사람 소개해야….",
@@ -632,7 +622,7 @@
               "isCue": true,
               "cues": [
                 {
-                  "id": "q-14",
+                  "id": "q-13",
                   "dept": "stage",
                   "trigger": "이 대사 즈음",
                   "offsetSec": null,
@@ -646,7 +636,7 @@
               "comments": []
             },
             {
-              "id": "i-16",
+              "id": "i-15",
               "kind": "line",
               "speaker": "p-daehoon",
               "text": "(말 끊고) 다음 마술은 뭐죠? 뭐죠?",
@@ -656,7 +646,7 @@
               "comments": []
             },
             {
-              "id": "i-17",
+              "id": "i-16",
               "kind": "line",
               "speaker": "p-yejun",
               "text": "(한숨 한 번 쉬고) 에휴 나가계세요 제가 진행할게요…",
@@ -666,7 +656,7 @@
               "comments": []
             },
             {
-              "id": "i-18",
+              "id": "i-17",
               "kind": "action",
               "speaker": null,
               "text": "(로프로 박대훈 묶음)",
@@ -676,7 +666,7 @@
               "comments": []
             },
             {
-              "id": "i-1a",
+              "id": "i-19",
               "kind": "action",
               "speaker": null,
               "text": "(박대훈 아웃)",
@@ -684,7 +674,7 @@
               "isCue": true,
               "cues": [
                 {
-                  "id": "q-19",
+                  "id": "q-18",
                   "dept": "cast",
                   "trigger": "묶은 후",
                   "offsetSec": null,
@@ -700,7 +690,7 @@
               "comments": []
             },
             {
-              "id": "i-1b",
+              "id": "i-1a",
               "kind": "line",
               "speaker": "p-yejun",
               "text": "소개합니다 다음 공연자 라태형",
@@ -710,7 +700,7 @@
               "comments": []
             },
             {
-              "id": "i-1d",
+              "id": "i-1c",
               "kind": "action",
               "speaker": null,
               "text": "(암전)",
@@ -718,7 +708,7 @@
               "isCue": true,
               "cues": [
                 {
-                  "id": "q-1c",
+                  "id": "q-1b",
                   "dept": "light",
                   "trigger": "'라태형' 호명 후",
                   "offsetSec": null,
@@ -766,7 +756,7 @@
               "comments": []
             },
             {
-              "id": "i-1f",
+              "id": "i-1e",
               "kind": "action",
               "speaker": null,
               "text": "(조예준 아웃)",
@@ -774,7 +764,7 @@
               "isCue": true,
               "cues": [
                 {
-                  "id": "q-1e",
+                  "id": "q-1d",
                   "dept": "cast",
                   "trigger": "암전 후",
                   "offsetSec": null,
@@ -790,7 +780,7 @@
               "comments": []
             },
             {
-              "id": "i-1i",
+              "id": "i-1h",
               "kind": "action",
               "speaker": null,
               "text": "(암전 7초 뒤에 조명 on + 음악 시작)",
@@ -798,7 +788,7 @@
               "isCue": true,
               "cues": [
                 {
-                  "id": "q-1g",
+                  "id": "q-1f",
                   "dept": "light",
                   "trigger": "암전 후",
                   "offsetSec": 7,
@@ -810,7 +800,7 @@
                   }
                 },
                 {
-                  "id": "q-1h",
+                  "id": "q-1g",
                   "dept": "sound",
                   "trigger": "암전 후",
                   "offsetSec": 7,
@@ -827,7 +817,7 @@
               "comments": []
             },
             {
-              "id": "i-1k",
+              "id": "i-1j",
               "kind": "action",
               "speaker": null,
               "text": "(라태형 인)",
@@ -835,7 +825,7 @@
               "isCue": true,
               "cues": [
                 {
-                  "id": "q-1j",
+                  "id": "q-1i",
                   "dept": "cast",
                   "trigger": "조명 On 후",
                   "offsetSec": null,
@@ -853,7 +843,7 @@
           ]
         },
         {
-          "id": "s-1m",
+          "id": "s-1l",
           "type": "act",
           "title": "카드 매니",
           "cast": [
@@ -865,7 +855,7 @@
           "items": []
         },
         {
-          "id": "s-2l",
+          "id": "s-2k",
           "type": "mc",
           "title": "",
           "cast": [
@@ -878,7 +868,7 @@
           "comments": [],
           "items": [
             {
-              "id": "i-1o",
+              "id": "i-1n",
               "kind": "action",
               "speaker": null,
               "text": "(조예준 인 — 마이크 들고 들어와 라태형에게 건넴)",
@@ -886,7 +876,7 @@
               "isCue": true,
               "cues": [
                 {
-                  "id": "q-1n",
+                  "id": "q-1m",
                   "dept": "cast",
                   "trigger": "액트 후",
                   "offsetSec": null,
@@ -902,7 +892,7 @@
               "comments": []
             },
             {
-              "id": "i-1p",
+              "id": "i-1o",
               "kind": "line",
               "speaker": "p-taehyung",
               "text": "(조예준에게 마이크 받아서 인사) 안녕하세요 라태형입니다",
@@ -912,7 +902,7 @@
               "comments": []
             },
             {
-              "id": "i-1q",
+              "id": "i-1p",
               "kind": "line",
               "speaker": "p-taehyung",
               "text": "오늘도 관객분들이~~ 적당히 있으시네요 ㅎㅎ 딱 좋아요. 앞에 뭐뭐하셨죠?",
@@ -922,7 +912,7 @@
               "comments": []
             },
             {
-              "id": "i-1r",
+              "id": "i-1q",
               "kind": "line",
               "speaker": "p-yejun",
               "text": "그냥 마술하고 이제 2분 막 소개했잖아요",
@@ -932,7 +922,7 @@
               "comments": []
             },
             {
-              "id": "i-1s",
+              "id": "i-1r",
               "kind": "line",
               "speaker": "p-taehyung",
               "text": "흠 그러면, 아 요즘 또 대학 축제에 그거 유행이더만요 그",
@@ -942,7 +932,7 @@
               "comments": []
             },
             {
-              "id": "i-1t",
+              "id": "i-1s",
               "kind": "line",
               "speaker": "p-yejun",
               "text": "예? 음… 설마 소개팅…?",
@@ -952,7 +942,7 @@
               "comments": []
             },
             {
-              "id": "i-1u",
+              "id": "i-1t",
               "kind": "line",
               "speaker": "p-taehyung",
               "text": "네네네 저희도 할까요?",
@@ -962,7 +952,7 @@
               "comments": []
             },
             {
-              "id": "i-1v",
+              "id": "i-1u",
               "kind": "line",
               "speaker": "p-yejun",
               "text": "카이에서요….?",
@@ -972,7 +962,7 @@
               "comments": []
             },
             {
-              "id": "i-1w",
+              "id": "i-1v",
               "kind": "line",
               "speaker": "p-taehyung",
               "text": "(일단 막무가내) 각자 1명씩 불러오기 어때요? 여러분 좋죠?",
@@ -985,10 +975,31 @@
               "id": "i-1y",
               "kind": "action",
               "speaker": null,
-              "text": "* 소개팅 2명 불러오기",
+              "text": "(소개팅 2명 불러오기)",
               "label": "20",
               "isCue": true,
               "cues": [
+                {
+                  "id": "q-1w",
+                  "dept": "light",
+                  "trigger": "지원자 2명 고를 때",
+                  "offsetSec": null,
+                  "memo": "시점·밝기 공연장에서 확정",
+                  "status": "tbd",
+                  "light": {
+                    "channels": [
+                      {
+                        "ch": "house",
+                        "action": "on",
+                        "dim": null,
+                        "color": null,
+                        "colorName": null,
+                        "timeSec": null
+                      }
+                    ],
+                    "anim": ""
+                  }
+                },
                 {
                   "id": "q-1x",
                   "dept": "stage",
@@ -1004,17 +1015,39 @@
               "comments": []
             },
             {
-              "id": "i-1z",
+              "id": "i-20",
               "kind": "line",
               "speaker": "p-taehyung",
               "text": "아니 둘 다 남자잖아요;;;",
-              "label": null,
-              "isCue": false,
-              "cues": [],
+              "label": "21",
+              "isCue": true,
+              "cues": [
+                {
+                  "id": "q-1z",
+                  "dept": "light",
+                  "trigger": "지원자 2명 무대에 올라온 뒤",
+                  "offsetSec": null,
+                  "memo": "시점·밝기 공연장에서 확정",
+                  "status": "tbd",
+                  "light": {
+                    "channels": [
+                      {
+                        "ch": "house",
+                        "action": "off",
+                        "dim": null,
+                        "color": null,
+                        "colorName": null,
+                        "timeSec": null
+                      }
+                    ],
+                    "anim": ""
+                  }
+                }
+              ],
               "comments": []
             },
             {
-              "id": "i-20",
+              "id": "i-21",
               "kind": "line",
               "speaker": "p-yejun",
               "text": "그건 제가 할말인데요….",
@@ -1024,7 +1057,7 @@
               "comments": []
             },
             {
-              "id": "i-21",
+              "id": "i-22",
               "kind": "line",
               "speaker": "p-taehyung",
               "text": "일단 오셨으니까 그래도 커플…. 게임이라도 해봅시다. 저희가 나름 상품을 준비했어요",
@@ -1034,7 +1067,7 @@
               "comments": []
             },
             {
-              "id": "i-22",
+              "id": "i-23",
               "kind": "line",
               "speaker": "p-yejun",
               "text": "하 설명을 드려야겠죠… 2:2 팀전입니다. 저희랑 배틀해서 카드를 더 빨리 줍는 겁니다. 절대 누가 카드를 많이 흘려놔서 그런 건 아닙니다….(째려보며)",
@@ -1044,7 +1077,7 @@
               "comments": []
             },
             {
-              "id": "i-23",
+              "id": "i-24",
               "kind": "line",
               "speaker": "p-taehyung",
               "text": "그럼 시작해볼까요",
@@ -1054,20 +1087,10 @@
               "comments": []
             },
             {
-              "id": "i-24",
-              "kind": "action",
-              "speaker": null,
-              "text": "(게임 진행)",
-              "label": null,
-              "isCue": false,
-              "cues": [],
-              "comments": []
-            },
-            {
               "id": "i-25",
               "kind": "action",
               "speaker": null,
-              "text": "* 친해지기 위해서 카드 줍기",
+              "text": "(게임 진행 — 친해지기 위해 카드 줍기, 카드 주우면 선물 증정)",
               "label": null,
               "isCue": false,
               "cues": [],
@@ -1077,16 +1100,6 @@
               "id": "i-26",
               "kind": "action",
               "speaker": null,
-              "text": "* 카드 주웠으니까 선물 주고",
-              "label": null,
-              "isCue": false,
-              "cues": [],
-              "comments": []
-            },
-            {
-              "id": "i-27",
-              "kind": "action",
-              "speaker": null,
               "text": "(선물 증정 후, 아래로 내려보내기)",
               "label": null,
               "isCue": false,
@@ -1094,15 +1107,15 @@
               "comments": []
             },
             {
-              "id": "i-29",
+              "id": "i-28",
               "kind": "line",
               "speaker": "p-daehoon",
               "text": "아니 나 빼고 소개팅 했어요?",
-              "label": "21",
+              "label": "22",
               "isCue": true,
               "cues": [
                 {
-                  "id": "q-28",
+                  "id": "q-27",
                   "dept": "cast",
                   "trigger": "선물 증정·관객 퇴장 직후",
                   "offsetSec": null,
@@ -1118,7 +1131,7 @@
               "comments": []
             },
             {
-              "id": "i-2a",
+              "id": "i-29",
               "kind": "line",
               "speaker": "p-taehyung",
               "text": "아니 커플이잖아 넌",
@@ -1128,7 +1141,7 @@
               "comments": []
             },
             {
-              "id": "i-2b",
+              "id": "i-2a",
               "kind": "line",
               "speaker": "p-daehoon",
               "text": "글킨 하죠,,,",
@@ -1138,7 +1151,7 @@
               "comments": []
             },
             {
-              "id": "i-2c",
+              "id": "i-2b",
               "kind": "line",
               "speaker": "p-taehyung",
               "text": "저기 보고 계실 수도 있어",
@@ -1148,7 +1161,7 @@
               "comments": []
             },
             {
-              "id": "i-2d",
+              "id": "i-2c",
               "kind": "line",
               "speaker": "p-yejun",
               "text": "쓰레기네 쓰레기",
@@ -1158,7 +1171,7 @@
               "comments": []
             },
             {
-              "id": "i-2e",
+              "id": "i-2d",
               "kind": "line",
               "speaker": "p-daehoon",
               "text": "에이 말이 심하시다",
@@ -1168,7 +1181,7 @@
               "comments": []
             },
             {
-              "id": "i-2f",
+              "id": "i-2e",
               "kind": "line",
               "speaker": "p-taehyung",
               "text": "각설하고 마술이나 하세요~",
@@ -1178,15 +1191,15 @@
               "comments": []
             },
             {
-              "id": "i-2h",
+              "id": "i-2g",
               "kind": "line",
               "speaker": "p-taehyung",
               "text": "음 링은 나랑 잘 안 맞으니까, 넘겨줄게요 뮤직 큐~",
-              "label": "22",
+              "label": "23",
               "isCue": true,
               "cues": [
                 {
-                  "id": "q-2g",
+                  "id": "q-2f",
                   "dept": "sound",
                   "trigger": "'뮤직 큐~' 후",
                   "offsetSec": null,
@@ -1203,15 +1216,15 @@
               "comments": []
             },
             {
-              "id": "i-2j",
+              "id": "i-2i",
               "kind": "action",
               "speaker": null,
               "text": "(라태형 아웃)",
-              "label": "23",
+              "label": "24",
               "isCue": true,
               "cues": [
                 {
-                  "id": "q-2i",
+                  "id": "q-2h",
                   "dept": "cast",
                   "trigger": "뮤직 큐 후",
                   "offsetSec": null,
@@ -1227,10 +1240,10 @@
               "comments": []
             },
             {
-              "id": "i-2k",
+              "id": "i-2j",
               "kind": "action",
               "speaker": null,
-              "text": "* 박대훈: 실크 세팅",
+              "text": "(박대훈 실크 세팅)",
               "label": null,
               "isCue": false,
               "cues": [],
@@ -1239,7 +1252,7 @@
           ]
         },
         {
-          "id": "s-2m",
+          "id": "s-2l",
           "type": "act",
           "title": "링앤로프",
           "cast": [
@@ -1252,7 +1265,7 @@
           "items": []
         },
         {
-          "id": "s-2w",
+          "id": "s-2v",
           "type": "mc",
           "title": "",
           "cast": [
@@ -1265,15 +1278,15 @@
           "comments": [],
           "items": [
             {
-              "id": "i-2o",
+              "id": "i-2n",
               "kind": "action",
               "speaker": null,
               "text": "(라태형 인)",
-              "label": "24",
+              "label": "25",
               "isCue": true,
               "cues": [
                 {
-                  "id": "q-2n",
+                  "id": "q-2m",
                   "dept": "cast",
                   "trigger": "액트 후",
                   "offsetSec": null,
@@ -1289,7 +1302,7 @@
               "comments": []
             },
             {
-              "id": "i-2p",
+              "id": "i-2o",
               "kind": "line",
               "speaker": "p-taehyung",
               "text": "이어서 한 번 더?",
@@ -1299,7 +1312,7 @@
               "comments": []
             },
             {
-              "id": "i-2q",
+              "id": "i-2p",
               "kind": "action",
               "speaker": null,
               "text": "(조예준, 박대훈: 약간 지친 표정)",
@@ -1309,15 +1322,15 @@
               "comments": []
             },
             {
-              "id": "i-2s",
+              "id": "i-2r",
               "kind": "line",
               "speaker": "p-taehyung",
               "text": "(관객 보며) 여러분 한 번 더 가야겠죠?",
-              "label": "25",
+              "label": "26",
               "isCue": true,
               "cues": [
                 {
-                  "id": "q-2r",
+                  "id": "q-2q",
                   "dept": "sound",
                   "trigger": "관객 대답 듣자마자",
                   "offsetSec": null,
@@ -1334,15 +1347,15 @@
               "comments": []
             },
             {
-              "id": "i-2u",
+              "id": "i-2t",
               "kind": "action",
               "speaker": null,
               "text": "(조예준 절레절레하며 퇴장)",
-              "label": "26",
+              "label": "27",
               "isCue": true,
               "cues": [
                 {
-                  "id": "q-2t",
+                  "id": "q-2s",
                   "dept": "cast",
                   "trigger": "절레절레하며 퇴장",
                   "offsetSec": null,
@@ -1358,10 +1371,10 @@
               "comments": []
             },
             {
-              "id": "i-2v",
+              "id": "i-2u",
               "kind": "action",
               "speaker": null,
-              "text": "* 라태형: 케인 세팅 (왼쪽 뒷주머니)",
+              "text": "(라태형 케인 세팅 — 왼쪽 뒷주머니)",
               "label": null,
               "isCue": false,
               "cues": [],
@@ -1370,7 +1383,7 @@
           ]
         },
         {
-          "id": "s-2x",
+          "id": "s-2w",
           "type": "act",
           "title": "실크쓰루",
           "cast": [
@@ -1383,7 +1396,7 @@
           "items": []
         },
         {
-          "id": "s-3k",
+          "id": "s-3i",
           "type": "act",
           "title": "프레딕션",
           "cast": [
@@ -1395,7 +1408,7 @@
           "setup": "",
           "comments": [
             {
-              "id": "c-3r",
+              "id": "c-3p",
               "author": "초안",
               "text": "7분 예정(미정)",
               "createdAt": "2026-11-18T00:00:00.000Z",
@@ -1406,15 +1419,15 @@
           ],
           "items": [
             {
-              "id": "i-2z",
+              "id": "i-2y",
               "kind": "action",
               "speaker": null,
-              "text": "(조예준 인 (고개 절레절레 하며))",
-              "label": "27",
+              "text": "(조예준 인 — 고개 절레절레 하며)",
+              "label": "28",
               "isCue": true,
               "cues": [
                 {
-                  "id": "q-2y",
+                  "id": "q-2x",
                   "dept": "cast",
                   "trigger": "씬 시작",
                   "offsetSec": null,
@@ -1430,15 +1443,15 @@
               "comments": []
             },
             {
-              "id": "i-31",
+              "id": "i-30",
               "kind": "line",
               "speaker": "p-yejun",
               "text": "이제 어느덧 1부 마지막입니다",
-              "label": "28",
+              "label": "29",
               "isCue": true,
               "cues": [
                 {
-                  "id": "q-30",
+                  "id": "q-2z",
                   "dept": "sound",
                   "trigger": "마지막 마술 멘트 때",
                   "offsetSec": null,
@@ -1455,7 +1468,7 @@
               "comments": []
             },
             {
-              "id": "i-32",
+              "id": "i-31",
               "kind": "line",
               "speaker": "p-daehoon",
               "text": "아 여러분 얼른 아쉬워하세요",
@@ -1465,7 +1478,7 @@
               "comments": []
             },
             {
-              "id": "i-33",
+              "id": "i-32",
               "kind": "line",
               "speaker": "p-taehyung",
               "text": "마지막이니까 여러분이랑 같이 해볼까 해요",
@@ -1475,54 +1488,36 @@
               "comments": []
             },
             {
-              "id": "i-38",
+              "id": "i-35",
               "kind": "action",
               "speaker": null,
-              "text": "* 3명이 전부 관객석으로 간다.",
-              "label": "29",
+              "text": "(3명이 전부 관객석으로 간다)",
+              "label": "30",
               "isCue": true,
               "cues": [
                 {
+                  "id": "q-33",
+                  "dept": "light",
+                  "trigger": "3명이 관객석으로 갈 때",
+                  "offsetSec": null,
+                  "memo": "시점·밝기 공연장에서 확정",
+                  "status": "tbd",
+                  "light": {
+                    "channels": [
+                      {
+                        "ch": "house",
+                        "action": "on",
+                        "dim": null,
+                        "color": null,
+                        "colorName": null,
+                        "timeSec": null
+                      }
+                    ],
+                    "anim": ""
+                  }
+                },
+                {
                   "id": "q-34",
-                  "dept": "cast",
-                  "trigger": "마지막 대사 후",
-                  "offsetSec": null,
-                  "memo": "",
-                  "status": "set",
-                  "cast": {
-                    "personId": "p-taehyung",
-                    "move": "move",
-                    "text": "관객석으로"
-                  }
-                },
-                {
-                  "id": "q-35",
-                  "dept": "cast",
-                  "trigger": "마지막 대사 후",
-                  "offsetSec": null,
-                  "memo": "",
-                  "status": "set",
-                  "cast": {
-                    "personId": "p-yejun",
-                    "move": "move",
-                    "text": "관객석으로"
-                  }
-                },
-                {
-                  "id": "q-36",
-                  "dept": "cast",
-                  "trigger": "마지막 대사 후",
-                  "offsetSec": null,
-                  "memo": "",
-                  "status": "set",
-                  "cast": {
-                    "personId": "p-daehoon",
-                    "move": "move",
-                    "text": "관객석으로"
-                  }
-                },
-                {
-                  "id": "q-37",
                   "dept": "stage",
                   "trigger": "3명이 관객석으로 간 사이",
                   "offsetSec": null,
@@ -1536,10 +1531,52 @@
               "comments": []
             },
             {
+              "id": "i-36",
+              "kind": "action",
+              "speaker": null,
+              "text": "(라태형이 코인으로 한 명 골라내기 — 적절한 멘트, 박대훈·조예준은 관객석 사이에서 안내 느낌)",
+              "label": null,
+              "isCue": false,
+              "cues": [],
+              "comments": []
+            },
+            {
+              "id": "i-38",
+              "kind": "action",
+              "speaker": null,
+              "text": "(무대 위로 한 명 올라옴)",
+              "label": "31",
+              "isCue": true,
+              "cues": [
+                {
+                  "id": "q-37",
+                  "dept": "light",
+                  "trigger": "관객이 무대에 올라온 뒤",
+                  "offsetSec": null,
+                  "memo": "시점·밝기 공연장에서 확정",
+                  "status": "tbd",
+                  "light": {
+                    "channels": [
+                      {
+                        "ch": "house",
+                        "action": "off",
+                        "dim": null,
+                        "color": null,
+                        "colorName": null,
+                        "timeSec": null
+                      }
+                    ],
+                    "anim": ""
+                  }
+                }
+              ],
+              "comments": []
+            },
+            {
               "id": "i-39",
               "kind": "action",
               "speaker": null,
-              "text": "* 라태형: 코인으로 한 명 골라내기 (적절한 멘트 + 박대훈, 조예준은 관객석 사이에서 안내 느낌)",
+              "text": "(조예준/박대훈: 6개 중 1개 선택 — 박대훈 룰 설명, 고르는 동안 라태형이 쓰레기통 같은 상자를 들고 있음)",
               "label": null,
               "isCue": false,
               "cues": [],
@@ -1549,7 +1586,7 @@
               "id": "i-3a",
               "kind": "action",
               "speaker": null,
-              "text": "* 무대 위로 한 명 올라오고,",
+              "text": "(둘 또는 셋이서 의견 분열)",
               "label": null,
               "isCue": false,
               "cues": [],
@@ -1559,7 +1596,7 @@
               "id": "i-3b",
               "kind": "action",
               "speaker": null,
-              "text": "* 조예준/박대훈: 6개 중 1개 선택 (박대훈 룰 설명) (고르는 동안 라태형이 쓰레기통 같은 상자를 들고 있음)",
+              "text": "(1개가 예언지, 나머지가 백지 — 나머지 5개는 상자에 버려두다가 예언 오픈 전에 하나씩 공개)",
               "label": null,
               "isCue": false,
               "cues": [],
@@ -1569,7 +1606,7 @@
               "id": "i-3c",
               "kind": "action",
               "speaker": null,
-              "text": "* 둘 또는 셋이서 의견 분열",
+              "text": "(조예준 백지 오픈)",
               "label": null,
               "isCue": false,
               "cues": [],
@@ -1577,26 +1614,6 @@
             },
             {
               "id": "i-3d",
-              "kind": "action",
-              "speaker": null,
-              "text": "* 1개가 예언지 나머지가 백지 (나머지 5개는 쓰레기통 같은 상자 하나 들고와서 버려두다가 예언 오픈 전에 하나씩 공개)",
-              "label": null,
-              "isCue": false,
-              "cues": [],
-              "comments": []
-            },
-            {
-              "id": "i-3e",
-              "kind": "action",
-              "speaker": null,
-              "text": "* 조예준: 백지 오픈",
-              "label": null,
-              "isCue": false,
-              "cues": [],
-              "comments": []
-            },
-            {
-              "id": "i-3f",
               "kind": "line",
               "speaker": "p-yejun",
               "text": "5개 선택받지 못한 종이는 보시다시피 전부 백지입니다.",
@@ -1606,17 +1623,17 @@
               "comments": []
             },
             {
-              "id": "i-3g",
+              "id": "i-3e",
               "kind": "action",
               "speaker": null,
-              "text": "* 박대훈: 엔딩",
+              "text": "(박대훈 엔딩)",
               "label": null,
               "isCue": false,
               "cues": [],
               "comments": []
             },
             {
-              "id": "i-3h",
+              "id": "i-3f",
               "kind": "line",
               "speaker": "p-daehoon",
               "text": "지금부터 마지막 남은 종이 열면서 하나씩 읽어주시겠어요?",
@@ -1626,7 +1643,7 @@
               "comments": []
             },
             {
-              "id": "i-3i",
+              "id": "i-3g",
               "kind": "action",
               "speaker": null,
               "text": "(관객 따라 읽기)",
@@ -1636,7 +1653,7 @@
               "comments": []
             },
             {
-              "id": "i-3j",
+              "id": "i-3h",
               "kind": "line",
               "speaker": "p-daehoon",
               "text": "자리로 모시겠습니다. 감사합니다.",
@@ -1648,7 +1665,7 @@
           ]
         },
         {
-          "id": "s-3q",
+          "id": "s-3o",
           "type": "mc",
           "title": "엔딩 진행",
           "cast": [
@@ -1661,7 +1678,7 @@
           "comments": [],
           "items": [
             {
-              "id": "i-3l",
+              "id": "i-3j",
               "kind": "line",
               "speaker": "p-taehyung",
               "text": "자 1부는 이렇게 마무리되었는데요, 사실 또 2부부터가 진짜 공연 제목이랑 맞잖아요",
@@ -1671,7 +1688,7 @@
               "comments": []
             },
             {
-              "id": "i-3m",
+              "id": "i-3k",
               "kind": "line",
               "speaker": "p-yejun",
               "text": "맞습니다 저희 공연 제목 기억하시나요? Backstage. 2부에서는 저희 공연 뒷모습을 조금 보여드릴까 합니다.",
@@ -1681,7 +1698,7 @@
               "comments": []
             },
             {
-              "id": "i-3n",
+              "id": "i-3l",
               "kind": "line",
               "speaker": "p-daehoon",
               "text": "“그럼 바로 만나볼까요?",
@@ -1691,15 +1708,15 @@
               "comments": []
             },
             {
-              "id": "i-3p",
+              "id": "i-3n",
               "kind": "line",
               "speaker": null,
               "text": "다같이 “Behind the Scene”",
-              "label": "30",
+              "label": "32",
               "isCue": true,
               "cues": [
                 {
-                  "id": "q-3o",
+                  "id": "q-3m",
                   "dept": "light",
                   "trigger": "'Behind the Scene' 후",
                   "offsetSec": null,

@@ -37,7 +37,9 @@ test('프런트 샘플(migrate 결과)은 오류·경고 없이 통과하고 서
   const s = plain(FE.migrate(FE.sampleShow()));
   const v = validateShow(s);
   assert.deepEqual(v.errors, []);
-  assert.deepEqual(v.warnings, []);
+  // 지문 표기 경고('action-format')는 뺀다 — sampleShow 가 아직 "* …" 지문을 쓰고, index.html 은 이 변경의 범위 밖이다.
+  // 다른 경고는 그대로 0 이어야 하므로 코드로 거른다. sampleShow 를 괄호 지문으로 고치면 이 필터를 지운다.
+  assert.deepEqual(v.warnings.filter(w => w.code !== 'action-format'), []);
   assert.equal(basicInvalid(s), null);
 });
 
@@ -108,6 +110,26 @@ test('경고: 사이트가 뜻을 유지한 채 고치는 값', () => {
     'version', `${P}.items[0].id`, `${P}.items[0].note`, `${P}.items[0].cues[1].offsetSec`,
     `${P}.items[0].cues[1].sound.level`, `${P}.items[0].cues[1].sound.track`, `${P}.items[1].speaker`, `${P}.items[1].text`
   ].sort());
+});
+
+test('경고: 지문 표기 규칙 — 괄호 한 쌍 (…)', () => {
+  const s = docExample();
+  const items = s.parts[0].scenes[0].items;
+  const mk = text => ({ id: 'i-x' + items.length, kind: 'action', speaker: null, text, label: null, comments: [], cues: [] });
+  const bad = ['* 액트 도중 조예준 인', '— 보충', '(여는 괄호만', '닫는 괄호만)', '(조예준 인 (고개 절레절레))', '(가) (나)', '조예준 인'];
+  const good = ['(조예준 인 — 고개 절레절레)', '(암전)'];
+  [...bad, ...good].forEach(t => items.push(mk(t)));
+  const v = validateShow(s);
+  assert.deepEqual(v.errors, []);
+  const base = items.length - bad.length - good.length;
+  const warned = v.warnings.filter(w => w.code === 'action-format');
+  assert.deepEqual(warned.map(w => w.path), bad.map((_, i) => `parts[0].scenes[0].items[${base + i}].text`));
+  assert.ok(warned.every(w => /괄호 지문 `\(…\)` 으로 쓰세요/.test(w.msg)));
+  assert.match(warned[4].msg, /괄호가 또 있습니다/);
+  assert.match(warned[0].where, /1부 › 씬 1\(mc\) › #\d+ "\* 액트 도중 조예준 인"/);
+  assert.equal(v.warnings.length, warned.length, '다른 경고는 없어야 한다');
+  // 큰 틀: 경고일 뿐 오류가 아니다 (사이트 편집기는 * 와 — 시작을 허용)
+  assert.equal(CONST.ACT_RE.test('* x') && CONST.ACT_RE.test('— x'), true);
 });
 
 test('fillIds: 빠진 id 만 위치 기반으로, 기존 id 와 겹치지 않게', () => {
