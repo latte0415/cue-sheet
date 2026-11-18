@@ -487,6 +487,18 @@ tr.cmt-hit{animation:none}
 .ch-rows{border-top:1px solid var(--rule)}
 .ch-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:8px;padding:8px 0;border-bottom:1px solid var(--rule);align-items:end}
 .ch-row .wide{grid-column:span 2}
+/* 큐 모달: 머리글 미리보기(읽기 전용) · 액션 버튼 묶음 · 채널 체크 · 새 소품 등록 */
+.qprev{border-left:2px solid var(--dc,var(--rule-2));padding:4px 0 6px 10px;background:var(--tint-2)}
+.qprev.d-cast{--dc:var(--q-cast)}.qprev.d-light{--dc:var(--q-light)}.qprev.d-sound{--dc:var(--q-sound)}.qprev.d-stage{--dc:var(--q-stage)}
+.qprev-h{display:flex;flex-wrap:wrap;justify-content:space-between;gap:0 12px;padding-right:8px;font-size:12px;color:var(--ink-3)}
+.qprev-l{margin-top:2px;overflow-wrap:anywhere}
+.qprev-l .ql{font-size:15px}
+.seg{display:flex;flex-wrap:wrap;gap:4px 14px;padding:4px 0}
+.chks{display:flex;flex-wrap:wrap;gap:2px 12px;font-size:13px;padding:5px 0}
+.chks label{white-space:nowrap;color:var(--ink-2)}
+.chks input{margin:0 5px 0 0;vertical-align:-2px;accent-color:var(--accent)}
+.pr-new{display:flex;gap:10px;align-items:center;padding-top:8px}
+.pr-new input{flex:1;min-width:0}
 .dimbox,.colorbox{display:flex;gap:6px;align-items:center}
 .dimbox input[type=range]{flex:1;min-width:60px}
 .dimbox input[type=number]{width:62px}
@@ -4659,92 +4671,145 @@ function openItem(id, focus) {
 }
 
 /* ================= 모달 ================= */
+// 큐 편집: 부서 → 대상(사람 · 트랙 · 채널 · 소품)과 액션을 목록·버튼에서 고른다 → 값 → 상세 → 시점 → 미정.
+// 맨 위 머리글은 미리보기일 뿐 입력칸이 아니다 — 대상·액션을 바꾸면 따라 바뀐다 (cueHead 와 같은 함수)
+// 조명은 무대 채널(백·탑·프론트)만 행으로 세밀하게, 객석은 켠다/끈다만. 행 = 같은 액션·밝기·색·시간인 채널 묶음
+const STAGE_CH = ['back', 'top', 'front'];
+const ltRow = (chs, action) => ({ chs, action: action || 'on', dim: null, color: null, colorName: null, timeSec: null });
 function blankCue() {
   const firstPerf = state.show.people.find(p => p.role === 'performer' || p.role === 'mc') || state.show.people[0];
   return {
     id: uid('q'), dept: roleDept() || 'light', trigger: '', offsetSec: null, memo: '', status: 'set',
-    light: { channels: [{ ch: 'front', action: 'on', dim: null, color: null, colorName: null, timeSec: null }], anim: '' },
-    sound: { track: state.show.tracks.length ? state.show.tracks[0].no : 1, action: 'play', timeSec: null, level: null },
+    light: { rows: [ltRow(['front'])], house: null, anim: '' },
+    sound: { track: state.show.tracks.length ? state.show.tracks[0].no : null, action: 'play', timeSec: null, level: null },
     stage: { text: '', props: [] },
     cast: { personId: firstPerf ? firstPerf.id : null, move: 'in', text: '' }
   };
+}
+// 저장된 조명 → 편집 행: 무대 채널은 같은 값끼리 한 행, 객석은 on/off 하나
+function lightDraft(l) {
+  const rows = []; let house = null;
+  ((l && l.channels) || []).forEach(c => {
+    if (c.ch === 'house') { house = houseOnOff(c.action); return; }
+    const r = rows.find(x => x.action === c.action && x.dim === c.dim && x.color === c.color && x.colorName === c.colorName && x.timeSec === c.timeSec);
+    if (r) { if (!r.chs.includes(c.ch)) r.chs.push(c.ch); } else rows.push(Object.assign(ltRow([c.ch], c.action), { dim: c.dim, color: c.color, colorName: c.colorName, timeSec: c.timeSec }));
+  });
+  return { rows, house, anim: (l && l.anim) || '' };
+}
+function draftChannels(L) {
+  const out = [];
+  L.rows.forEach(r => r.chs.forEach(ch => out.push({ ch, action: r.action, dim: r.action === 'off' ? null : r.dim, color: safeHex(r.color), colorName: r.colorName ? String(r.colorName).trim() || null : null, timeSec: r.timeSec })));
+  out.sort((x, y) => CH.indexOf(x.ch) - CH.indexOf(y.ch));
+  if (L.house) out.push({ ch: 'house', action: L.house, dim: null, color: null, colorName: null, timeSec: null });
+  return out;
+}
+// 모달 초안 → 저장할 큐 (미리보기도 같은 값으로 그린다)
+function draftCue(d) {
+  const cue = { id: d.id, dept: d.dept, trigger: d.trigger.trim(), offsetSec: d.offsetSec, memo: d.memo.trim(), status: d.status === 'tbd' ? 'tbd' : 'set' };
+  if (d.dept === 'light') cue.light = { channels: draftChannels(d.light), anim: d.light.anim.trim() };
+  else if (d.dept === 'sound') {
+    const x = d.sound;
+    // level 은 volume(기본 100)·fadeIn(선택)에서만 저장
+    cue.sound = { track: x.track, action: x.action, timeSec: x.timeSec, level: x.action === 'volume' ? (x.level == null ? 100 : x.level) : x.action === 'fadeIn' && x.level != null ? x.level : null };
+  }
+  else if (d.dept === 'stage') cue.stage = { text: d.stage.text.trim(), props: d.stage.props.filter(x => x.propId).map(x => ({ propId: x.propId, action: MOVES[x.action] ? x.action : 'in', at: String(x.at || '').trim() })) };
+  else cue.cast = { personId: d.cast.personId, move: d.cast.move, text: d.cast.text.trim() };
+  return cue;
 }
 function openCueModal(itemId, cueId, extra) {
   const e = IDX.byItem.get(itemId); if (!e) return;
   const draft = blankCue();
   if (cueId) {
     const c = e.item.cues.find(x => x.id === cueId); if (!c) return;
+    const blank = clone(draft);
     Object.assign(draft, clone(c));
+    DEPTS.forEach(k => { if (k !== c.dept) draft[k] = blank[k]; });
+    if (c.dept === 'light') draft.light = lightDraft(c.light);
     if (!Array.isArray(draft.stage.props)) draft.stage.props = [];
+    if (draft.stage.text == null) draft.stage.text = '';
+    if (draft.cast.text == null) draft.cast.text = '';
+    if (draft.memo == null) draft.memo = '';
   } else if (rolePerson()) { draft.dept = 'cast'; draft.cast.personId = rolePerson(); }
-  state.modal = Object.assign({ type: 'cue', itemId, cueId: cueId || null, draft, err: '' }, extra || {});
+  state.modal = Object.assign({ type: 'cue', itemId, cueId: cueId || null, draft, err: '', newProps: [], prNew: '' }, extra || {});
   renderModal(true);
 }
 function opts(list, cur, labels) { return list.map(v => `<option value="${v}" ${v === cur ? 'selected' : ''}>${labels ? labels[v] : v}</option>`).join(''); }
+// 액션 버튼 묶음 (고르는 것만, 글자는 고정)
+function segHtml(act, keys, cur, labels, extra, label) {
+  return `<div class="seg" role="group" aria-label="${esc(label || '액션')}">${keys.map(k => `<button type="button" class="tb ${k === cur ? 'on' : ''}" data-act="${act}" data-v="${esc(k)}" ${extra || ''} aria-pressed="${k === cur}">${esc(labels[k])}</button>`).join('')}</div>`;
+}
+// 모달 안에서 새로 등록한 소품은 저장할 때 소품 목록에 들어간다 — 그 전에는 여기서 이름을 찾는다
+function modalLook(m) {
+  return Object.assign({}, CUE_LOOK, { prop: id => { const n = (m.newProps || []).find(x => x.id === id); return n ? n.name : propName(id); } });
+}
+function cuePrevHtml(m) {
+  const c = draftCue(m.draft), lk = modalLook(m), H = cueHead(c, lk), D = cueDetail(c, lk);
+  return `<span class="ql d-${esc(c.dept)}"><span class="qd">${esc(H.dept)}</span><span class="qx">${cueHeadHtml(H)}${cueTailHtml(H, D)}</span></span>`;
+}
+function updateCuePreview() { const m = state.modal, el = $('#m-prev'); if (m && m.type === 'cue' && el) el.innerHTML = cuePrevHtml(m); }
 function cueModalBody() {
   const m = state.modal, d = m.draft, e = IDX.byItem.get(m.itemId);
   let h = m.newItem
     ? `<div class="field"><label for="m-itemtext">동작 문단 (대본에 들어갈 내용)</label><input type="text" id="m-itemtext" data-f="itemText" value="${esc(m.itemText || '')}" placeholder="예: (탑햇 세팅)"></div>`
     : `<div class="m-ref">${esc(sceneTitle(e.scene))} — ${esc(itemRefText(e, 80))}</div>`;
   h += `<div class="m-tabs" role="group" aria-label="부서">${DEPTS.map(x => `<button type="button" id="m-dept-${x}" data-act="m-dept" data-dept="${x}" aria-pressed="${d.dept === x}">${DEPT_L[x]}</button>`).join('')}</div>
-    <div class="grid2">
-      <div class="field"><label for="cue-trigger">트리거</label><input type="text" id="cue-trigger" data-f="trigger" value="${esc(d.trigger)}" list="trigger-hints" placeholder="예: 대사 끝, '박대훈' 호명 후"></div>
+    <div class="qprev d-${esc(d.dept)}"><div class="qprev-h"><span>머리글 미리보기 · 자동</span><span>직접 고칠 수 없음 — 대상·액션을 바꾸세요</span></div><div class="qprev-l" id="m-prev" aria-live="polite">${cuePrevHtml(m)}</div></div>`;
+  if (d.dept === 'light') {
+    const L = d.light, used = L.rows.flatMap(r => r.chs);
+    h += '<div class="field"><span class="lbl">대상 · 무대 채널 — 같은 동작끼리 한 행</span><div class="ch-rows">';
+    L.rows.forEach((r, i) => {
+      h += `<div class="ch-row lt-row" data-i="${i}">
+        <div class="field wide"><span class="lbl">채널</span><div class="chks">${STAGE_CH.map(ch => `<label><input type="checkbox" id="lt-ch-${i}-${ch}" data-f="lt.ch" data-i="${i}" data-v="${ch}" ${r.chs.includes(ch) ? 'checked' : ''}>${CH_L[ch]}</label>`).join('')}</div></div>
+        <div class="field wide"><span class="lbl">액션</span>${segHtml('m-lt-act', L_ACT, r.action, L_ACT_L, `data-i="${i}"`)}</div>
+        ${r.action === 'off' ? '' : `<div class="field wide"><label for="lt-dim-${i}">밝기 % (비우면 지정 안 함)</label><div class="dimbox"><input type="range" id="lt-dimr-${i}" data-f="lt" data-i="${i}" data-k="dimr" min="0" max="100" step="5" value="${r.dim == null ? 0 : r.dim}" aria-label="밝기 슬라이더"><input type="number" id="lt-dim-${i}" data-f="lt" data-i="${i}" data-k="dim" min="0" max="100" value="${r.dim == null ? '' : r.dim}"></div></div>
+        <div class="field wide"><label for="lt-cname-${i}">색</label><div class="colorbox"><input type="checkbox" id="lt-usecolor-${i}" data-f="lt" data-i="${i}" data-k="usecolor" ${r.color ? 'checked' : ''} aria-label="색 지정"><input type="color" id="lt-color-${i}" data-f="lt" data-i="${i}" data-k="color" value="${safeHex(r.color) || '#ffe3b8'}" aria-label="색 선택"><input type="text" id="lt-cname-${i}" data-f="lt" data-i="${i}" data-k="colorName" value="${esc(r.colorName || '')}" placeholder="이름 (예: 앰버)"></div></div>`}
+        <div class="field"><label for="lt-time-${i}">시간 (초)</label><input type="number" id="lt-time-${i}" data-f="lt" data-i="${i}" data-k="timeSec" min="0" step="0.5" value="${r.timeSec == null ? '' : r.timeSec}"></div>
+        <div class="field"><button type="button" class="tb red" id="lt-del-${i}" data-act="m-lt-del" data-i="${i}">행 삭제</button></div>
+      </div>`;
+    });
+    if (!L.rows.length) h += '<p class="note pr-none">무대 채널 행 없음</p>';
+    h += `</div><div class="quick" style="padding-top:6px"><button type="button" class="tb" id="m-lt-add" data-act="m-lt-add" ${used.length >= STAGE_CH.length ? 'disabled' : ''}>+ 채널 행</button><button type="button" class="tb" id="m-blackout" data-act="m-blackout">암전 (네 채널 OFF 로 채움)</button></div></div>
+      <div class="field"><span class="lbl">객석 — 켠다/끈다만 (밝기·색·페이드는 무대 채널만)</span>${segHtml('m-house', ['on', 'off', ''], L.house || '', { on: 'ON', off: 'OFF', '': '그대로' }, 'id="m-house"', '객석')}</div>
+      <div class="field"><label for="light-anim">애니메이션 프리셋 (ANIM 일 때)</label><input type="text" id="light-anim" data-f="light.anim" value="${esc(L.anim)}" placeholder="예: 스파클 체이스"></div>`;
+  } else if (d.dept === 'sound') {
+    const TS = state.show.tracks, x = d.sound, known = x.track == null || TS.some(t => t.no === x.track);
+    h += `<div class="field"><label for="snd-track">대상 · BGM 트랙</label><select id="snd-track" data-f="sound.track"><option value="">(선택)</option>${known ? '' : `<option value="${esc(x.track)}" selected>BGM ${esc(x.track)} — 트랙 목록에 없음</option>`}${TS.map(t => `<option value="${esc(t.no)}" ${t.no === x.track ? 'selected' : ''}>BGM ${esc(t.no)}${t.title ? ' · ' + esc(t.title) : ''}</option>`).join('')}</select>${TS.length ? '' : '<p class="note">등록된 트랙이 없습니다 — 음원 탭에서 먼저 추가하세요</p>'}</div>
+      <div class="field"><span class="lbl">액션</span>${segHtml('m-snd-act', ['play', 'stop', 'fadeIn', 'fadeOut', 'volume'], x.action, S_ACT_L)}</div>
+      <div class="grid2"><div class="field"><label for="snd-time">${x.action === 'volume' ? '램프 시간 (초, 비우면 즉시)' : '시간 (초)'}</label><input type="number" id="snd-time" data-f="sound.timeSec" min="0" step="0.5" value="${x.timeSec == null ? '' : x.timeSec}" placeholder="${x.action === 'fadeOut' ? '비우면 ' + FADE_DEFAULT + '초' : x.action === 'stop' ? '비우면 즉시' : ''}"></div>`;
+    if (x.action === 'volume' || x.action === 'fadeIn') {
+      const lv = x.level, vol = x.action === 'volume';
+      h += `<div class="field"><label for="snd-level">${vol ? '목표 볼륨 %' : '도착 볼륨 % (비우면 100)'}</label><div class="dimbox"><input type="range" id="snd-levelr" data-f="sound.levelr" min="0" max="100" step="5" value="${lv == null ? 100 : lv}" aria-label="볼륨 슬라이더"><input type="number" id="snd-level" data-f="sound.level" min="0" max="100" step="1" value="${lv == null ? (vol ? 100 : '') : lv}"></div></div>`;
+    }
+    h += '</div>';
+  } else if (d.dept === 'stage') {
+    // 소품 행: 대상(소품) + 액션 + 위치. 무대 상황 뷰·점검의 소품 연속성에 쓰인다
+    const PS = state.show.props.concat(m.newProps || []);
+    h += '<div class="field"><span class="lbl">대상 · 소품</span><div class="ch-rows" id="m-pr-rows">';
+    d.stage.props.forEach((x, i) => {
+      const known = !x.propId || PS.some(p => p.id === x.propId);
+      h += `<div class="ch-row pr-row" data-i="${i}">
+        <div class="field"><label for="pr-prop-${i}">소품</label><select id="pr-prop-${i}" data-f="pr" data-i="${i}" data-k="propId"><option value="">(선택)</option>${known ? '' : `<option value="${esc(x.propId)}" selected>(삭제된 소품)</option>`}${PS.map(p => `<option value="${esc(p.id)}" ${p.id === x.propId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></div>
+        <div class="field wide"><span class="lbl">액션</span>${segHtml('m-pr-act', Object.keys(MOVES), x.action, MOVES, `data-i="${i}"`)}</div>
+        <div class="field wide"><label for="pr-at-${i}">위치</label><input type="text" id="pr-at-${i}" data-f="pr" data-i="${i}" data-k="at" value="${esc(x.at)}" placeholder="예: 탑햇테이블 위"></div>
+        <div class="field"><button type="button" class="tb red" id="pr-del-${i}" data-act="m-pr-del" data-i="${i}">행 삭제</button></div>
+      </div>`;
+    });
+    if (!d.stage.props.length) h += `<p class="note pr-none">${PS.length ? '소품 행 없음 — 다루는 소품을 행으로 추가하세요' : '등록된 소품이 없습니다 — 아래에서 바로 등록하세요'}</p>`;
+    h += `</div><div class="quick" style="padding-top:6px"><button type="button" class="tb" id="m-pr-add" data-act="m-pr-add" ${PS.length ? '' : 'disabled'}>+ 소품 행</button></div>
+      <div class="pr-new"><label class="sr-only" for="pr-new-name">새 소품 이름</label><input type="text" id="pr-new-name" data-f="prnew" data-enter="m-pr-new" value="${esc(m.prNew || '')}" placeholder="목록에 없으면 새 소품 이름 (예: 꽃가루)"><button type="button" class="tb" id="m-pr-new" data-act="m-pr-new">소품 등록</button></div></div>`;
+  } else {
+    h += `<div class="field"><label for="cast-person">대상 · 사람</label><select id="cast-person" data-f="cast.personId"><option value="">(선택)</option>${state.show.people.map(p => `<option value="${esc(p.id)}" ${p.id === d.cast.personId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></div>
+      <div class="field"><span class="lbl">액션</span>${segHtml('m-cast-act', Object.keys(MOVES), d.cast.move, MOVES)}</div>`;
+  }
+  if (d.dept === 'cast' || d.dept === 'stage') h += `<div class="field"><label for="cue-note">상세 (자유 문장)</label><input type="text" id="cue-note" data-f="detail" value="${esc(d[d.dept].text)}" placeholder="${d.dept === 'cast' ? '예: 마이크 들고 들어와 라태형에게 건넴' : '예: 흘린 카드 줍기'}"></div>`;
+  h += `<div class="grid2">
+      <div class="field"><label for="cue-trigger">시점</label><input type="text" id="cue-trigger" data-f="trigger" value="${esc(d.trigger)}" list="trigger-hints" placeholder="예: 대사 끝, '박대훈' 호명 후"></div>
       <div class="field"><label for="cue-offset">+N초</label><input type="number" id="cue-offset" data-f="offsetSec" value="${d.offsetSec == null ? '' : d.offsetSec}" min="0" step="0.5" placeholder="없음"></div>
     </div>
     <div class="quick"><span class="lbl">이전 큐 후</span>${[2, 3, 5, 7, 10].map(n => `<button type="button" class="tb" data-act="m-quick" data-n="${n}">+${n}초</button>`).join('')}</div>
-    <div class="quick"><span class="lbl">상태</span>
-      <button type="button" class="tb ${d.status !== 'tbd' ? 'on' : ''}" id="m-status-set" data-act="m-status" data-v="set" aria-pressed="${d.status !== 'tbd'}">확정</button>
-      <button type="button" class="tb ${d.status === 'tbd' ? 'on red' : ''}" id="m-status-tbd" data-act="m-status" data-v="tbd" aria-pressed="${d.status === 'tbd'}">미정</button>
-      <span class="note">미정이면 내용이 비어 있어도 저장됩니다</span></div>
-    <datalist id="trigger-hints">${TRIGGER_HINTS.map(t => `<option value="${esc(t)}">`).join('')}</datalist>`;
-  if (d.dept === 'light') {
-    h += '<div class="field"><span class="lbl">채널</span><div class="ch-rows">';
-    d.light.channels.forEach((c, i) => {
-      h += `<div class="ch-row" data-i="${i}">
-        <div class="field"><label for="ch-ch-${i}">채널</label><select id="ch-ch-${i}" data-f="ch" data-i="${i}" data-k="ch">${opts(CH, c.ch, CH_L)}</select></div>
-        <div class="field"><label for="ch-act-${i}">동작</label><select id="ch-act-${i}" data-f="ch" data-i="${i}" data-k="action">${opts(L_ACT, c.action)}</select></div>
-        <div class="field wide"><label for="ch-dim-${i}">Dim % (비우면 지정 안 함)</label><div class="dimbox"><input type="range" id="ch-dimr-${i}" data-f="ch" data-i="${i}" data-k="dimr" min="0" max="100" step="5" value="${c.dim == null ? 0 : c.dim}" aria-label="Dim 슬라이더"><input type="number" id="ch-dim-${i}" data-f="ch" data-i="${i}" data-k="dim" min="0" max="100" value="${c.dim == null ? '' : c.dim}"></div></div>
-        <div class="field wide"><label for="ch-cname-${i}">색</label><div class="colorbox"><input type="checkbox" id="ch-usecolor-${i}" data-f="ch" data-i="${i}" data-k="usecolor" ${c.color ? 'checked' : ''} aria-label="색 지정"><input type="color" id="ch-color-${i}" data-f="ch" data-i="${i}" data-k="color" value="${safeHex(c.color) || '#ffe3b8'}" aria-label="색 선택"><input type="text" id="ch-cname-${i}" data-f="ch" data-i="${i}" data-k="colorName" value="${esc(c.colorName || '')}" placeholder="이름 (예: 앰버)"></div></div>
-        <div class="field"><label for="ch-time-${i}">시간 (초)</label><input type="number" id="ch-time-${i}" data-f="ch" data-i="${i}" data-k="timeSec" min="0" step="0.5" value="${c.timeSec == null ? '' : c.timeSec}"></div>
-        <div class="field"><button type="button" class="tb red" id="ch-del-${i}" data-act="m-ch-del" data-i="${i}">채널 행 삭제</button></div>
-      </div>`;
-    });
-    h += `</div><div style="padding-top:6px"><button type="button" class="tb" id="m-ch-add" data-act="m-ch-add">+ 채널 행</button></div></div>
-      <div class="field"><label for="light-anim">애니메이션 (프리셋 이름)</label><input type="text" id="light-anim" data-f="light.anim" value="${esc(d.light.anim)}" placeholder="예: 스파클 체이스"></div>`;
-  } else if (d.dept === 'sound') {
-    h += `<div class="grid3">
-      <div class="field"><label for="snd-track">BGM 트랙 번호</label><input type="number" id="snd-track" data-f="sound.track" min="0" value="${d.sound.track == null ? '' : d.sound.track}"></div>
-      <div class="field"><label for="snd-action">동작</label><select id="snd-action" data-f="sound.action">${opts(S_ACT, d.sound.action, S_ACT_L)}</select></div>
-      <div class="field"><label for="snd-time">${d.sound.action === 'volume' ? '램프 시간 (초, 비우면 즉시)' : '시간 (초)'}</label><input type="number" id="snd-time" data-f="sound.timeSec" min="0" step="0.5" value="${d.sound.timeSec == null ? '' : d.sound.timeSec}" placeholder="${d.sound.action === 'fadeOut' ? '비우면 ' + FADE_DEFAULT + '초' : d.sound.action === 'stop' ? '비우면 즉시' : ''}"></div>
-    </div>`;
-    if (d.sound.action === 'volume' || d.sound.action === 'fadeIn') {
-      const lv = d.sound.level, vol = d.sound.action === 'volume';
-      h += `<div class="field"><label for="snd-level">${vol ? '목표 볼륨 %' : '도착 볼륨 % (비우면 100)'}</label><div class="dimbox"><input type="range" id="snd-levelr" data-f="sound.levelr" min="0" max="100" step="5" value="${lv == null ? 100 : lv}" aria-label="볼륨 슬라이더"><input type="number" id="snd-level" data-f="sound.level" min="0" max="100" step="1" value="${lv == null ? (vol ? 100 : '') : lv}"></div></div>`;
-    }
-  } else if (d.dept === 'stage') {
-    h += `<div class="field"><label for="stage-text">무대 보조 내용</label><input type="text" id="stage-text" data-f="stage.text" value="${esc(d.stage.text)}" placeholder="예: 탑햇테이블에 탑햇 세팅"></div>`;
-    // v6: 소품 동작 행 (조명 채널 행과 같은 모양) — 무대 상황 뷰·점검의 소품 연속성에 쓰인다
-    const PS = state.show.props;
-    h += '<div class="field"><span class="lbl">소품 동작</span><div class="ch-rows" id="m-pr-rows">';
-    d.stage.props.forEach((x, i) => {
-      const known = !x.propId || IDX.props.has(x.propId);
-      h += `<div class="ch-row pr-row" data-i="${i}">
-        <div class="field"><label for="pr-prop-${i}">소품</label><select id="pr-prop-${i}" data-f="pr" data-i="${i}" data-k="propId"><option value="">(선택)</option>${known ? '' : `<option value="${esc(x.propId)}" selected>(삭제된 소품)</option>`}${PS.map(p => `<option value="${esc(p.id)}" ${p.id === x.propId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></div>
-        <div class="field"><label for="pr-act-${i}">동작</label><select id="pr-act-${i}" data-f="pr" data-i="${i}" data-k="action">${opts(Object.keys(MOVES), x.action, MOVES)}</select></div>
-        <div class="field wide"><label for="pr-at-${i}">위치</label><input type="text" id="pr-at-${i}" data-f="pr" data-i="${i}" data-k="at" value="${esc(x.at)}" placeholder="예: 탑햇테이블 위"></div>
-        <div class="field"><button type="button" class="tb red" id="pr-del-${i}" data-act="m-pr-del" data-i="${i}">소품 행 삭제</button></div>
-      </div>`;
-    });
-    if (!d.stage.props.length) h += `<p class="note pr-none">${PS.length ? '소품 동작 없음 — 소품이 들어오고 나가는 큐면 행을 추가하세요' : '등록된 소품이 없습니다 — 소품 탭에서 먼저 추가하세요'}</p>`;
-    h += `</div><div style="padding-top:6px"><button type="button" class="tb" id="m-pr-add" data-act="m-pr-add" ${PS.length ? '' : 'disabled'}>+ 소품 행</button></div></div>`;
-  } else {
-    h += `<div class="grid3">
-      <div class="field"><label for="cast-person">사람</label><select id="cast-person" data-f="cast.personId"><option value="">(선택)</option>${state.show.people.map(p => `<option value="${esc(p.id)}" ${p.id === d.cast.personId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></div>
-      <div class="field"><label for="cast-move">인/아웃</label><select id="cast-move" data-f="cast.move">${opts(Object.keys(MOVES), d.cast.move, MOVES)}</select></div>
-      <div class="field"><label for="cast-text">설명</label><input type="text" id="cast-text" data-f="cast.text" value="${esc(d.cast.text)}" placeholder="예: 무대 좌측에서"></div>
-    </div>`;
-  }
-  h += `<div class="field"><label for="cue-memo">메모</label><textarea id="cue-memo" data-f="memo" rows="2">${esc(d.memo)}</textarea></div>`;
+    <datalist id="trigger-hints">${TRIGGER_HINTS.map(t => `<option value="${esc(t)}">`).join('')}</datalist>
+    <div class="field"><label for="cue-memo">메모</label><textarea id="cue-memo" data-f="memo" rows="2">${esc(d.memo)}</textarea></div>
+    <label class="chk"><input type="checkbox" id="m-tbd" data-f="tbd" ${d.status === 'tbd' ? 'checked' : ''}>미정 — 대상이 비어 있어도 저장</label>`;
   if (m.err) h += `<p class="err" role="alert">${esc(m.err)}</p>`;
   return h;
 }
@@ -5113,6 +5178,7 @@ function modalField(t) {
   const f = t.dataset.f, d = m.draft, v = t.value;
   if (f === 'ag.adminKey') { m.adminKey = v; return; }
   if (f === 'ag.name') { m.name = v; if (m.tokErr) { m.tokErr = ''; const e = $('.modal-b .ag-blk .err'); if (e) e.remove(); } return; }
+  if (m.type === 'cue') { cueField(t); updateCuePreview(); return; }
   if (f === 'trigger' || f === 'memo') d[f] = v;
   else if (f === 'itemText') m.itemText = v;
   else if (f === 'offsetSec') d.offsetSec = num(v);
@@ -5148,29 +5214,85 @@ function modalField(t) {
     else if (k === 'usecolor') { const pk = $('#ch-color-' + i); c.color = t.checked ? safeHex(pk && pk.value) : null; }
   }
 }
+// 큐 편집 모달의 입력칸 → 초안. 미리보기는 modalField 가 바로 다시 그린다
+function cueField(t) {
+  const m = state.modal, f = t.dataset.f, d = m.draft, v = t.value;
+  if (f === 'trigger' || f === 'memo') d[f] = v;
+  else if (f === 'itemText') m.itemText = v;
+  else if (f === 'offsetSec') d.offsetSec = num(v);
+  else if (f === 'tbd') { d.status = t.checked ? 'tbd' : 'set'; if (m.err) { m.err = ''; const e = $('.modal-b > .err'); if (e) e.remove(); } }
+  else if (f === 'detail') { if (d.dept === 'cast' || d.dept === 'stage') d[d.dept].text = v; }
+  else if (f === 'light.anim') d.light.anim = v;
+  else if (f === 'sound.track') d.sound.track = num(v);
+  else if (f === 'sound.level') { const n = num(v); d.sound.level = n == null ? null : Math.round(Math.max(0, Math.min(100, n))); const r = $('#snd-levelr'); if (r) r.value = d.sound.level == null ? 100 : d.sound.level; }
+  else if (f === 'sound.levelr') { d.sound.level = Math.round(Number(v)); const n = $('#snd-level'); if (n) n.value = d.sound.level; }
+  else if (f === 'sound.timeSec') d.sound.timeSec = num(v);
+  else if (f === 'pr') { const x = d.stage.props[Number(t.dataset.i)], k = t.dataset.k; if (x && (k === 'propId' || k === 'at')) x[k] = v; }
+  else if (f === 'prnew') m.prNew = v;
+  else if (f === 'cast.personId') d.cast.personId = v || null;
+  else if (f === 'lt.ch') {
+    // 채널은 한 행에만 — 다른 행에서 빼고 이 행에 넣는다. 행 구성이 바뀌므로 다시 그린다
+    const i = Number(t.dataset.i), ch = t.dataset.v, rows = d.light.rows;
+    rows.forEach((r, k) => { if (k !== i || !t.checked) r.chs = r.chs.filter(x => x !== ch); });
+    if (t.checked && rows[i]) rows[i].chs.push(ch);
+    rows.forEach(r => r.chs.sort((x, y) => CH.indexOf(x) - CH.indexOf(y)));
+    renderModal(); const el = document.getElementById(t.id); if (el) el.focus();
+  }
+  else if (f === 'lt') {
+    const i = Number(t.dataset.i), k = t.dataset.k, r = d.light.rows[i]; if (!r) return;
+    if (k === 'timeSec') r.timeSec = num(v);
+    else if (k === 'colorName') r.colorName = v || null;
+    else if (k === 'dim') { const n = num(v); r.dim = n == null ? null : Math.max(0, Math.min(100, n)); const x = $('#lt-dimr-' + i); if (x) x.value = r.dim == null ? 0 : r.dim; }
+    else if (k === 'dimr') { r.dim = Number(v); const x = $('#lt-dim-' + i); if (x) x.value = r.dim; }
+    else if (k === 'color') { r.color = safeHex(v); const cb = $('#lt-usecolor-' + i); if (cb) cb.checked = true; }
+    else if (k === 'usecolor') { const pk = $('#lt-color-' + i); r.color = t.checked ? safeHex(pk && pk.value) : null; }
+  }
+}
+// 모달 액션 버튼(부서별 액션 · 행 추가/삭제 · 암전 · 소품 등록). 처리했으면 true
+function cueModalAct(a, el) {
+  const m = state.modal; if (!m || m.type !== 'cue') return false;
+  const d = m.draft, i = Number(el.dataset.i), v = el.dataset.v;
+  switch (a) {
+    case 'm-lt-act': { const r = d.light.rows[i]; if (r) { r.action = v; if (v === 'off') r.dim = null; } break; }
+    case 'm-lt-add': { const used = d.light.rows.flatMap(r => r.chs), ch = STAGE_CH.find(c => !used.includes(c)); if (ch) d.light.rows.push(ltRow([ch])); break; }
+    case 'm-lt-del': d.light.rows.splice(i, 1); break;
+    case 'm-blackout': d.light.rows = [ltRow(STAGE_CH.slice(), 'off')]; d.light.house = 'off'; break;
+    case 'm-house': d.light.house = v || null; break;
+    case 'm-snd-act': d.sound.action = v; if (v === 'volume' && d.sound.level == null) d.sound.level = 100; break;
+    case 'm-cast-act': d.cast.move = v; break;
+    case 'm-pr-act': { const x = d.stage.props[i]; if (x) x.action = v; break; }
+    case 'm-pr-new': {
+      // 새 소품을 모달 안에서 바로 등록 — 같은 이름이 이미 있으면 그것을 쓴다. 소품 목록에는 큐를 저장할 때 들어간다
+      const name = String(m.prNew || '').trim();
+      if (!name) { m.err = '등록할 소품 이름을 입력하세요.'; break; }
+      const p = state.show.props.concat(m.newProps).find(x => x.name === name) || (() => { const n = { id: uid('pr'), name, note: '' }; m.newProps.push(n); return n; })();
+      const empty = d.stage.props.find(x => !x.propId);
+      if (empty) empty.propId = p.id; else d.stage.props.push({ propId: p.id, action: 'in', at: '' });
+      m.prNew = ''; m.err = '';
+      break;
+    }
+    default: return false;
+  }
+  renderModal();
+  if (a === 'm-pr-new') { const f = $('#pr-new-name'); if (f) f.focus(); }
+  return true;
+}
 function saveCue() {
   const m = state.modal, d = m.draft;
   const e = IDX.byItem.get(m.itemId);
   if (!e) { closeModal(true); return; }
   let err = '';
-  const tbd = d.status === 'tbd';
+  const tbd = d.status === 'tbd', cue = draftCue(d);
   if (!tbd) {
-    if (d.dept === 'light' && !d.light.channels.length && !d.light.anim.trim()) err = '조명 채널을 하나 이상 추가하거나 애니메이션을 입력하세요 (아직 모르면 상태를 "미정"으로).';
-    if (d.dept === 'sound' && d.sound.track == null) err = 'BGM 트랙 번호를 입력하세요.';
-    if (d.dept === 'stage' && !d.stage.text.trim() && !d.stage.props.some(x => x.propId)) err = '무대 보조 내용이나 소품 동작을 하나 이상 입력하세요.';
+    if (d.dept === 'light' && !cue.light.channels.length && !cue.light.anim) err = '무대 채널을 하나 이상 고르거나 객석 ON/OFF, 애니메이션을 정하세요 (아직 모르면 "미정").';
+    if (d.dept === 'sound' && d.sound.track == null) err = 'BGM 트랙을 고르세요.';
+    if (d.dept === 'stage' && !cue.stage.text && !cue.stage.props.length) err = '소품 행을 추가하거나 상세를 입력하세요.';
     else if (d.dept === 'stage' && d.stage.props.some(x => !x.propId)) err = '소품 행에서 소품을 고르거나 그 행을 삭제하세요.';
     if (d.dept === 'cast' && !d.cast.personId) err = '사람을 선택하세요.';
   }
   if (err) { m.err = err; renderModal(); return; }
-  const cue = { id: d.id, dept: d.dept, trigger: d.trigger.trim(), offsetSec: d.offsetSec, memo: d.memo.trim(), status: tbd ? 'tbd' : 'set' };
-  if (d.dept === 'light') cue.light = { channels: d.light.channels.map(c => ({ ch: c.ch, action: c.action, dim: c.dim, color: safeHex(c.color), colorName: c.colorName ? c.colorName.trim() || null : null, timeSec: c.timeSec })), anim: d.light.anim.trim() };
-  else if (d.dept === 'sound') {
-    const x = d.sound;
-    // level 은 volume(기본 100)·fadeIn(선택)에서만 저장
-    cue.sound = { track: x.track, action: x.action, timeSec: x.timeSec, level: x.action === 'volume' ? (x.level == null ? 100 : x.level) : x.action === 'fadeIn' && x.level != null ? x.level : null };
-  }
-  else if (d.dept === 'stage') cue.stage = { text: d.stage.text.trim(), props: d.stage.props.filter(x => x.propId).map(x => ({ propId: x.propId, action: MOVES[x.action] ? x.action : 'in', at: String(x.at || '').trim() })) };
-  else cue.cast = { personId: d.cast.personId, move: d.cast.move, text: d.cast.text.trim() };
+  // 모달에서 등록한 소품 중 이 큐가 쓰는 것만 소품 목록에 넣는다
+  if (d.dept === 'stage') (m.newProps || []).forEach(p => { if (cue.stage.props.some(x => x.propId === p.id) && !state.show.props.some(x => x.id === p.id)) state.show.props.push(p); });
   if (m.newItem) {
     let t = (m.itemText || '').trim() || '(동작)';
     if (!ACT_RE.test(t)) t = '(' + t + ')';
@@ -5629,8 +5751,8 @@ function act(a, el) {
     case 'sv-prev': stageGo(stagePoint().i - 1); break;
     case 'sv-next': stageGo(stagePoint().i + 1); break;
     case 'm-pr-add': {
-      const ps = state.modal.draft.stage.props, used = ps.map(x => x.propId);
-      const p = S.props.find(x => !used.includes(x.id)) || S.props[0];
+      const ps = state.modal.draft.stage.props, used = ps.map(x => x.propId), all = S.props.concat(state.modal.newProps || []);
+      const p = all.find(x => !used.includes(x.id)) || all[0];
       ps.push({ propId: p ? p.id : '', action: 'in', at: '' }); state.modal.err = ''; renderModal();
       const f = document.getElementById('pr-prop-' + (ps.length - 1)); if (f) f.focus();
       break;
@@ -5669,10 +5791,9 @@ function act(a, el) {
     case 'pl-close': AU.shown = false; updatePlayer(); break; // 숨기기만 — 재생은 계속
     case 'pl-open': AU.shown = true; updatePlayer(); break;
     case 'm-dept': state.modal.draft.dept = el.dataset.dept; state.modal.err = ''; renderModal(); break;
-    case 'm-status': state.modal.draft.status = el.dataset.v === 'tbd' ? 'tbd' : 'set'; state.modal.err = ''; renderModal(); break;
     case 'm-quick': state.modal.draft.trigger = '이전 큐 후'; state.modal.draft.offsetSec = Number(el.dataset.n); renderModal(); break;
-    case 'm-ch-add': { const chs = state.modal.draft.light.channels; const used = chs.map(c => c.ch); chs.push({ ch: CH.find(c => !used.includes(c)) || 'front', action: 'on', dim: null, color: null, colorName: null, timeSec: null }); renderModal(); break; }
-    case 'm-ch-del': state.modal.draft.light.channels.splice(Number(el.dataset.i), 1); renderModal(); break;
+    case 'm-lt-act': case 'm-lt-add': case 'm-lt-del': case 'm-blackout': case 'm-house': case 'm-snd-act': case 'm-cast-act': case 'm-pr-act': case 'm-pr-new':
+      cueModalAct(a, el); break;
     case 'm-save': saveCue(); break;
     case 'm-del': { const m = state.modal; const ok = deleteCue(m.itemId, m.cueId); closeModal(true); commit(); if (ok) delToast('큐를 삭제했습니다'); break; }
     case 'agent-open':
