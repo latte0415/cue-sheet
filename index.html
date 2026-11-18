@@ -219,6 +219,21 @@ input[type=color]{padding:0 2px;width:40px;height:30px;cursor:pointer}
 .ql.other .qt{font-weight:400;color:var(--ink-3)}
 .ql.other .qd{color:var(--ink-3);font-weight:400}
 .qb:hover .qt{text-decoration:underline;text-decoration-color:var(--rule-2);text-underline-offset:3px}
+/* 끌어 옮기기 (편집 모드): 문단 손잡이는 본문 바로 왼쪽의 점선 두 줄, 놓을 곳은 문단 사이 가로 괘선 하나, 큐를 놓을 문단은 옅은 바탕 + 왼쪽 선 */
+.dnd-h{position:absolute;left:-14px;z-index:3;width:14px;height:27px;display:flex;align-items:center;justify-content:center;color:var(--rule-2);cursor:grab;touch-action:none}
+.dnd-h::before{content:"";width:2px;height:13px;border-left:2px dotted currentColor;border-right:2px dotted currentColor}
+.dnd-h:hover,.dnd-h:focus{color:var(--accent);outline:0}
+.dnd-h:focus-visible{box-shadow:inset 0 -1px 0 var(--accent)}
+.ro .dnd-h{display:none}
+@media (pointer:coarse){.dnd-h{left:-20px;width:20px;color:var(--ink-3)}}
+.dnd-line{position:fixed;z-index:60;height:0;border-top:2px solid var(--accent);pointer-events:none}
+.dnd-tag{position:fixed;z-index:61;max-width:280px;padding:0 6px;font-size:12px;line-height:1.6;color:var(--ink);background:var(--paper);border-left:2px solid var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+.app.dnd-drag,.app.dnd-drag *{cursor:grabbing!important;-webkit-user-select:none;user-select:none}
+.doc p.dnd-src,.ql.dnd-src,.qb.dnd-src{opacity:.35}
+.doc p.dnd-tgt{background:var(--accent-tint);box-shadow:inset 2px 0 0 var(--accent)}
+.script:not(.ro) .qb .ql[data-cue]{cursor:grab}
+.script:not(.ro) .qb .ql .qd{touch-action:none}
+@media print{.dnd-h,.dnd-line,.dnd-tag{display:none!important}}
 
 /* ---------- 큐시트 ---------- */
 .cs-top{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px;padding:18px 0 10px}
@@ -2617,6 +2632,7 @@ function spkBtnPlace() {
 
 /* ===== 되돌리기 (편집기 전용 — 브라우저 기본 undo 는 프로그램이 바꾼 DOM 과 섞이면 깨진다) ===== */
 const UNDO = new Map();
+let UNDO_SEQ = 0; // 스냅숏·끌어 옮기기 기록의 순서 (Ctrl+Z 가 더 최근 것을 고른다)
 function undoBox(doc) { const k = doc.dataset.scene; if (!UNDO.has(k)) UNDO.set(k, { stack: [], redo: [], t: 0 }); return UNDO.get(k); }
 function snap(doc) {
   const c = selCtx();
@@ -2626,7 +2642,7 @@ function pushUndo(doc, force) {
   const u = undoBox(doc), now = Date.now();
   if (!force && now - u.t < 900) return;
   u.t = force ? 0 : now;
-  u.stack.push(snap(doc)); if (u.stack.length > 120) u.stack.shift();
+  u.stack.push(Object.assign(snap(doc), { seq: ++UNDO_SEQ })); if (u.stack.length > 120) u.stack.shift();
   u.redo = [];
 }
 function restoreSnap(doc, s) {
@@ -2637,10 +2653,11 @@ function restoreSnap(doc, s) {
   syncDoc(doc);
 }
 function undo(doc, redo) {
+  if (dndUndoTurn(doc, redo)) return; // 이 씬에서 가장 최근 일이 끌어 옮기기면 그것부터
   const u = undoBox(doc);
   const from = redo ? u.redo : u.stack, to = redo ? u.stack : u.redo;
   if (!from.length) { toast(redo ? '다시 실행할 것이 없습니다' : '되돌릴 것이 없습니다'); return; }
-  to.push(snap(doc));
+  to.push(Object.assign(snap(doc), { seq: ++UNDO_SEQ }));
   restoreSnap(doc, from.pop());
   u.t = 0;
 }
@@ -2828,7 +2845,7 @@ function cueLinesHtml(cues, q) {
   return cues.map((c, i) => {
     const L = cueLine(c, CUE_LOOK), meta = [L.when, L.memo].filter(Boolean).join(' · ');
     const other = !cueMine(c), bare = L.tbd && L.text === '상세 미정'; // 내용이 비어 "상세 미정" 이면 그 글자를 빨갛게 — "미정" 을 두 번 쓰지 않는다
-    return `<span class="ql d-${esc(c.dept)}${other ? ' other' : ''}">${q != null ? `<span class="qn">${i ? '' : 'Q' + esc(q)}</span>` : ''}<span class="qd">${esc(L.dept)}</span><span class="qx"><span class="qt${bare ? ' tbd' : ''}">${esc(L.text)}</span>${L.tbd && !bare ? '<span class="qs">미정</span>' : ''}${meta ? `<span class="qm">${esc(meta)}</span>` : ''}</span></span>`;
+    return `<span class="ql d-${esc(c.dept)}${other ? ' other' : ''}" data-cue="${esc(c.id)}">${q != null ? `<span class="qn">${i ? '' : 'Q' + esc(q)}</span>` : ''}<span class="qd">${esc(L.dept)}</span><span class="qx"><span class="qt${bare ? ' tbd' : ''}">${esc(L.text)}</span>${L.tbd && !bare ? '<span class="qs">미정</span>' : ''}${meta ? `<span class="qm">${esc(meta)}</span>` : ''}</span></span>`;
   }).join('');
 }
 function cueBlocksHtml(s) {
@@ -5372,6 +5389,389 @@ document.addEventListener('drop', ev => {
   const pv = previewEl();
   ['play', 'pause', 'ended'].forEach(n => pv.addEventListener(n, () => { if (state.view === 'tracks') render(); }));
 })();
+
+/* ================= 끌어 옮기기: 모델 ================= */
+// 문단·큐 재배치 — show 만 바꾸는 순수 함수. 반환하는 from 을 그대로 다시 넣으면 원래 자리로 돌아간다 (되돌리기)
+function dndScene(show, sceneId) { for (const p of show.parts) for (const s of p.scenes) if (s.id === sceneId) return s; return null; }
+function dndFindItem(show, itemId) {
+  for (const p of show.parts) for (const s of p.scenes) { const i = s.items.findIndex(x => x.id === itemId); if (i >= 0) return { scene: s, item: s.items[i], index: i }; }
+  return null;
+}
+function dndFindCue(show, cueId) {
+  for (const p of show.parts) for (const s of p.scenes) for (const it of s.items) { const i = it.cues.findIndex(c => c.id === cueId); if (i >= 0) return { scene: s, item: it, index: i }; }
+  return null;
+}
+function dndClamp(i, n) { return Math.max(0, Math.min(i == null ? n : i, n)); }
+// 문단 itemId 를 sceneId 씬의 index 자리로 (index 는 옮긴 뒤 기준, 없으면 끝). 큐·코멘트·번호는 Item 에 붙어 있어 함께 간다
+function relocateItem(show, itemId, sceneId, index) {
+  const at = dndFindItem(show, itemId), dst = dndScene(show, sceneId);
+  if (!at || !dst) return null;
+  at.scene.items.splice(at.index, 1);
+  const k = dndClamp(index, dst.items.length);
+  dst.items.splice(k, 0, at.item);
+  return { from: { sceneId: at.scene.id, index: at.index }, to: { sceneId, index: k }, changed: at.scene.id !== sceneId || at.index !== k };
+}
+// 큐 cueId 를 itemId 문단의 index 자리로 (없으면 끝)
+function relocateCue(show, cueId, itemId, index) {
+  const at = dndFindCue(show, cueId), dst = dndFindItem(show, itemId);
+  if (!at || !dst) return null;
+  const c = at.item.cues.splice(at.index, 1)[0];
+  at.item.isCue = at.item.cues.length > 0;
+  const k = dndClamp(index, dst.item.cues.length);
+  dst.item.cues.splice(k, 0, c); dst.item.isCue = true;
+  return { from: { itemId: at.item.id, index: at.index }, to: { itemId, index: k }, changed: at.item.id !== itemId || at.index !== k };
+}
+// 한 칸 위/아래 자리 — 씬의 처음/끝이면 이전 씬의 끝 / 다음 씬의 처음 (파트 경계도 넘는다). 더 갈 곳이 없으면 null
+function stepSlot(show, itemId, d) {
+  const at = dndFindItem(show, itemId); if (!at) return null;
+  if (d < 0 && at.index > 0) return { sceneId: at.scene.id, index: at.index - 1 };
+  if (d > 0 && at.index < at.scene.items.length - 1) return { sceneId: at.scene.id, index: at.index + 1 };
+  const all = []; show.parts.forEach(p => p.scenes.forEach(s => all.push(s)));
+  const nb = all[all.indexOf(at.scene) + (d < 0 ? -1 : 1)];
+  if (!nb) return null;
+  return { sceneId: nb.id, index: d < 0 ? nb.items.length : 0 };
+}
+// 큐 번호를 되돌리기용으로 적어 두고 그대로 되돌린다 (큐가 없는 문단은 번호 없음, 적어 둔 번호가 없으면 지금 번호)
+function labelMap(show) { const m = {}; show.parts.forEach(p => p.scenes.forEach(s => s.items.forEach(i => { m[i.id] = i.label; }))); return m; }
+function restoreLabels(show, m) {
+  show.parts.forEach(p => p.scenes.forEach(s => s.items.forEach(i => {
+    if (!i.cues.length) i.label = null;
+    else if (Object.prototype.hasOwnProperty.call(m, i.id) && m[i.id] != null) i.label = m[i.id];
+  })));
+}
+
+/* ================= 끌어 옮기기: 화면 ================= */
+// 편집 모드 대본에서만.
+//  문단: 왼쪽 손잡이(마우스를 올린 문단 · 커서가 있는 문단 옆)를 끌어 문단 사이 괘선에 놓는다 — 다른 씬으로도.
+//        손잡이에 포커스가 있으면 Alt+↑/↓ 로 한 칸씩 (씬 경계를 넘는다)
+//  큐:   큐 블록의 한 줄(터치는 줄 앞 부서 열)을 끌어 다른 문단에 놓는다 — 그 문단 큐의 맨 뒤로
+//  끄는 동안 화면 위·아래 가장자리에 가면 저절로 스크롤. 놓으면 큐 번호를 다시 매기고 저장. Esc 취소
+// 되돌리기: 편집기 UNDO(씬별 문단 스냅숏)와 따로 MV 에 "원래 자리"를 쌓는다. 편집기 안 Ctrl+Z 는 그 씬의 스냅숏과
+//  그 씬을 건드린 이동 중 더 최근 것을 먼저 되돌린다 (둘 다 UNDO_SEQ 로 순서를 단다). 편집기 밖(손잡이·빈 곳)에서는 이동만
+const MV = { undo: [], redo: [], show: null };
+const DND = { on: false, started: false, kind: null, id: null, el: null, src: null, x0: 0, y0: 0, x: 0, y: 0, pid: null, slot: null, tgt: null, raf: 0, hoverP: null, eatClick: false };
+function dndOn() { return !!state.show && state.edit && state.view === 'script' && mountedView === 'script' && !state.moveCue && !state.modal && !composing; }
+// 프로젝트를 바꾸거나 서버본·삭제 되돌리기로 show 를 갈아끼우면 이동 기록은 버린다
+function mvBox() { if (MV.show !== state.show) { MV.undo = []; MV.redo = []; MV.show = state.show; } return MV; }
+function dndDoc(sid) { return $(`#script .doc[data-scene="${cssq(sid)}"]`); }
+function dndPara(id) { return $(`#script .doc > p[data-id="${cssq(id)}"]`); }
+
+/* --- 손잡이 (하나를 마우스를 올린 문단·커서 문단 옆으로 옮겨 다닌다) --- */
+let dndH = null;
+function dndHandle() {
+  if (dndH) return dndH;
+  const h = document.createElement('button');
+  h.type = 'button'; h.className = 'dnd-h'; h.tabIndex = -1; h.hidden = true;
+  h.title = '끌어서 문단 옮기기 · Alt+↑/↓ 한 칸씩'; h.setAttribute('aria-label', '문단 옮기기 — 끌어서 놓기, Alt+위/아래 화살표로 한 칸씩');
+  h.addEventListener('pointerdown', ev => {
+    if (ev.button !== 0 || !h._p || !h._p.isConnected || !dndOn()) return;
+    ev.preventDefault(); // 편집기 포커스·텍스트 선택을 건드리지 않는다
+    dndBegin(ev, 'item', h._p.dataset.id, h, h._p);
+  });
+  h.addEventListener('keydown', ev => {
+    if (ev.altKey && !ev.ctrlKey && !ev.metaKey && !ev.shiftKey && (ev.key === 'ArrowUp' || ev.key === 'ArrowDown')) {
+      ev.preventDefault(); ev.stopPropagation();
+      const p = h._p; if (!p || !p.isConnected || !dndOn()) return;
+      const slot = stepSlot(state.show, p.dataset.id, ev.key === 'ArrowUp' ? -1 : 1);
+      if (!slot) { toast(ev.key === 'ArrowUp' ? '맨 첫 문단입니다' : '맨 마지막 문단입니다'); return; }
+      dndMoveItem(p.dataset.id, slot.sceneId, slot.index, true);
+    } else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); h.blur(); }
+  });
+  h.addEventListener('blur', () => { setTimeout(() => { if (document.activeElement !== h && !DND.on) dndPlace(DND.hoverP || dndCaretP()); }, 0); });
+  dndH = h;
+  return h;
+}
+function dndCaretP() { const c = selCtx(); return c && document.activeElement === c.doc && c.p.dataset.id ? c.p : null; }
+function dndPlace(p) {
+  const h = dndHandle();
+  if (DND.on) return;
+  if (document.activeElement === h && h._p && h._p.isConnected && p !== h._p) { if (!p) return; h.blur(); }
+  if (!p || !p.isConnected || !p.dataset.id || !dndOn()) { h.hidden = true; h._p = null; return; }
+  const sheet = p.closest('.sheet'); if (!sheet) { h.hidden = true; h._p = null; return; }
+  if (h.parentNode !== sheet) sheet.appendChild(h);
+  // 큐 블록이 위에 있으면 그 아래 본문 첫 줄 옆에
+  h.style.top = p.offsetTop + (parseFloat(p.style.getPropertyValue('--qh')) || 0) + 'px';
+  h._p = p; h.hidden = false;
+}
+// y 위치에서 가장 가까운 편집기 / 그 안의 문단
+function dndNearestDoc(y) {
+  let best = null, bd = Infinity;
+  $$('#script .doc').forEach(d => {
+    const r = d.getBoundingClientRect(), dist = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
+    if (dist < bd) { bd = dist; best = d; }
+  });
+  return best;
+}
+function dndParaAtY(doc, y) {
+  if (!doc) return null;
+  const ps = Array.from(doc.children).filter(p => p.dataset.id);
+  for (const p of ps) { const r = p.getBoundingClientRect(); if (y < r.bottom + 2) return p; }
+  return ps[ps.length - 1] || null;
+}
+
+/* --- 끌기 --- */
+function dndEl(id, cls) {
+  let e = document.getElementById(id);
+  if (!e) { e = document.createElement('div'); e.id = id; e.className = cls; e.hidden = true; e.setAttribute('aria-hidden', 'true'); document.body.appendChild(e); }
+  return e;
+}
+function dndLine() { return dndEl('dnd-line', 'dnd-line'); }
+function dndTag() { return dndEl('dnd-tag', 'dnd-tag'); }
+function dndBegin(ev, kind, id, el, src) {
+  if (!id) return;
+  Object.assign(DND, { on: true, started: false, kind, id, el, src, x0: ev.clientX, y0: ev.clientY, x: ev.clientX, y: ev.clientY, pid: ev.pointerId, slot: null, tgt: null });
+  try { el.setPointerCapture(ev.pointerId); } catch (e) { /* 이미 끝난 포인터 */ }
+}
+function dndStart() {
+  DND.started = true;
+  // 화면의 편집 내용을 먼저 모델에 반영 — 문단 순서·id 가 모델과 같아야 자리를 셀 수 있다
+  const a = document.activeElement; if (a && a.classList && a.classList.contains('doc')) syncDoc(a);
+  if (DND.kind === 'item') DND.src = dndPara(DND.id);
+  const f = DND.kind === 'cue' ? dndFindCue(state.show, DND.id) : null;
+  if (!DND.src || (DND.kind === 'cue' && !f)) { dndEnd(false); return; }
+  DND.src.classList.add('dnd-src');
+  if (DND.kind === 'item') { const qb = $(`#script .qb[data-for="${cssq(DND.id)}"]`); if (qb) qb.classList.add('dnd-src'); } // 문단 위 큐 블록도 함께 흐리게
+  $('#app').classList.add('dnd-drag');
+  const tag = dndTag();
+  if (f) { const c = f.item.cues[f.index]; tag.textContent = DEPT_L[c.dept] + ' ' + cut(cueSummary(c), 34); }
+  else { const it = ITEMS.get(DND.id); tag.textContent = cut(it ? itemToRaw(it) : '', 40) || '(빈 문단)'; }
+  tag.hidden = false;
+  dndLoop();
+}
+// 문단: 놓을 자리 = 가장 가까운 씬의 문단 사이. 옮기는 문단 자신은 빼고 센다 (index = 옮긴 뒤 자리)
+function dndItemSlot(y) {
+  const doc = dndNearestDoc(y); if (!doc) return null;
+  const ps = Array.from(doc.children).filter(p => p.dataset.id && p !== DND.src);
+  let k = ps.length;
+  for (let i = 0; i < ps.length; i++) { const r = ps[i].getBoundingClientRect(); if (y < (r.top + r.bottom) / 2) { k = i; break; } }
+  const sid = doc.dataset.scene, cur = IDX.byItem.get(DND.id);
+  const noop = !!cur && cur.scene.id === sid && cur.ii === k;
+  const dr = doc.getBoundingClientRect(), a = ps[k - 1], b = ps[k];
+  let ly;
+  if (a && b) ly = (a.getBoundingClientRect().bottom + b.getBoundingClientRect().top) / 2;
+  else if (b) ly = b.getBoundingClientRect().top - 3;
+  else if (a) ly = a.getBoundingClientRect().bottom + 2;
+  else ly = dr.top + 2;
+  return { sceneId: sid, index: k, noop, y: ly, left: dr.left, width: dr.width };
+}
+function dndUpdate() {
+  if (!DND.started) return;
+  const tag = dndTag();
+  tag.style.left = (DND.x + 14) + 'px'; tag.style.top = (DND.y + 12) + 'px';
+  if (DND.kind === 'item') {
+    const line = dndLine(), s = DND.slot = dndItemSlot(DND.y);
+    if (!s || s.noop) { line.hidden = true; return; }
+    line.style.top = Math.round(s.y - 1) + 'px'; line.style.left = Math.round(s.left) + 'px'; line.style.width = Math.round(s.width) + 'px';
+    line.hidden = false;
+  } else {
+    const f = dndFindCue(state.show, DND.id), p = dndParaAtY(dndNearestDoc(DND.y), DND.y);
+    const t = p && f && p.dataset.id !== f.item.id ? p : null;
+    if (DND.tgt !== t) { if (DND.tgt) DND.tgt.classList.remove('dnd-tgt'); if (t) t.classList.add('dnd-tgt'); DND.tgt = t; }
+  }
+}
+// 가장자리 자동 스크롤 + 자리 다시 계산 (스크롤하면 같은 포인터 위치라도 자리가 바뀐다)
+function dndLoop() {
+  cancelAnimationFrame(DND.raf);
+  const tick = () => {
+    if (!DND.on || !DND.started) return;
+    const m = $('#main'), r = m.getBoundingClientRect(), E = 56;
+    let v = 0;
+    if (DND.y < r.top + E) v = -Math.ceil((r.top + E - DND.y) / 3);
+    else if (DND.y > r.bottom - E) v = Math.ceil((DND.y - (r.bottom - E)) / 3);
+    if (v) m.scrollTop += Math.max(-28, Math.min(28, v));
+    dndUpdate();
+    DND.raf = requestAnimationFrame(tick);
+  };
+  DND.raf = requestAnimationFrame(tick);
+}
+function dndEnd(drop) {
+  if (!DND.on) return;
+  const { kind, id, started, slot, tgt, el, pid } = DND;
+  DND.on = false; DND.started = false;
+  cancelAnimationFrame(DND.raf);
+  try { if (el && el.hasPointerCapture && el.hasPointerCapture(pid)) el.releasePointerCapture(pid); } catch (e) { /* 무시 */ }
+  if (DND.src) DND.src.classList.remove('dnd-src');
+  $$('#script .qb.dnd-src').forEach(x => x.classList.remove('dnd-src'));
+  if (tgt) tgt.classList.remove('dnd-tgt');
+  DND.src = null; DND.tgt = null; DND.slot = null;
+  $('#app').classList.remove('dnd-drag');
+  dndLine().hidden = true; dndTag().hidden = true;
+  if (!started) return;
+  DND.eatClick = true; setTimeout(() => { DND.eatClick = false; }, 0); // 끌고 난 뒤의 click(큐 블록 → 상세 열기)은 먹는다
+  if (!drop || !dndOn()) return;
+  if (kind === 'item' && slot && !slot.noop) dndMoveItem(id, slot.sceneId, slot.index, true);
+  else if (kind === 'cue' && tgt) dndMoveCue(id, tgt.dataset.id);
+}
+document.addEventListener('pointermove', ev => {
+  if (DND.on && ev.pointerId === DND.pid) {
+    DND.x = ev.clientX; DND.y = ev.clientY;
+    if (!DND.started) { if (Math.abs(DND.x - DND.x0) + Math.abs(DND.y - DND.y0) < 5) return; dndStart(); }
+    if (ev.cancelable) ev.preventDefault();
+    return;
+  }
+  // 마우스: 올린 문단 옆에 손잡이
+  if (ev.pointerType !== 'mouse' || DND.on || !state.edit || mountedView !== 'script') return;
+  const t = ev.target;
+  if (dndH && t === dndH) return;
+  const sheet = t && t.closest && t.closest('#script .sheet');
+  const p = sheet ? dndParaAtY(sheet.querySelector('.doc'), ev.clientY) : null;
+  if (p === DND.hoverP && (!p || (dndH && dndH._p === p && !dndH.hidden))) return;
+  DND.hoverP = p;
+  dndPlace(p || dndCaretP());
+}, { passive: false });
+document.addEventListener('pointerup', ev => {
+  if (!DND.on || ev.pointerId !== DND.pid) return;
+  const click = !DND.started && DND.el === dndH;
+  if (DND.started) ev.preventDefault();
+  dndEnd(true);
+  if (click && dndH._p && !dndH.hidden) dndH.focus({ preventScroll: true }); // 손잡이를 누르기만 하면 포커스 → Alt+↑/↓
+});
+document.addEventListener('pointercancel', ev => { if (DND.on && ev.pointerId === DND.pid) dndEnd(false); });
+document.addEventListener('keydown', ev => { if (DND.on && DND.started && ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); dndEnd(false); toast('옮기기를 취소했습니다'); } }, true);
+// 큐 한 줄 잡기: 마우스는 줄 어디든, 터치·펜은 부서 열(.qd)만 — 나머지는 평소처럼 스크롤
+document.addEventListener('pointerdown', ev => {
+  const t = ev.target, ql = t && t.closest && t.closest('#script .qb .ql[data-cue]');
+  if (!ql || !dndOn() || ev.button !== 0) return;
+  if (ev.pointerType !== 'mouse' && !t.closest('.qd')) return;
+  ev.preventDefault();
+  dndBegin(ev, 'cue', ql.dataset.cue, ql, ql);
+});
+document.addEventListener('click', ev => { if (DND.eatClick) { ev.preventDefault(); ev.stopPropagation(); DND.eatClick = false; } }, true);
+document.addEventListener('selectionchange', () => { if (!DND.on && !DND.hoverP) requestAnimationFrame(() => { if (!DND.on && !DND.hoverP) dndPlace(dndCaretP()); }); });
+document.documentElement.addEventListener('mouseleave', () => { DND.hoverP = null; if (!DND.on) dndPlace(dndCaretP()); });
+
+/* --- 옮기기 / 되돌리기 --- */
+function dndPush(e) {
+  const m = mvBox();
+  e.seq = ++UNDO_SEQ; m.undo.push(e); if (m.undo.length > 120) m.undo.shift();
+  m.redo = [];
+  // 이 이동 전에 찍힌 그 씬들의 "다시 실행" 스냅숏은 이제 맞지 않는다. 다음 입력은 새 스냅숏부터
+  e.scenes.forEach(sid => { const u = UNDO.get(sid); if (u) { u.redo = []; u.t = 0; } });
+}
+function dndSync(sids) { const a = document.activeElement; if (a && a.classList && a.classList.contains('doc') && sids.includes(a.dataset.scene)) syncDoc(a); }
+// 바뀐 씬의 편집기를 모델대로 다시 그리고(docs), 번호·거터·머리말을 갱신하고 저장
+function dndRedraw(sids, docs, focusId) {
+  const a = document.activeElement, fdoc = a && a.classList && a.classList.contains('doc') ? a : null;
+  buildIndex();
+  if (docs) Array.from(new Set(sids)).forEach(sid => {
+    const doc = dndDoc(sid), se = IDX.byScene.get(sid); if (!doc || !se) return;
+    doc.innerHTML = se.scene.items.map(paraHtml).join('') || '<p><br></p>';
+    Array.from(doc.children).forEach(p => { p._raw = textOf(p); });
+    markEmpty(doc);
+  });
+  scriptSig = sig();
+  commit();
+  // 편집기 안에서 Ctrl+Z 로 되돌렸으면 커서를 옮긴 문단(없으면 첫 문단) 앞에
+  if (docs && fdoc && fdoc.isConnected && document.activeElement === fdoc && sids.includes(fdoc.dataset.scene)) {
+    const p = (focusId && fdoc.querySelector(`p[data-id="${cssq(focusId)}"]`)) || fdoc.firstElementChild;
+    if (p) setCaret(p, 0);
+  }
+}
+// focusHandle: 옮긴 문단의 손잡이에 포커스 (끌어 놓기·Alt+↑/↓ 뒤 — 이어서 Alt+↑/↓, Ctrl+Z)
+function dndMoveItem(id, sceneId, index, focusHandle) {
+  const at = dndFindItem(state.show, id); if (!at) return false;
+  dndSync([at.scene.id, sceneId]);
+  const labels = labelMap(state.show);
+  const r = relocateItem(state.show, id, sceneId, index);
+  if (!r || !r.changed) return false;
+  renumberLabels(state.show);
+  dndPush({ kind: 'item', id, from: r.from, to: r.to, labels, scenes: Array.from(new Set([r.from.sceneId, r.to.sceneId])) });
+  dndRedraw([r.from.sceneId, r.to.sceneId], true, id);
+  const p = dndPara(id);
+  if (p) {
+    p.scrollIntoView({ block: 'nearest' });
+    if (focusHandle) { DND.hoverP = null; dndPlace(p); const h = dndHandle(); if (!h.hidden) h.focus({ preventScroll: true }); }
+  }
+  if (r.from.sceneId !== r.to.sceneId) { const se = IDX.byScene.get(r.to.sceneId); toast(`문단을 「${cut(se ? sceneTitle(se.scene) : '', 20)}」(으)로 옮겼습니다 — Ctrl+Z 되돌리기`); }
+  return true;
+}
+function dndMoveCue(cueId, itemId) {
+  const at = dndFindCue(state.show, cueId), dst = dndFindItem(state.show, itemId);
+  if (!at || !dst || at.item.id === itemId) return false;
+  const labels = labelMap(state.show), fromScene = at.scene.id;
+  const r = relocateCue(state.show, cueId, itemId, null);
+  if (!r || !r.changed) return false;
+  renumberLabels(state.show);
+  dndPush({ kind: 'cue', id: cueId, from: r.from, to: r.to, labels, scenes: Array.from(new Set([fromScene, dst.scene.id])) });
+  // 편집기에 커서가 남아 있으면 Ctrl+Z 가 그 씬의 글 되돌리기로 가므로 놓고 나면 편집기에서 빠진다
+  const a = document.activeElement; if (a && a.classList && a.classList.contains('doc')) a.blur();
+  dndRedraw([fromScene, dst.scene.id], false, null);
+  const ne = IDX.byItem.get(itemId);
+  toast(`큐를 옮겼습니다 → ${ne && ne.q ? 'Q' + ne.q + ' · ' : ''}${cut(ne ? itemRefText(ne, 24) : '', 30)} — Ctrl+Z 되돌리기`);
+  return true;
+}
+// e 를 되돌리거나(redo=false) 다시 실행(redo=true)
+function dndApply(e, redo) {
+  const S = state.show, dst = redo ? e.to : e.from;
+  let sids;
+  if (e.kind === 'item') {
+    const cur = dndFindItem(S, e.id); if (!cur || !dndScene(S, dst.sceneId)) return false;
+    sids = [cur.scene.id, dst.sceneId];
+    dndSync(sids);
+    if (!relocateItem(S, e.id, dst.sceneId, dst.index)) return false;
+  } else {
+    const cur = dndFindCue(S, e.id), di = dndFindItem(S, dst.itemId); if (!cur || !di) return false;
+    sids = [cur.scene.id, di.scene.id];
+    if (!relocateCue(S, e.id, dst.itemId, dst.index)) return false;
+  }
+  if (redo) renumberLabels(S); else restoreLabels(S, e.labels);
+  e.scenes = Array.from(new Set(e.scenes.concat(sids)));
+  dndRedraw(sids, e.kind === 'item', e.kind === 'item' ? e.id : null);
+  return true;
+}
+// 되돌리기 한 단계. sid 가 있으면(편집기 안) 그 씬을 건드린 이동만 본다
+function dndUndoStep(sid) {
+  const m = mvBox();
+  let j = -1; for (let k = m.undo.length - 1; k >= 0; k--) if (!sid || m.undo[k].scenes.includes(sid)) { j = k; break; }
+  if (j < 0) return false;
+  const e = m.undo[j];
+  // 같은 문단·큐를 더 나중에 옮긴 기록이 있으면 맨 위부터 그것까지 차례로 (자리가 꼬이지 않게)
+  const list = m.undo.slice(j + 1).some(x => x.id === e.id) ? m.undo.splice(j).reverse() : m.undo.splice(j, 1);
+  let n = 0;
+  list.forEach(x => {
+    const ok = dndApply(x, false);
+    // 이 이동 뒤에 그 씬들에서 찍힌 편집기 스냅숏은 이동이 반영된 모양이라 이제 맞지 않는다 — 버린다
+    x.scenes.forEach(s => { const u = UNDO.get(s); if (u) { u.stack = u.stack.filter(y => (y.seq || 0) < x.seq); u.redo = []; u.t = 0; } });
+    if (ok) { n++; x.rseq = ++UNDO_SEQ; m.redo.push(x); }
+  });
+  toast(n ? (n > 1 ? `옮기기 ${n}개를 되돌렸습니다` : '옮기기를 되돌렸습니다') : '옮긴 문단·큐를 찾지 못해 되돌리지 못했습니다');
+  return true;
+}
+function dndRedoStep(sid) {
+  const m = mvBox();
+  let j = -1; for (let k = m.redo.length - 1; k >= 0; k--) if (!sid || m.redo[k].scenes.includes(sid)) { j = k; break; }
+  if (j < 0) return false;
+  const e = m.redo[j];
+  // 되돌린 뒤 그 씬에서 글을 고쳤으면 다시 실행하지 않는다 (보통의 "다시 실행" 규칙과 같다)
+  if (e.scenes.some(s => { const u = UNDO.get(s); return u && u.stack.some(y => (y.seq || 0) > e.rseq); })) { m.redo = []; return false; }
+  m.redo.splice(j, 1);
+  if (!dndApply(e, true)) { toast('옮긴 문단·큐를 찾지 못해 다시 실행하지 못했습니다'); return true; }
+  e.seq = ++UNDO_SEQ; m.undo.push(e);
+  e.scenes.forEach(s => { const u = UNDO.get(s); if (u) { u.redo = []; u.t = 0; } });
+  toast('옮기기를 다시 실행했습니다');
+  return true;
+}
+// 편집기 undo() 가 먼저 묻는다: 이 씬에서 가장 최근 일이 끌어 옮기기면 그것을 되돌리고 true
+function dndUndoTurn(doc, redo) {
+  const m = mvBox(), sid = doc.dataset.scene, list = redo ? m.redo : m.undo;
+  let e = null; for (let k = list.length - 1; k >= 0; k--) if (list[k].scenes.includes(sid)) { e = list[k]; break; }
+  if (!e) return false;
+  const u = undoBox(doc), top = (redo ? u.redo : u.stack).slice(-1)[0];
+  if (top && (top.seq || 0) > (redo ? e.rseq : e.seq)) return false;
+  return redo ? dndRedoStep(sid) : dndUndoStep(sid);
+}
+// 편집기 밖(손잡이·빈 곳)의 Ctrl+Z / Ctrl+Y · Ctrl+Shift+Z — 끌어 옮긴 기록만
+document.addEventListener('keydown', ev => {
+  const mod = ev.ctrlKey || ev.metaKey, k = ev.key;
+  if (!mod || ev.altKey || !(k === 'z' || k === 'Z' || k === 'y' || k === 'Y')) return;
+  if (!state.show || state.view !== 'script' || state.modal || GATE.type) return;
+  const t = ev.target;
+  if (t && t.closest && (t.closest('.doc, .ce, .modal, #panel') || t.matches('input, textarea, select, [contenteditable="true"]'))) return;
+  const redo = k === 'y' || k === 'Y' || ev.shiftKey, m = mvBox();
+  if (!(redo ? m.redo : m.undo).length) return;
+  ev.preventDefault();
+  if (!(redo ? dndRedoStep(null) : dndUndoStep(null))) toast(redo ? '다시 실행할 것이 없습니다' : '되돌릴 것이 없습니다');
+});
 
 /* ================= 시작 ================= */
 // http(s) 로 열렸으면 서버를 먼저 찾는다. 없으면(아티팩트·file://·정적 호스팅) 지금까지처럼 로컬 모드
