@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { mergeShows } = require('../lib/merge');
+const { mergeShows, hasAllIds } = require('../lib/merge');
 const { applyOps } = require('../lib/ops');
 const { validateShow } = require('../lib/validate');
 
@@ -314,6 +314,42 @@ test('show 메타: updatedAt·version 은 서버 것, revision 은 한쪽만 바
   assert.equal(r.show.title, '서버 제목'); assert.equal(r.show.preShowSetup, '로컬 세팅');
   remote.revision = '4차';
   assert.equal(merge(base, local, remote).show.revision, '4차', '둘 다 바꾸면 조용히 서버 것');
+});
+
+test('서버가 지운 곳으로 이 기기가 옮겨 넣은 항목: 서버에 아직 있으면 서버 쪽 자리로 되돌린다', () => {
+  const base = backstage();
+  // 이 기기: 큐 q-1(i-3) 을 i-k 로 옮김 / 서버: i-k 를 지움 → 충돌(i-k), 서버 쪽으로 정하면 q-1 은 서버처럼 i-3 에
+  let remote = remoteOps(base, [{ op: 'remove', id: 'i-k' }]);
+  let local = plain(base);
+  find(local, 'i-k').cues.push(find(local, 'i-3').cues.shift());
+  let r = merge(base, local, remote);
+  assert.deepEqual(r.conflicts.map(c => [c.id, c.type]), [['i-k', 'delete-remote']]);
+  assert.equal(find(r.show, 'i-k'), null);
+  assert.equal(parentOf(r.show, 'q-1'), 'i-3');
+  assert.deepEqual(find(r.show, 'i-3').cues.map(c => c.id), find(remote, 'i-3').cues.map(c => c.id), '서버 순서 그대로');
+  // 이 기기: 문단 i-x(s-11) 를 s-v 로 옮김 / 서버: s-v 를 지움 → i-x 는 s-11 의 서버 자리에
+  remote = remoteOps(base, [{ op: 'remove', id: 's-v', force: true }]);
+  local = plain(base);
+  find(local, 's-v').items.push(find(local, 's-11').items.shift());
+  r = merge(base, local, remote);
+  assert.deepEqual(r.conflicts.map(c => [c.id, c.type]), [['s-v', 'delete-remote']]);
+  assert.deepEqual(ids(find(r.show, 's-11')), ids(find(remote, 's-11')));
+  assert.deepEqual(validateShow(r.show).errors, []);
+  // 서버가 그 항목도 지웠으면(서버에 없음) 그대로 버린다
+  remote = remoteOps(base, [{ op: 'remove', id: 's-v', force: true }, { op: 'remove', id: 'i-x' }]);
+  r = merge(base, local, remote);
+  assert.equal(find(r.show, 'i-x'), null);
+});
+
+test('hasAllIds: migrate 전 원본에 id 없는 항목이 있으면 false (브라우저는 그때 병합하지 않는다)', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cues', 'backstage-part1.json'), 'utf8'));
+  assert.equal(hasAllIds(raw), true);
+  for (const strip of [s => delete s.people[0].id, s => delete s.tracks[0].id, s => delete s.parts[0].scenes[3].items[0].id,
+    s => delete s.parts[0].scenes[1].items[0].cues[0].id, s => { s.parts[0].scenes[3].items[0].comments.push({ text: 'x' }); }, s => delete s.parts[0].id]) {
+    const t = plain(raw); strip(t);
+    assert.equal(hasAllIds(t), false);
+  }
+  assert.equal(hasAllIds({}), false);
 });
 
 test('id 가 겹치거나 없으면 병합하지 않는다', () => {

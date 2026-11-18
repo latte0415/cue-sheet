@@ -1248,7 +1248,7 @@ function backupLocal() {
 // PUT 은 한 번에 하나. 끝났을 때 또 바뀌어 있으면 이어서 한 번 더
 async function push() {
   // 편집 잠김·새 버전 대기 동안 이어진 수정도 이 브라우저 백업에 계속 반영한다(잠금을 못 풀어도 최신 변경이 남게)
-  if ((Srv.locked || Srv.outdated) && Srv.dirty && Store.mode === 'server') backupLocal();
+  if ((Srv.locked || Srv.outdated || Srv.mergeWait) && Srv.dirty && Store.mode === 'server') backupLocal();
   if (Store.mode !== 'server' || !Srv.showId || Srv.inflight || Srv.conflict || !Srv.dirty || Srv.gone || Srv.locked || Srv.outdated || Srv.mergeWait) { renderSync(); return; }
   clearTimeout(Srv.retryT); Srv.retryT = null;
   const id = Srv.showId;
@@ -1454,16 +1454,15 @@ function applyRemote(d, force, merged) {
   if (force) { clearTimeout(saveT); saveT = null; }
   state.show = show; state.show.updatedAt = d.updatedAt || show.updatedAt;
   Srv.rev = d.rev; Srv.etag = `"${d.rev}"`; Srv.dirty = false; Srv.conflict = null; Srv.err = false; Srv.deferred = false; Srv.locked = false;
-  Srv.base = remote; Srv.mergeWait = null;
+  Srv.base = idsOk(d.show) ? remote : null; Srv.mergeWait = null;
   if (merged) Srv.dirty = true; else Srv.mergeTries = 0;
-  localReplaced();
+  localReplaced(partial ? f.scene : null);
   clearTimeout(Srv.retryT); Srv.retryT = null;
   state.sceneEdit = null; state.moveCue = null; state.trackRenum = null;
   if (partial) {
     buildIndex();
     $$('#script .doc').forEach(doc => {
       if (doc.dataset.scene === f.scene) return;
-      UNDO.delete(doc.dataset.scene);
       const se = IDX.byScene.get(doc.dataset.scene); if (!se) return;
       const html = se.scene.items.map(paraHtml).join('') || '<p><br></p>';
       if (doc.innerHTML !== html) { doc.innerHTML = html; Array.from(doc.children).forEach(p => { p._raw = textOf(p); }); markEmpty(doc); }
@@ -1471,7 +1470,7 @@ function applyRemote(d, force, merged) {
     scriptSig = sig();
     render();
   } else {
-    UNDO.clear(); mountedView = null; render();
+    mountedView = null; render();
   }
   renderSync(); renderSyncBar();
   // 다른 기기가 올린 음원: 목록을 다시 받기 전에도 바로 재생되게 낙관적으로 둔다
@@ -1481,14 +1480,23 @@ function applyRemote(d, force, merged) {
 /* ---- 409 자동 병합 (lib/merge.js — docs/mcp.md "동시 편집") ---- */
 // Srv.base = 마지막으로 서버와 맞춘 내용(열기·저장 성공·서버 내용 반영 때). 409 면 기준·내 것·서버 것을 id 단위로 합친다
 const MERGE_TRIES = 3; // 다시 저장해도 또 409 면 몇 번까지 다시 합칠지
-// 이 기기의 show 를 서버 내용(또는 병합 결과)으로 바꿀 때마다 불린다 — 바뀐 show 와 맞지 않는 이 기기 전용 기록을 여기서 비운다
-// (끌어 옮기기 기록 MV·UNDO_SEQ 가 들어오면 여기서 비울 것. UNDO 는 applyRemote 가 이미 비운다)
-function localReplaced() {}
-// 합칠 수 없으면 null — 병합 모듈이 없거나, 기준이 없거나, 서버가 이 페이지보다 새 형식(version)이면(새로고침 안내 쪽에 맡긴다)
+// 이 기기의 show 를 서버 내용(또는 병합 결과)으로 바꿀 때마다 불린다(applyRemote·openShow) — 바뀐 show 와 맞지 않는 이 기기 전용
+// 기록은 모두 여기서 비운다: DEL(삭제 되돌리기 = show 통째 스냅샷이라 남기면 병합된 서버 변경까지 되돌린다), UNDO(편집기 되돌리기).
+// keepScene: 부분 반영 때 편집 중이라 그대로 둔 씬 — 그 씬의 편집기 되돌리기만 남긴다(서버가 그 씬을 안 바꿨을 때만 부분 반영된다).
+// 끌어 옮기기 기록(MV·UNDO_SEQ)이 들어오면 여기서 함께 비울 것
+function localReplaced(keepScene) {
+  DEL.length = 0;
+  if (keepScene == null) UNDO.clear();
+  else Array.from(UNDO.keys()).forEach(k => { if (k !== keepScene) UNDO.delete(k); });
+}
+// 서버 원본(migrate 전)의 모든 항목에 id 가 있나 — 없으면 migrate 가 받을 때마다 다른 임시 id 를 만들어 병합하면 항목이 둘로 늘어난다.
+// 그런 내용은 기준으로 삼지 않는다(Srv.base = null → 병합 없이 선택 바). 브라우저가 한 번 저장하면 id 가 붙는다
+function idsOk(raw) { const M = window.CueMerge; return !!M && M.hasAllIds(raw); }
+// 합칠 수 없으면 null — 병합 모듈이 없거나, 기준이 없거나, 서버 원본에 id 없는 항목이 있거나, 서버가 이 화면보다 새 형식이면
+// (새 형식은 부르는 쪽이 먼저 markOutdated 로 보낸다)
 function mergeWith(d) {
   const M = window.CueMerge;
-  if (!M || !Srv.base || !d || !d.show || !state.show) return null;
-  if ((Number(d.show.version) || 0) > SHOW_VER) return null;
+  if (!M || !Srv.base || !d || !d.show || !state.show || newerShow(d) || !idsOk(d.show)) return null;
   try {
     const r = M.mergeShows(migrate(Srv.base), migrate(state.show), migrate(d.show), { assignLabels });
     return r.ok ? r : null;
@@ -1497,25 +1505,32 @@ function mergeWith(d) {
 // 저장이 409: 충돌 없이 합쳐지면 합친 것을 내 것으로 삼는다(push 끝에서 서버 rev 위에 다시 저장). 입력 중이면 미루고(mergeWait,
 // 포커스가 빠지면 poll 이 다시 합친다), 충돌이 있거나 너무 여러 번이면 선택 바
 function onConflict(d) {
+  if (newerShow(d)) { markOutdated(); return; } // 서버가 새 형식 — 합치지도 덮어쓰지도 않고 새로고침 바
   const r = Srv.mergeTries < MERGE_TRIES ? mergeWith(d) : null;
   if (r && !r.conflicts.length) {
     Srv.mergeTries++;
-    if (applyRemote(d, false, r.show)) toast('다른 기기의 변경과 합쳤습니다');
-    else Srv.mergeWait = d;
+    if (adoptMerge(d, r)) return;
+    Srv.mergeWait = d; backupLocal(); // 저장이 멈추는 동안 이 브라우저에 남겨 둔다
     return;
   }
   d.merge = r;
   Srv.conflict = d;
 }
+// 충돌 없는 병합 결과를 반영. 결과가 서버 것과 같으면(내 변경이 이미 서버에 다 있음) 다시 저장하지 않고 서버 버전으로 맞춘다
+function adoptMerge(d, r) {
+  if (!applyRemote(d, false, r.sameAsRemote ? null : r.show)) return false;
+  toast('다른 기기의 변경과 합쳤습니다');
+  return true;
+}
 // 폴링이 새 rev 를 봤는데 이 기기 변경이 대기 중: 저장(409)을 기다리지 않고 미리 합친다. 충돌이 있으면 건드리지 않고 저장의 409 처리에
 // 맡긴다 — 다만 미뤄 둔 병합(mergeWait)이었으면 그 자리에서 선택 바를 띄운다
 function pollMerge(d) {
-  if (Srv.inflight || Srv.conflict || Srv.locked || Srv.gone || !(d.rev > Srv.rev)) return;
+  if (Srv.inflight || Srv.conflict || Srv.locked || Srv.outdated || Srv.gone || !(d.rev > Srv.rev)) return;
+  if (newerShow(d)) { markOutdated(); return; }
   const r = mergeWith(d);
   if (r && !r.conflicts.length) {
-    if (!applyRemote(d, false, r.show)) return;
-    toast('다른 기기의 변경과 합쳤습니다');
-    if (!saveT) push();
+    if (!adoptMerge(d, r)) return;
+    if (Srv.dirty && !saveT) push();
   } else if (Srv.mergeWait) {
     Srv.mergeWait = null; d.merge = r; Srv.conflict = d;
     renderSync(); renderSyncBar();
@@ -1537,7 +1552,7 @@ async function poll() {
     if (r.status === 404) { if (!pendingLocal()) { Srv.gone = true; showGone(); } return; }
     if (r.status !== 200 || !r.data) return;
     if (newerShow(r.data)) { markOutdated(); return; }
-    if (r.data.rev === Srv.rev) { Srv.etag = r.etag; return; }
+    if (r.data.rev <= Srv.rev) { if (r.data.rev === Srv.rev) Srv.etag = r.etag; return; } // 저장 성공과 엇갈린 옛 응답은 버린다
     if (pendingLocal()) { pollMerge(r.data); return; } // 내 변경이 대기 중 — 미리 합치거나, 안 되면 저장의 409 처리에 맡긴다
     if (applyRemote(r.data, false)) toast('다른 기기의 변경을 불러왔습니다');
   } catch (e) { /* 네트워크 오류 — 다음 폴링에서 */ } finally { Srv.polling = false; }
@@ -1580,11 +1595,11 @@ async function openShow(id) {
   // 편집 비밀번호를 모르는 프로젝트는 보기로 연다 (편집을 누르면 묻는다)
   if (!editKey(id)) state.edit = false;
   state.show = show; state.show.updatedAt = r.data.updatedAt;
-  Srv.base = clone(show); Srv.mergeWait = null; Srv.mergeTries = 0; localReplaced();
+  Srv.base = idsOk(r.data.show) ? clone(show) : null; Srv.mergeWait = null; Srv.mergeTries = 0; localReplaced();
   state.selItem = null; state.sceneEdit = null; state.moveCue = null; state.trackRenum = null; state.panelScene = null;
   state.menuOpen = false; state.projOpen = false; state.curScene = null;
   state.runItemId = typeof Srv.runPos[id] === 'string' ? Srv.runPos[id] : null;
-  DEL.length = 0; SETUP_DONE.clear(); UNDO.clear(); trackErr.clear(); trackBusy.clear(); trackProg.clear();
+  SETUP_DONE.clear(); trackErr.clear(); trackBusy.clear(); trackProg.clear(); // DEL·UNDO 는 위 localReplaced()
   mountedView = null;
   hideGate(); savePrefs(); render(); renderSync(); renderSyncBar(); renderProj();
   loadAudioFiles(); startPoll();
@@ -4506,16 +4521,16 @@ function act(a, el) {
       applyRemote(c, true); toast(`서버 버전(rev ${c.rev})을 불러왔습니다`); break;
     }
     case 'sync-overwrite': {
-      const c = Srv.conflict; if (!c) break;
+      const c = Srv.conflict; if (!c || Srv.outdated || newerShow(c)) break; // 새 형식 데이터는 옛 화면이 덮어쓰지 않는다
       // 기준도 그 서버 내용으로 — 덮어쓰는 사이 또 409 가 나면 "서버 것 대비 내 것" 을 내 변경으로 보고 합친다
-      try { Srv.base = migrate(c.show); } catch (e) { /* 기준을 못 바꾸면 그대로 */ }
+      try { Srv.base = idsOk(c.show) ? migrate(c.show) : null; } catch (e) { Srv.base = null; }
       Srv.rev = c.rev; Srv.conflict = null; Srv.dirty = true; Srv.mergeTries = 0; renderSyncBar(); push(); toast('내 버전으로 덮어씁니다'); break;
     }
     case 'sync-merge': {
       const c = Srv.conflict; if (!c) break;
       const r = mergeWith(c); // 바를 띄운 뒤에도 고쳤을 수 있으니 지금 내용으로 다시 합친다
       if (!r) { toast('합치지 못했습니다 — 다른 선택지를 고르세요'); break; }
-      applyRemote(c, true, r.show); Srv.mergeTries = 0; push();
+      applyRemote(c, true, r.sameAsRemote ? null : r.show); Srv.mergeTries = 0; push();
       toast(r.conflicts.length ? `충돌 ${r.conflicts.length}곳은 서버 것으로, 나머지는 합쳤습니다` : '다른 기기의 변경과 합쳤습니다'); break;
     }
     case 'proj-toggle':
