@@ -99,7 +99,7 @@ Codex 설정, 도구 목록, 동시 편집 주의점은 [docs/mcp.md](docs/mcp.m
 ## 데이터 구조
 
 ```
-DATA_DIR/shows/<id>.json                 { rev, updatedAt, by, via, show[, restoredFrom] }   ← show = 앱의 큐시트 JSON (version 6). by·via = 그 버전을 저장한 사람·경로
+DATA_DIR/shows/<id>.json                 { rev, updatedAt, by, via, show[, restoredFrom] }   ← show = 앱의 큐시트 JSON (version 7). by·via = 그 버전을 저장한 사람·경로
 DATA_DIR/shows/<id>/audio/<fileKey>       음원 원본
 DATA_DIR/shows/<id>/audio/<fileKey>.json  { fileKey, name, mime, size }
 DATA_DIR/shows/<id>/history/<rev>.json    덮어쓰기 직전 버전 (최근 HISTORY_KEEP 개, 되돌리기용). 예전 위치 shows/<id>.history/ 는 시작할 때 여기로 옮긴다

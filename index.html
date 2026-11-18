@@ -814,7 +814,9 @@ const MOVES = { in: 'IN', out: 'OUT', move: '이동' };
 const ROLES = { performer: '공연자', mc: 'MC', light: '조명', sound: '음향', stage: '무대', other: '기타' };
 const VIEWS = ['script', 'cuesheet', 'run', 'stage', 'people', 'props', 'tracks', 'check'];
 const VIEW_L = { script: '대본', cuesheet: '큐시트', run: '런', stage: '무대 상황', people: '사람', props: '소품', tracks: '음원', check: '점검' };
-const SHOW_VER = 6; // v6: 소품 목록(props) · 공연 전 무대 소품(preShowProps) · 무대 큐 소품 동작(stage.props)
+// v6: 소품 목록(props) · 공연 전 무대 소품(preShowProps) · 무대 큐 소품 동작(stage.props)
+// v7: 문단 코멘트의 snapshot(코멘트 당시 문단). 필드를 더하면 올린다 — 서버가 버전을 비교해 옛 화면이 모르는 필드를 떨어뜨린 채 저장하는 것을 막는다
+const SHOW_VER = 7;
 const FADE_DEFAULT = 3; // fadeOut 시간이 비어 있을 때 쓰는 기본 페이드(초)
 const THEMES = ['system', 'light', 'dark'];
 const THEME_L = { system: '시스템', light: '라이트', dark: '다크' };
@@ -1016,7 +1018,7 @@ function migrate(raw) {
     }
     return out;
   }
-  // v5: 해결자·해결 시각 · snapshot(선택): 코멘트 당시 문단 { kind, speaker, text, cues } — 없으면 키도 없다
+  // v5: 해결자·해결 시각 · v7: snapshot(선택) 코멘트 당시 문단 { kind, speaker, text, cues } — 없으면 키도 없다 (v6 → v7 은 version 만 바뀐다)
   const normSnap = v => v && typeof v === 'object' && !Array.isArray(v)
     ? { kind: v.kind === 'action' ? 'action' : 'line', speaker: ensure(v.speaker), text: String(v.text || ''), cues: (Array.isArray(v.cues) ? v.cues : []).map(normCue) } : null;
   const normCmts = a => (Array.isArray(a) ? a : []).filter(c => c && typeof c === 'object').map(c => {
@@ -4284,7 +4286,7 @@ function renderModal(focusFirst) {
     title = 'JSON 가져오기';
     body = `<div class="field"><label for="import-file">파일 선택</label><input type="file" id="import-file" accept=".json,application/json" data-act="import-file"></div>
       <div class="field"><label for="import-text">또는 붙여넣기</label><textarea id="import-text" class="code" placeholder='{"title": "...", "parts": [...]}'>${esc(m.text || '')}</textarea></div>
-      <p class="note">${Store.mode === 'server' ? '덮어쓰기는 지금 프로젝트를 대체합니다(이 프로젝트를 여는 모든 기기에 반영). 새 프로젝트로 가져오면 지금 프로젝트는 그대로입니다.' : '현재 데이터를 대체합니다.'} 이전 형식(v1~v5)은 자동 변환합니다.</p>
+      <p class="note">${Store.mode === 'server' ? '덮어쓰기는 지금 프로젝트를 대체합니다(이 프로젝트를 여는 모든 기기에 반영). 새 프로젝트로 가져오면 지금 프로젝트는 그대로입니다.' : '현재 데이터를 대체합니다.'} 이전 형식(v1~v6)은 자동 변환합니다.</p>
       ${m.err ? `<p class="err" role="alert">${esc(m.err)}</p>` : ''}${m.warn ? `<p class="err" role="alert" id="import-warn">${esc(m.warn)}</p>` : ''}`;
     foot = Store.mode === 'server'
       ? `<button type="button" class="btn" data-act="modal-close">취소</button><button type="button" class="btn" id="btn-import-new" data-act="import-do" data-mode="new">새 프로젝트로 가져오기</button><button type="button" class="btn ${m.warn ? 'armed' : 'strong'}" id="btn-import-do" data-act="import-do" data-mode="over">${m.warn ? '그래도 덮어쓰기' : '현재 프로젝트에 덮어쓰기'}</button>`

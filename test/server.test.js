@@ -336,7 +336,7 @@ test('옛 화면 차단: POST·복제는 기존 저장본을 덮어쓰지 않고
   assert.deepEqual([d.show.version, d.show.props.length, d.show.preShowProps.length], [6, 1, 1]);
 });
 
-test('옛 화면 차단: MCP edit_show 는 version 을 낮추지 않는다 (v6 소품 유지, v5 는 v6 으로)', async () => {
+test('옛 화면 차단: MCP edit_show 는 version 을 낮추지 않는다 (v6 소품 유지, v5·v6 은 현재 형식 SHOW_VER 로)', async () => {
   const H = { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', 'MCP-Protocol-Version': '2025-03-26', 'X-Edit-Key': '1234' };
   const call = async (args, n) => {
     const r = await fetch(S.base + '/mcp', { method: 'POST', headers: H, body: JSON.stringify({ jsonrpc: '2.0', id: n, method: 'tools/call', params: { name: 'edit_show', arguments: args } }) });
@@ -347,12 +347,12 @@ test('옛 화면 차단: MCP edit_show 는 version 을 낮추지 않는다 (v6 �
   let res = await call({ showId: id, ops: [{ op: 'set', id: 'i1', fields: { text: '(MCP 가 고침)' } }] }, 1);
   assert.ok(!res.isError, JSON.stringify(res));
   let g = await (await fetch(`${S.base}/api/shows/${id}`)).json();
-  assert.deepEqual([g.rev, g.show.version, g.show.props.length, g.show.preShowProps.length, g.show.parts[0].scenes[0].items[0].cues[0].stage.props.length], [2, 6, 1, 1, 1]);
+  assert.deepEqual([g.rev, g.show.version, g.show.props.length, g.show.preShowProps.length, g.show.parts[0].scenes[0].items[0].cues[0].stage.props.length], [2, SHOW_VER, 1, 1, 1]);
   const { id: id5 } = await (await fetch(S.base + '/api/shows', J('POST', { show: show('MCP v5') }))).json();
   res = await call({ showId: id5, ops: [{ op: 'set', kind: 'show', fields: { title: 'MCP v5 → v6' } }] }, 2);
   assert.ok(!res.isError, JSON.stringify(res));
   g = await (await fetch(`${S.base}/api/shows/${id5}`)).json();
-  assert.deepEqual([g.show.version, g.show.props, g.show.preShowProps], [6, [], []]);
+  assert.deepEqual([g.show.version, g.show.props, g.show.preShowProps], [SHOW_VER, [], []]);
 });
 
 test('옛 화면 차단: 버전 복원은 의도한 옛 내용을 그대로 쓰고(version 포함), 사이트는 불러올 때 현재 형식으로 올린다', async () => {

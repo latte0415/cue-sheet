@@ -1,7 +1,17 @@
-# 큐시트 JSON 형식 (show v6)과 업로드
+# 큐시트 JSON 형식 (show v7)과 업로드
 
 원문 큐시트(대본 + 조명·음향·무대·출연 큐)를 이 JSON 으로 바꿔 `scripts/upload.js` 로 올린다.
-사이트의 "내보내기"가 만드는 JSON 과 같은 형식이다. `version` 5 파일도 그대로 읽힌다(소품 필드가 없는 옛 형식 — 경고 없음). 새로 만들 땐 6 을 쓴다. 기준 구현은 `index.html` 의 `migrate()`, 검증은 `lib/validate.js`.
+사이트의 "내보내기"가 만드는 JSON 과 같은 형식이다. `version` 5·6 파일도 그대로 읽힌다(경고 없음). 새로 만들 땐 7 을 쓴다. 기준 구현은 `index.html` 의 `migrate()`, 검증은 `lib/validate.js`.
+
+## 형식 버전
+
+필드를 더하면 `version` 을 올린다. 서버가 저장 요청의 버전을 비교해, 새 필드를 모르는 옛 화면이 그 필드를 떨어뜨린 채 저장하는 것을 막기 위해서다.
+
+| version | 바뀐 것 |
+|---|---|
+| 5 | 코멘트 해결자·해결 시각(`resolvedBy`·`resolvedAt`) |
+| 6 | 소품: `props[]`, `preShowProps[]`, 무대 큐 `stage.props[]` |
+| 7 | 문단 코멘트의 선택 필드 `snapshot`(코멘트 당시 문단). 없으면 6 과 같은 모양 — 6 → 7 은 `version` 만 바뀐다 |
 
 ## 올리기
 
@@ -32,7 +42,7 @@ node scripts/upload.js cues/show.json --project <id|제목> --edit-key <편집 �
 
 ```
 show
-├─ title, version: 6, preShowSetup, revision
+├─ title, version: 7, preShowSetup, revision
 ├─ people[]  { id, name, role, note }
 ├─ props[]   { id, name, note }                            ← 소품 목록 (v6)
 ├─ preShowProps[]  { propId, at }                          ← 공연 시작 때 무대에 있는 소품 (v6)
@@ -50,7 +60,7 @@ show
 | 필드 | 타입 | 뜻 |
 |---|---|---|
 | `title` | string | 공연(프로젝트) 제목 |
-| `version` | number | **필수**, `6` (`5` 도 읽힘) |
+| `version` | number | **필수**, `7` (`5`·`6` 도 읽힘) |
 | `preShowSetup` | string | 공연 전 무대 세팅 (런 보기 첫 화면) |
 | `revision` | string | 판 표시, 40자까지 |
 | `people` / `props` / `preShowProps` / `tracks` / `parts` | array | 아래. `parts` 는 **필수** |
@@ -164,7 +174,7 @@ show
 ```json
 {
   "title": "1부 (초안)",
-  "version": 6,
+  "version": 7,
   "preShowSetup": "탑햇테이블",
   "people": [
     { "id": "p-yejun", "name": "조예준", "role": "mc", "note": "MC 겸 공연자" },

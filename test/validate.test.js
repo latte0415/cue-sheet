@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { validateShow, basicInvalid, unwrapShow, fillIds, CONST } = require('../lib/validate');
+const { validateShow, basicInvalid, unwrapShow, fillIds, CONST, SHOW_VER } = require('../lib/validate');
 
 // index.html 의 "상수" ~ "상태" 구간(상수·유틸·샘플·라벨·migrate)만 떼어 Node 에서 돌린다
 function frontend() {
@@ -31,6 +31,10 @@ test('상수가 index.html 과 같다', () => {
   assert.deepEqual(Object.keys(FE.MOVES), CONST.MOVES);
   assert.deepEqual(Object.keys(FE.ROLES), CONST.ROLES);
   assert.ok(CONST.SHOW_VERS.includes(plain(FE.migrate({ version: 5, parts: [] })).version), '프런트가 내보내는 version 은 읽을 수 있는 형식이어야 한다');
+  // 프런트가 내보내는 version = 서버 스키마 SHOW_VER (MCP ops 도 이 값으로 저장)
+  assert.equal(plain(FE.migrate({ version: 6, parts: [] })).version, SHOW_VER);
+  assert.ok(CONST.SHOW_VERS.includes(SHOW_VER) && SHOW_VER === Math.max(...CONST.SHOW_VERS), 'SHOW_VER 는 읽을 수 있는 형식 중 가장 새 것');
+  assert.equal(plain(FE.migrate({ version: 7, parts: [] })).version, 7);
   assert.equal(FE.ACT_RE.source, CONST.ACT_RE.source);
 });
 
@@ -135,7 +139,7 @@ test('경고: 지문 표기 규칙 — 괄호 한 쌍 (…)', () => {
 
 test('v6: 소품이 있는 정상 문서는 오류·경고 없음, v5 도 경고 없음', () => {
   const s = docExample();
-  assert.equal(s.version, 6);
+  assert.equal(s.version, 7);
   assert.ok(s.props.length && s.preShowProps.length);
   assert.deepEqual(validateShow(s).warnings, []);
   const v5 = plain(s); v5.version = 5; delete v5.props; delete v5.preShowProps;

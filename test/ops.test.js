@@ -363,7 +363,7 @@ test('v6: 관계없는 op 를 적용해도 props·preShowProps·stage.props 는 
     { op: 'add', kind: 'person', data: { name: '스태프', role: 'stage' } }
   ]);
   assert.equal(JSON.stringify(s), before, '입력은 그대로');
-  assert.equal(r.show.version, 6);
+  assert.equal(r.show.version, 7);
   assert.deepEqual(r.show.props, s.props);
   assert.deepEqual(r.show.preShowProps, s.preShowProps);
   assert.deepEqual(find(r.show, 'q-4').stage, { text: '탑햇 세팅', props: [{ propId: 'pr-tophat', action: 'in', at: '테이블 위' }] });
@@ -376,7 +376,7 @@ test('v6: v5 공연은 migrate 처럼 v6 으로 — 빈 props·preShowProps, 무
   assert.equal(s.version, 5);
   const stageBefore = items(s).flatMap(i => i.cues).filter(c => c.dept === 'stage').map(c => c.stage.text);
   const r = applyOps(s, [{ op: 'set', kind: 'show', fields: { revision: 'v6 테스트' } }]);
-  assert.equal(r.show.version, 6);
+  assert.equal(r.show.version, 7);
   assert.deepEqual(r.show.props, []);
   assert.deepEqual(r.show.preShowProps, []);
   assert.deepEqual(Object.keys(r.show).slice(Object.keys(r.show).indexOf('people')), ['people', 'props', 'preShowProps', 'tracks', 'parts'], 'migrate 와 같은 키 순서');
@@ -474,7 +474,7 @@ test('v6: 사이트가 불러와도(index.html migrate) 소품 op 결과가 그�
     { op: 'add', kind: 'cue', parent: st.i.id, data: { dept: 'stage', stage: { props: [{ propId: 'pr-cup', action: 'in' }] } } },
     { op: 'set', id: lt.c.id, fields: { dept: 'stage', stage: { text: '의자' } } }
   ]);
-  assert.equal(r.show.version, 6);
+  assert.equal(r.show.version, 7);
   const strip = x => { x = JSON.parse(JSON.stringify(x)); delete x.updatedAt; return x; };
   assert.deepEqual(strip(migrate(r.show)), strip(r.show));
 });

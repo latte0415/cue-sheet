@@ -101,14 +101,14 @@ test('validateShow: snapshot 은 모르는 키 경고가 나지 않는다', () =
   assert.deepEqual(v.warnings.filter(w => /snapshot/.test(w.path + ' ' + w.message)), []);
 });
 
-test('v6: snapshot 의 무대 큐 소품 동작(stage.props)도 보존되고, 결과는 version 6 으로 검증 통과', () => {
+test('v6 → v7: snapshot 의 무대 큐 소품 동작(stage.props)도 보존되고, 결과는 version 7 로 검증 통과', () => {
   const stage = { id: 'q-3', dept: 'stage', trigger: '', offsetSec: null, memo: '', status: 'set', stage: { text: '', props: [{ propId: 'pr-hat', action: 'in', at: '테이블' }] } };
   const it = Object.assign(item(), { cues: [light('q-1', 50), stage] });
   const raw = Object.assign(showWith([{ id: 'c-1', author: 'a', text: '확인', createdAt: '2026-11-01T00:00:00.000Z', resolved: false, resolvedBy: null, resolvedAt: null, snapshot: FE.cmtSnap(it) }]),
     { version: 6, props: [{ id: 'pr-hat', name: '탑햇', note: '' }], preShowProps: [] });
   raw.parts[0].scenes[0].items[0].cues = plain(it.cues);
   const s = plain(FE.migrate(raw));
-  assert.equal(s.version, 6);
+  assert.equal(s.version, 7);
   assert.deepEqual(s.parts[0].scenes[0].items[0].comments[0].snapshot.cues[1].stage, { text: '', props: [{ propId: 'pr-hat', action: 'in', at: '테이블' }] });
   const v = validateShow(s);
   assert.deepEqual(v.errors, []);
@@ -117,4 +117,17 @@ test('v6: snapshot 의 무대 큐 소품 동작(stage.props)도 보존되고, �
   const old = Object.assign(item(), { cues: [{ id: 'q-9', dept: 'stage', trigger: '', offsetSec: null, memo: '', status: 'set', stage: { text: '컵 빼기' } }] });
   const s5 = plain(FE.migrate(showWith([{ id: 'c-2', author: 'a', text: '옛', createdAt: '2026-11-01T00:00:00.000Z', resolved: false, snapshot: FE.cmtSnap(old) }])));
   assert.deepEqual(s5.parts[0].scenes[0].items[0].comments[0].snapshot.cues[0].stage, { text: '컵 빼기', props: [] });
+});
+
+test('v6 → v7: snapshot 이 없는 v6 공연은 version 만 바뀌고 나머지는 그대로', () => {
+  const raw = Object.assign(showWith([{ id: 'c-1', author: 'a', text: '확인', createdAt: '2026-11-01T00:00:00.000Z', resolved: false, resolvedBy: null, resolvedAt: null }]),
+    { id: 'show-x', revision: '', updatedAt: '2026-11-01T00:00:00.000Z', preShowSetup: '', version: 6, props: [], preShowProps: [] });
+  raw.parts[0].scenes[0].items[0].cues = [light('q-1', 50), sound('q-2')];
+  const once = plain(FE.migrate(raw));
+  assert.equal(once.version, 7);
+  const v6 = Object.assign(plain(once), { version: 6 });
+  assert.deepEqual(plain(FE.migrate(v6)), once, 'v6 을 다시 읽어도 version 외에는 같다');
+  assert.equal('snapshot' in once.parts[0].scenes[0].items[0].comments[0], false);
+  assert.deepEqual(validateShow(Object.assign(plain(once), { version: 6 })).warnings, [], 'v6 도 경고 없이 읽힌다');
+  assert.deepEqual(validateShow(once).warnings, []);
 });
