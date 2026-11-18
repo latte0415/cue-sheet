@@ -357,6 +357,30 @@ test('사람·트랙·씬 출연자', () => {
   assert.deepEqual(r.show.tracks.map(t => t.id + ':' + t.no).slice(-2), ['tr-R:8', 'tr-L:9']);
 });
 
+// 옛 형식으로 올린 데이터를 연 화면(migrate 로 현재 형식)이 저장하다 409 — 그사이 다른 기기가 옛 형식 그대로 트랙 파일만 바꿨다.
+// 형식(version) 차이가 "이 기기 변경"으로 잡혀 서버의 fileKey 변경을 덮으면 조용한 데이터 손실이다 (공연 모드 E2E "다른 기기에서 트랙 변경")
+test('옛 형식 기준·내 것 + 서버의 트랙 파일 변경(지움·되돌림) → 서버 변경 유지', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'backstage-part1-v5.json'), 'utf8'));
+  raw.tracks.forEach(t => { t.fileKey = 'f-' + t.no; t.fileName = t.no + '.wav'; });
+  const local = migrate(raw);
+  find(local, 'tr-1').durationSec = 40; // 이 기기: 재생하며 길이를 채워 저장(loadedmetadata)
+  const gone = plain(raw);
+  Object.assign(find(gone, 'tr-7'), { fileKey: null, fileName: null }); // 다른 기기: 옛 형식 그대로 BGM 7 파일만 지움
+  const r = merge(migrate(raw), local, migrate(gone));
+  assert.deepEqual(r.conflicts, []);
+  assert.equal(r.show.version, migrate(raw).version);
+  assert.equal(find(r.show, 'tr-7').fileKey, null, '서버가 지운 파일');
+  assert.equal(find(r.show, 'tr-1').durationSec, 40, '이 기기 변경도 남음');
+  // 되돌림: 기준은 지운 판, 서버가 파일을 다시 붙임
+  const back = migrate(raw);
+  const local2 = migrate(gone);
+  find(local2, 'tr-2').note = '이 기기 메모';
+  const r2 = merge(migrate(gone), local2, back);
+  assert.deepEqual(r2.conflicts, []);
+  assert.deepEqual([find(r2.show, 'tr-7').fileKey, find(r2.show, 'tr-7').fileName], ['f-7', '7.wav'], '서버가 되돌린 파일');
+  assert.equal(find(r2.show, 'tr-2').note, '이 기기 메모');
+});
+
 test('소품(v6): props 항목은 id 단위, preShowProps 는 통째', () => {
   const base = backstage();
   const remote = remoteOps(base, [
