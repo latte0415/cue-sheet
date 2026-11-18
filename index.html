@@ -397,6 +397,22 @@ kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--rule-2);paddin
 .cmt-form .row{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--ink-3)}
 .cmt-form .row input{flex:1}
 .pn-del{border-top:1px solid var(--rule);padding-top:10px;margin-top:10px}
+.cmts li[data-act]{cursor:pointer}
+.cmts li[data-act]:hover{background:var(--tint-2)}
+/* 코멘트 위치 강조: 위아래 괘선 + 배경이 옅어진다 (표 행은 칸에) */
+.cmt-hit,tr.cmt-hit>td,tr.cmt-hit>th{animation:cmt-hit 2.4s ease-out}
+tr.cmt-hit{animation:none}
+@keyframes cmt-hit{0%,50%{background:var(--accent-tint);box-shadow:inset 0 1px 0 var(--accent),inset 0 -1px 0 var(--accent)}100%{background:transparent;box-shadow:inset 0 1px 0 transparent,inset 0 -1px 0 transparent}}
+@media (prefers-reduced-motion: reduce){.cmt-hit:not(tr),tr.cmt-hit>td,tr.cmt-hit>th{background:var(--accent-tint);box-shadow:inset 0 1px 0 var(--accent),inset 0 -1px 0 var(--accent)}}
+.rv-c{margin:0;font-size:13px;border-left:2px solid var(--red);padding-left:10px;overflow-wrap:anywhere}
+.rv-c time{color:var(--ink-3);font-size:12px}
+.rv-ref{margin:0;font-size:12px;color:var(--ink-3)}
+.rv-t{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed}
+.rv-t th,.rv-t td{border-top:1px solid var(--rule);padding:6px 10px 6px 0;text-align:left;vertical-align:top;overflow-wrap:anywhere;white-space:pre-wrap}
+.rv-t thead th{border-top:0;border-bottom:1px solid var(--rule-2);font-size:12px;font-weight:500;color:var(--ink-3)}
+.rv-t thead th:first-child,.rv-t .rv-k{width:5.5em}
+.rv-t .rv-k{font-size:12px;font-weight:400;color:var(--ink-3)}
+.rv-t .rv-out{color:var(--ink-3);text-decoration:line-through}
 
 /* ---------- 모달 / 토스트 / 플레이어 ---------- */
 .overlay{position:fixed;inset:0;background:var(--overlay);z-index:60;display:flex;justify-content:center;align-items:flex-start;overflow:auto;padding:max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px))}
@@ -1012,14 +1028,17 @@ function migrate(raw) {
     }
     return out;
   }
-  // v5: 해결자·해결 시각
+  // v5: 해결자·해결 시각 · snapshot(선택): 코멘트 당시 문단 { kind, speaker, text, cues } — 없으면 키도 없다
+  const normSnap = v => v && typeof v === 'object' && !Array.isArray(v)
+    ? { kind: v.kind === 'action' ? 'action' : 'line', speaker: ensure(v.speaker), text: String(v.text || ''), cues: (Array.isArray(v.cues) ? v.cues : []).map(normCue) } : null;
   const normCmts = a => (Array.isArray(a) ? a : []).filter(c => c && typeof c === 'object').map(c => {
-    const resolved = !!c.resolved;
+    const resolved = !!c.resolved, snap = normSnap(c.snapshot);
     return {
       id: String(c.id || uid('c')), author: String(c.author || '익명'), text: String(c.text || ''),
       createdAt: isNaN(Date.parse(c.createdAt)) ? new Date().toISOString() : c.createdAt, resolved,
       resolvedBy: resolved && c.resolvedBy ? String(c.resolvedBy) : null,
-      resolvedAt: resolved && !isNaN(Date.parse(c.resolvedAt)) ? c.resolvedAt : null
+      resolvedAt: resolved && !isNaN(Date.parse(c.resolvedAt)) ? c.resolvedAt : null,
+      ...(snap ? { snapshot: snap } : {})
     };
   });
   const parts = src.parts.filter(p => p && typeof p === 'object').map(p => ({
@@ -1090,6 +1109,29 @@ function validateImport(txt) {
   if (data.props != null && !Array.isArray(data.props)) return { err: 'props 가 배열이 아닙니다.' };
   if (data.preShowProps != null && !Array.isArray(data.preShowProps)) return { err: 'preShowProps 가 배열이 아닙니다.' };
   try { return { show: migrate(data), from: data }; } catch (e) { return { err: '변환 중 오류: ' + e.message }; }
+}
+
+/* ================= 코멘트 스냅샷: 코멘트 당시 문단 → 차이 · 되돌리기 (순수 함수 — test/comment-snapshot.test.js) ================= */
+// 문단 코멘트에만 남긴다. 씬 코멘트는 위치 이동만 — 씬을 통째로 되돌리면 그 뒤에 생긴 문단·큐·남의 코멘트까지 지워진다
+function cmtSnap(it) { return { kind: it.kind === 'action' ? 'action' : 'line', speaker: it.speaker || null, text: String(it.text || ''), cues: clone(it.cues || []) }; }
+// 키 순서와 무관한 비교용 문자열 (모달에서 고친 큐는 키 순서가 달라질 수 있다)
+function canon(v) {
+  if (Array.isArray(v)) return '[' + v.map(canon).join(',') + ']';
+  if (v && typeof v === 'object') return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + canon(v[k])).join(',') + '}';
+  return JSON.stringify(v === undefined ? null : v);
+}
+// then = 코멘트 당시, now = 지금. gone: 그 뒤 지워진 큐(되돌리면 복원) · extra: 그 뒤 생긴 큐(되돌리면 삭제) · order: 남은 큐의 순서가 바뀜
+function snapDiff(snap, it) {
+  const now = cmtSnap(it), A = new Map(snap.cues.map(c => [c.id, c])), B = new Map(now.cues.map(c => [c.id, c]));
+  const text = snap.kind !== now.kind || (snap.speaker || null) !== now.speaker || snap.text !== now.text;
+  const gone = snap.cues.filter(c => !B.has(c.id)), extra = now.cues.filter(c => !A.has(c.id));
+  const changed = snap.cues.filter(c => B.has(c.id) && canon(c) !== canon(B.get(c.id))).map(c => ({ then: c, now: B.get(c.id) }));
+  const order = snap.cues.filter(c => B.has(c.id)).map(c => c.id).join('\n') !== now.cues.filter(c => A.has(c.id)).map(c => c.id).join('\n');
+  return { text, order, gone, extra, changed, same: !text && !order && !gone.length && !extra.length && !changed.length };
+}
+function applySnap(it, snap) {
+  it.kind = snap.kind; it.speaker = snap.speaker || null; it.text = snap.text;
+  it.cues = clone(snap.cues); it.isCue = it.cues.length > 0;
 }
 
 /* ================= 상태 ================= */
@@ -3815,11 +3857,12 @@ function commentLi(x, withRef) {
     ? `<button type="button" class="ref-link" data-act="comment-goto" data-item="${esc(e.item.id)}">${esc(sceneTitle(e.scene))}${e.q ? ' · Q' + esc(e.q) : ''} — ${esc(itemRefText(e, 30))}</button>`
     : `<button type="button" class="ref-link" data-act="comment-goto-scene" data-scene="${esc(s.id)}">씬 · ${esc(sceneTitle(s))}</button>`;
   const res = c.resolved ? `해결${c.resolvedBy ? ' · ' + esc(c.resolvedBy) : ''}${c.resolvedAt ? ' ' + fmtTime(c.resolvedAt) : ''}` : '미해결';
-  return `<li class="${c.resolved ? 'resolved' : 'open'}">
+  // 코멘트 아무 데나 누르면 그 문단(씬)으로 이동 — 버튼은 각자 동작
+  return `<li class="${c.resolved ? 'resolved' : 'open'}" data-act="cmt-jump" ${own} title="대본에서 위치 보기">
     ${withRef ? ref : ''}
     <div class="cmt-h"><span><b>${esc(c.author)}</b>${isNewCmt(c) ? '<span class="new">새</span>' : ''} <span class="${c.resolved ? 'muted' : 'red'}">${res}</span></span><time class="mono" datetime="${esc(c.createdAt)}">${fmtTime(c.createdAt)}</time></div>
     <p>${esc(c.text)}</p>
-    <div class="cmt-a"><button type="button" class="tb" data-act="comment-resolve" ${ids} aria-pressed="${c.resolved}">${c.resolved ? '미해결로' : '해결로 표시'}</button>
+    <div class="cmt-a"><button type="button" class="tb" data-act="comment-resolve" ${ids} aria-pressed="${c.resolved}">${c.resolved ? '미해결로' : '해결로 표시'}</button>${cmtRevertBtn(x, ids)}
     <button type="button" class="tb red" data-act="comment-del" ${ids} data-confirm="정말 삭제?">삭제</button></div></li>`;
 }
 function renderPanel() {
@@ -3880,6 +3923,77 @@ function renderPanel() {
     state.panelFocus = null;
     if (f) { f.focus({ preventScroll: true }); f.scrollIntoView({ block: 'nearest' }); }
   }
+}
+
+/* ===== 코멘트 → 위치 이동 · 코멘트 당시로 되돌리기 (대본·큐시트 DOM 은 id·data 속성으로 찾아가기만 한다) ===== */
+// 잠깐 강조: 위아래 괘선 + 배경이 옅어진다 (.cmt-hit, 동작 줄이기면 그냥 잠깐 칠함)
+function flashEl(el) {
+  if (!el) return;
+  el.classList.remove('cmt-hit'); void el.offsetWidth; el.classList.add('cmt-hit');
+  clearTimeout(el._hitT); el._hitT = setTimeout(() => el.classList.remove('cmt-hit'), 2400);
+}
+function itemEl(id) {
+  const q = cssq(id);
+  return state.view === 'cuesheet' ? document.getElementById('it-' + id) : myLinesOn() ? document.getElementById('ml-' + id) : $(`#view .doc > p[data-id="${q}"]`);
+}
+function sceneEl(id) {
+  const sec = document.getElementById('sc-' + id); if (!sec) return $(`#view [data-scene="${cssq(id)}"]`);
+  return sec.matches('tr') ? sec : ($('.sc-head', sec) || sec);
+}
+// o = { item } | { scene }. 다른 뷰(런·사람·음원·점검)에 있으면 대본으로 바꾼 뒤 이동
+function cmtJump(o) {
+  if (o.item) {
+    if (!IDX.byItem.has(o.item)) { toast('삭제된 문단입니다 — 코멘트가 달린 문단을 찾을 수 없습니다'); return false; }
+    gotoItem(o.item);
+    flashEl(itemEl(o.item));
+    return true;
+  }
+  if (!o.scene) return false;
+  if (!IDX.byScene.has(o.scene)) { toast('삭제된 씬입니다 — 코멘트가 달린 씬을 찾을 수 없습니다'); return false; }
+  if (state.view === 'run') setView('script');
+  gotoScene(o.scene);
+  flashEl(sceneEl(o.scene));
+  return true;
+}
+// 되돌리기는 편집 모드 · 스냅샷이 있는 문단 코멘트 · 그 뒤 바뀐 것이 있을 때만
+function cmtRevertBtn(x, ids) {
+  if (!state.edit || !x.e || !x.c.snapshot || snapDiff(x.c.snapshot, x.e.item).same) return '';
+  return `<button type="button" class="tb" data-act="cmt-revert" ${ids} title="코멘트를 단 뒤에 바뀐 문장·큐를 그때로">코멘트 당시로 되돌리기</button>`;
+}
+function rvCue(c) {
+  return `${DEPT_L[c.dept]} ${cueSummary(c)}${trigLabel(c) ? ' ↳ ' + trigLabel(c) : ''}${c.status === 'tbd' ? ' (미정)' : ''}${c.memo ? ' · ' + c.memo : ''}`;
+}
+// 모달 본문: 지금 → 코멘트 당시(되돌린 뒤). 지금 쪽에서 사라질 것은 취소선
+function revertBody(m) {
+  const e = IDX.byItem.get(m.itemId), c = e && e.item.comments.find(x => x.id === m.cmtId);
+  if (!c || !c.snapshot) return '<p class="empty">삭제된 문단입니다 — 되돌릴 대상이 없습니다.</p>';
+  const d = snapDiff(c.snapshot, e.item), rows = [];
+  const row = (k, now, then, gone) => rows.push(`<tr><th class="rv-k">${k}</th><td class="${gone ? 'rv-out' : ''}">${now == null ? '<span class="muted">—</span>' : esc(now)}</td><td>${then == null ? '<span class="muted">—</span>' : esc(then)}</td></tr>`);
+  if (d.text) row('문장', itemToRaw(e.item) || '(빈 문단)', itemToRaw(c.snapshot) || '(빈 문단)', true);
+  d.extra.forEach(q => row('큐 삭제', rvCue(q), null, true));
+  d.gone.forEach(q => row('큐 복원', null, rvCue(q)));
+  d.changed.forEach(x => row('큐 변경', rvCue(x.now), rvCue(x.then), true));
+  if (d.order) row('큐 순서', e.item.cues.map(q => DEPT_L[q.dept]).join(' · '), c.snapshot.cues.map(q => DEPT_L[q.dept]).join(' · '), true);
+  return `<p class="rv-c"><b>${esc(c.author)}</b> <time class="mono">${fmtTime(c.createdAt)}</time> — ${esc(cut(c.text, 120))}</p>
+    <p class="rv-ref">${esc(e.part.name)} › ${esc(sceneTitle(e.scene))}${e.q ? ' · Q' + esc(e.q) : ''}</p>
+    ${d.same ? '<p class="empty">코멘트를 단 뒤로 바뀐 것이 없습니다.</p>' : `<table class="rv-t"><thead><tr><th></th><th>지금</th><th>코멘트 당시 (되돌린 뒤)</th></tr></thead><tbody>${rows.join('')}</tbody></table>`}
+    ${c.resolved ? '' : '<label class="chk" for="rv-resolve"><input type="checkbox" id="rv-resolve">되돌린 뒤 이 코멘트를 해결로 표시</label>'}
+    <p class="note">되돌린 뒤에도 메뉴의 "마지막 삭제 되돌리기"나 알림의 [되돌리기]로 바로 전 상태로 돌아갈 수 있습니다.</p>`;
+}
+function revertCmt(itemId, cmtId, resolve) {
+  const e = IDX.byItem.get(itemId), c = e && e.item.comments.find(x => x.id === cmtId);
+  state.modal = null; renderModal();
+  if (!c || !c.snapshot) { toast('삭제된 문단입니다 — 되돌리지 못했습니다'); return; }
+  delSnap('코멘트 당시 복원'); // 통째 취소: 메뉴 · 알림 [되돌리기]
+  const doc = mountedView === 'script' && $(`#script .doc[data-scene="${cssq(e.scene.id)}"]`);
+  if (doc) pushUndo(doc, true); // 편집기 Ctrl+Z 로는 문장만 되돌아간다
+  applySnap(e.item, c.snapshot);
+  if (resolve) { c.resolved = true; c.resolvedBy = state.author || '익명'; c.resolvedAt = new Date().toISOString(); }
+  commit();
+  const p = doc && doc.querySelector(`p[data-id="${cssq(itemId)}"]`);
+  if (p) { setPara(p, itemToRaw(e.item)); p._raw = textOf(p); queuePaint(); }
+  cmtJump({ item: itemId });
+  toast('코멘트 당시로 되돌렸습니다' + (resolve ? ' · 해결로 표시' : ''), { undo: true, ms: 8000 });
 }
 
 /* ================= 렌더 ================= */
@@ -4237,6 +4351,10 @@ function renderModal(focusFirst) {
       ${m.list.length > 1 ? '' : '<p class="note">아직 이전 버전이 없습니다. 저장할 때 직전 버전이 여기에 쌓입니다.</p>'}`;
     body += `<p class="note">서버가 직전 버전을 보관합니다 — 이 화면의 자동 저장은 10분에 한 번, 에이전트(MCP) 수정과 복원은 매번. 복원하면 그 버전이 새 rev 로 저장되고, 지금 버전도 기록에 남아 다시 되돌릴 수 있습니다.</p>${modalErr(m)}`;
     foot = '<button type="button" class="btn" data-act="modal-close">닫기</button>';
+  } else if (m.type === 'revert') {
+    title = '코멘트 당시로 되돌리기';
+    body = revertBody(m);
+    foot = '<button type="button" class="btn" data-act="modal-close">취소</button><button type="button" class="btn strong" id="btn-revert-do" data-act="revert-do">되돌리기</button>';
   }
   root.innerHTML = `<div class="overlay"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <div class="modal-h"><h2 id="modal-title">${title}</h2><button type="button" class="tb" data-act="modal-close" aria-label="닫기">닫기</button></div>
@@ -4631,7 +4749,7 @@ function act(a, el) {
       state.panel = true; state.panelTab = 'scene'; state.panelScene = el.dataset.scene; state.panelFocus = 'comments';
       savePrefs(); renderTop(); renderPanel(); break;
     }
-    case 'comment-goto-scene': if (innerWidth <= 1100) state.panel = false; savePrefs(); gotoScene(el.dataset.scene); break;
+    case 'comment-goto-scene': if (innerWidth <= 1100) state.panel = false; savePrefs(); cmtJump({ scene: el.dataset.scene }); break;
     case 'undo-del': state.menuOpen = false; undoDelete(); break;
     case 'cue-move': {
       state.moveCue = { itemId: el.dataset.item, cueId: el.dataset.cue };
@@ -4771,8 +4889,8 @@ function act(a, el) {
     case 'cue-status': { const e = IDX.byItem.get(el.dataset.item); const c = e && e.item.cues.find(x => x.id === el.dataset.cue); if (c) { c.status = c.status === 'tbd' ? 'set' : 'tbd'; commit(); } break; }
     case 'cue-play': { const e = IDX.byItem.get(el.dataset.item); const c = e && e.item.cues.find(x => x.id === el.dataset.cue); if (c) cueRun(c); break; }
     case 'check-goto': {
-      if (el.dataset.item && IDX.byItem.has(el.dataset.item)) { gotoItem(el.dataset.item); openItem(el.dataset.item); }
-      else if (el.dataset.scene) { gotoScene(el.dataset.scene); if (el.dataset.sp) act('scene-cmts', el); }
+      if (el.dataset.item && IDX.byItem.has(el.dataset.item)) { cmtJump({ item: el.dataset.item }); openItem(el.dataset.item); }
+      else if (el.dataset.scene) { cmtJump({ scene: el.dataset.scene }); if (el.dataset.sp) act('scene-cmts', el); }
       else if (el.dataset.pv) { setView('props'); render(); const s = document.getElementById('pre-props'); if (s) s.scrollIntoView({ block: 'start' }); }
       else if (el.dataset.track) { setView('tracks'); render(); const r = document.getElementById('track-' + el.dataset.track); if (r) r.scrollIntoView({ block: 'center' }); }
       break;
@@ -4843,7 +4961,7 @@ function act(a, el) {
       const e = !se && IDX.byItem.get(state.selItem);
       if (!text || !(e || se)) { if (t) t.focus(); break; }
       const name = ($('#author-name') && $('#author-name').value.trim()) || state.author || '익명';
-      (se ? se.scene.comments : e.item.comments).push({ id: uid('c'), author: name, text, createdAt: new Date().toISOString(), resolved: false, resolvedBy: null, resolvedAt: null });
+      (se ? se.scene.comments : e.item.comments).push({ id: uid('c'), author: name, text, createdAt: new Date().toISOString(), resolved: false, resolvedBy: null, resolvedAt: null, ...(se ? {} : { snapshot: cmtSnap(e.item) }) });
       state.commentDraft = ''; state.panelFocus = 'comments'; commit(); toast('코멘트를 등록했습니다'); break;
     }
     case 'comment-resolve': {
@@ -4854,7 +4972,13 @@ function act(a, el) {
       commit(); break;
     }
     case 'comment-del': { const o = cmtOwner(el); if (o) { o.comments = o.comments.filter(x => x.id !== el.dataset.cmt); commit(); } break; }
-    case 'comment-goto': if (innerWidth <= 1100) state.panel = false; savePrefs(); gotoItem(el.dataset.item); break;
+    case 'comment-goto': if (innerWidth <= 1100) state.panel = false; savePrefs(); cmtJump({ item: el.dataset.item }); break;
+    case 'cmt-jump': {
+      const sl = getSelection && getSelection(); if (sl && !sl.isCollapsed && el.contains(sl.anchorNode)) break; // 글자 고르기는 이동 아님
+      if (innerWidth <= 1100) state.panel = false; savePrefs(); cmtJump({ item: el.dataset.item, scene: el.dataset.scene }); break;
+    }
+    case 'cmt-revert': if (!state.edit) break; state.modal = { type: 'revert', itemId: el.dataset.item, cmtId: el.dataset.cmt }; renderModal(); { const b = $('#btn-revert-do'); if (b) b.focus(); } break;
+    case 'revert-do': { const m = state.modal; if (m && m.type === 'revert') revertCmt(m.itemId, m.cmtId, !!($('#rv-resolve') && $('#rv-resolve').checked)); break; }
     case 'person-add': state.modal = { type: 'person', draft: { name: '', role: 'performer', note: '' }, err: '' }; renderModal(true); break;
     case 'person-del': {
       const id = el.dataset.person;

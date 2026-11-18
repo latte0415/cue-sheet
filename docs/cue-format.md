@@ -157,6 +157,7 @@ show
 - 등장하는 사람은 모두 `people` 에 넣고 id 를 정한다(예: `"p-yejun"`). 음향 큐가 쓰는 트랙 번호는 모두 `tracks` 에 넣는다.
 - 원문에 없는 값은 지어내지 말고 `null` / `""` / `status:"tbd"` + `memo` 로 남긴다.
 - comments(`{ author, text, createdAt(ISO), resolved }`)는 원문의 확인 요청·메모를 남길 때만 쓴다.
+  앱은 문단 코멘트에 선택 필드 `snapshot`(`{ kind, speaker, text, cues[] }`, 코멘트를 달 당시 그 문단)을 함께 저장해 "코멘트 당시로 되돌리기"에 쓴다. 업로드할 때는 넣지 않는다 — 없으면 위치 이동만 된다.
 
 ## 최소 예시
 
