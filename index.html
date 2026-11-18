@@ -360,18 +360,38 @@ kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--rule-2);paddin
 .err{color:var(--red);font-size:13px;margin:4px 0}
 
 /* ---------- 점검 ---------- */
-.ck-sum{font-size:14px;color:var(--ink-2);padding:10px 0 0}
-.ck-sum b{font-family:var(--mono);font-weight:500;color:var(--red)}
+/* 막힘만 빨강(숫자·왼쪽 괘선), 확인·참고는 회색. 마지막으로 누른 항목은 accent 괘선 */
+.ck-sum{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;font-size:14px;color:var(--ink-2);padding:10px 0 0}
+.ck-sum b{font-family:var(--mono);font-weight:500;color:var(--ink)}
+.ck-sum.has-block b{color:var(--red)}
 .ck-sum.ok b{color:var(--accent)}
-.ck-g{padding:14px 0 4px;border-bottom:1px solid var(--rule)}
-.ck-g h3{margin:0 0 4px;font-size:14px;font-weight:600;display:flex;gap:10px;align-items:baseline}
-.ck-g h3 .n{font-family:var(--mono);font-size:12px;font-weight:500;color:var(--red)}
-.ck-g h3 .n.zero{color:var(--ink-3);font-weight:400}
-.ck-g .note{margin-bottom:4px}
+.ck-sum .sep,.ckbar .sep{color:var(--rule-2)}
+.ck-sev{margin:0;padding:22px 0 6px;font-size:12px;font-weight:500;color:var(--ink-3);border-bottom:1px solid var(--rule-2)}
+.ck-sev.block{color:var(--red)}
+.ck-g{padding:12px 0 4px;border-bottom:1px solid var(--rule)}
+.ck-g h4{margin:0 0 4px;font-size:14px;font-weight:600;display:flex;flex-wrap:wrap;gap:2px 10px;align-items:baseline}
+.ck-g h4 .n{font-family:var(--mono);font-size:12px;font-weight:500;color:var(--ink-3)}
+.ck-g.block h4 .n{color:var(--red)}
+.ck-note{font-size:12px;font-weight:400;color:var(--ink-3);min-width:0;overflow-wrap:anywhere}
+.ck-fold{font:inherit;color:inherit}
+.ck-fold::after{content:' ▸';color:var(--ink-3);font-weight:400}
+.ck-fold[aria-expanded="true"]::after{content:' ▾'}
+.ck-fold:hover{color:var(--accent)}
 .ck-g ol{list-style:none;margin:0;padding:0}
 .ck-g li{border-top:1px solid var(--rule)}
 .ck-g li:first-child{border-top:0}
-.ck-g .ref-link{font-size:13px;padding:6px 0 6px 10px;border-left:2px solid var(--red);width:100%}
+.ck-g .ref-link{font-size:13px;padding:6px 0 6px 10px;border-left:2px solid var(--rule-2);width:100%}
+.ck-g.block .ref-link{border-left-color:var(--red)}
+.ck-g li.ck-sub .ref-link{padding-left:24px}
+.ck-g li.last .ref-link{border-left-color:var(--accent);color:var(--ink)}
+.ck-none{margin:0;padding:12px 0 0;font-size:13px;color:var(--ink-3);overflow-wrap:anywhere}
+.count.soft{color:var(--ink-3)}
+/* 점검에서 온 이동: 본문(또는 패널) 맨 위 한 줄 */
+.ckbar{position:sticky;top:0;z-index:6;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;padding:6px 0;font-size:13px;background:var(--paper);border-bottom:1px solid var(--rule-2)}
+.ckbar .ck-pos{font-size:12px;color:var(--ink-3)}
+.ckbar.in-panel{position:static;margin:0 0 6px}
+.main:has(> .ckbar:not([hidden])){scroll-padding-top:44px}
+@media print{.ckbar{display:none!important}}
 
 /* ---------- 패널 ---------- */
 .pn-h{display:flex;align-items:flex-end;gap:12px;border-bottom:1px solid var(--rule-2)}
@@ -775,7 +795,7 @@ body.has-player .app{padding-bottom:calc(var(--player-h) + env(safe-area-inset-b
   <div class="body">
     <aside class="nav" id="nav" aria-label="파트·씬 목록"></aside>
     <div class="scrim" id="nav-scrim" data-act="nav-close" hidden></div>
-    <main class="main" id="main" tabindex="-1"><div id="view"></div></main>
+    <main class="main" id="main" tabindex="-1"><div class="ckbar" id="ckbar" role="navigation" aria-label="점검 항목 이동" hidden></div><div id="view"></div></main>
     <aside class="panel" id="panel" aria-label="문단 상세 · 코멘트" hidden></aside>
   </div>
 </div>
@@ -1142,7 +1162,9 @@ const state = {
   // 7차: 내 대사만 보기(prefs) · 사람 뷰에서 펼친 사람 · 사람 목록에 없는 화자 이름(편집기를 떠날 때 모음)
   myLines: false, peopleOpen: null, unknown: [],
   // 8차: 무대 상황 뷰에서 고른 시점('pre' | 'scene:<id>' | 문단 id, 세션 메모리만) · 소품 탭에서 펼친 소품
-  stageAt: null, propOpen: null
+  stageAt: null, propOpen: null,
+  // 9차: 점검 — 역할과 상관없이 전체 보기 · 펼친 그룹({ k: true }) · 마지막으로 누른 항목 key · 목록 스크롤 · 점검에서 온 이동({ key, pos, panelWas, panel }) (모두 세션 메모리만)
+  ckAll: false, ckOpen: {}, ckLast: null, ckScroll: 0, ckNav: null
 };
 const SETUP_DONE = new Set(); // 런: 무대 세팅 체크 (세션 메모리만, 저장 안 함)
 let IDX = null;
@@ -3594,70 +3616,208 @@ function viewProps() {
   return h;
 }
 
-/* ================= 뷰: 점검 ================= */
-// 공연 전에 한 번에 봐야 하는 문제들. 각 항목은 { item | scene | track, text }
-function checkIssues() {
-  const G = [
-    { k: 'tbd', t: '미정 큐', note: '공연 전에 확정하거나 리허설에서 정한 내용을 적어 두세요.' },
-    { k: 'trig', t: '트리거가 비어 있는 큐', note: '언제 칠지 적혀 있지 않습니다.' },
-    { k: 'light', t: '채널이 비어 있는 확정 조명 큐', note: '확정인데 채널·애니메이션이 없습니다.' },
-    { k: 'sound', t: '음원', note: '' },
-    { k: 'cast', t: '인/아웃 연속성', note: '같은 사람의 IN 다음 IN, OUT 다음 OUT, 씬 출연에 없는 사람의 IN/OUT 큐.' },
-    { k: 'props', t: '소품 연속성', note: '이미 무대에 있는 소품을 또 IN, 무대에 없는 소품을 OUT·이동, 소품 목록에 없는 소품. 공연 전 무대 소품에서 시작해 무대 큐 순서대로 셉니다.' },
-    { k: 'empty', t: '문단 없는 액트 씬', note: '코멘트·큐를 달 문단이 없습니다.' },
-    { k: 'cmt', t: '미해결 코멘트', note: '' }
-  ];
-  G.forEach(g => { g.list = []; });
-  G.find(g => g.k === 'sound').note = (Store.mode === 'server' ? '서버에' : '이 브라우저에') + ' 파일이 없는 BGM, 트랙 목록에 없는 번호를 쓰는 음향 큐.';
-  const at = k => G.find(g => g.k === k).list;
-  const ref = e => (e.q ? 'Q' + e.q + ' · ' : '') + sceneTitle(e.scene);
-  const last = new Map(), missing = [];
-  IDX.entries.forEach(e => {
-    const id = e.item.id;
+/* ================= 점검: 규칙 (순수 함수 — test/check.test.js) ================= */
+// 심각도: block 막힘(이대로면 공연이 막힘 — 빨강) · check 확인(공연 전에 확인) · info 참고(건수에 세지 않음)
+const CK_SEV = ['block', 'check', 'info'];
+const CK_SEV_L = { block: '막힘', check: '확인', info: '참고' };
+// 그룹 순서 = 화면 순서(막힘 → 확인 → 참고). short 는 맨 아래 "문제 없음: …" 줄, depts 는 이 그룹에 나올 수 있는 부서('any' = 큐 부서 그대로)
+const CK_GROUPS = [
+  { k: 'track', sev: 'block', t: '트랙 목록에 없는 BGM 번호', short: '트랙 번호', note: '음향 큐가 쓰는 번호가 음원 탭에 없습니다.', depts: ['sound'] },
+  { k: 'light', sev: 'block', t: '채널이 비어 있는 확정 조명 큐', short: '조명 채널', note: '확정인데 채널·애니메이션이 없습니다.', depts: ['light'] },
+  { k: 'cast', sev: 'block', t: '인/아웃 반복', short: '인/아웃 반복', note: '같은 사람의 IN 다음 또 IN, OUT 다음 또 OUT.', depts: ['cast'] },
+  { k: 'props', sev: 'block', t: '소품 연속성', short: '소품', note: '이미 무대에 있는 소품을 또 IN, 무대에 없는 소품을 OUT·이동, 소품 목록에 없는 소품. 공연 전 무대 소품에서 시작해 무대 큐 순서대로 셉니다.', depts: ['stage'] },
+  { k: 'tbd', sev: 'check', t: '미정 큐', short: '미정', note: '공연 전에 확정하거나 리허설에서 정한 내용을 적어 두세요.', depts: 'any' },
+  { k: 'trig', sev: 'check', t: '트리거가 비어 있는 큐', short: '트리거', note: '언제 칠지 적혀 있지 않습니다.', depts: 'any' },
+  { k: 'castlist', sev: 'check', t: '씬 출연에 없는 사람의 IN/OUT', short: '출연 명단', note: '씬 마지막 큐의 IN(다음 씬 등장)과 첫 큐의 OUT(앞 씬 퇴장)은 뺍니다.', depts: ['cast'] },
+  { k: 'files', sev: 'check', t: '음원 파일', short: '음원 파일', note: '', depts: ['sound'] },
+  { k: 'empty', sev: 'info', t: '문단 없는 액트 씬', short: '빈 액트', note: '코멘트·큐를 달 문단이 없습니다.', depts: ['common'], fold: true },
+  { k: 'cmt', sev: 'info', t: '미해결 코멘트', short: '코멘트', note: '', depts: ['common'] }
+];
+// 모든 항목: { k, key, dept(cast|light|sound|stage|common), person(인/아웃의 사람), who(공통 항목이 걸린 씬의 출연), text, 이동 대상 item | scene(+sp) | track | pv, fix }
+// x = { show, entries: [{ item, scene, q }](문서 순서), sceneTitle(s), pname(id), hasPerson(id), cueSummary(c), trackByNo(no), hasFile(t), useCount(t), propIssues() → [{ e, prev, text }], fileWhere }
+function checkCollect(x) {
+  const S = x.show, out = {};
+  CK_GROUPS.forEach(g => { out[g.k] = []; });
+  const add = (k, o) => { o.k = k; o.key = [k, o.item || o.scene || o.track || (o.pv ? 'pv' : ''), o.text].join('|'); out[k].push(o); };
+  const ref = e => (e.q ? 'Q' + e.q + ' · ' : '') + x.sceneTitle(e.scene);
+  const scenes = [];
+  S.parts.forEach(p => p.scenes.forEach(s => scenes.push(s)));
+  const noCues = its => its.every(it => !it.cues.length);
+  // 씬 경계: 씬 마지막 큐 문단의 IN 이 다음 씬 출연에 있으면 "다음 씬 등장", 첫 큐 문단의 OUT 이 앞 씬 출연에 있으면 "앞 씬 퇴장"
+  const edge = (e, mv, pid) => {
+    const si = scenes.indexOf(e.scene), its = e.scene.items, ii = its.indexOf(e.item);
+    if (mv === 'in') { const nx = scenes[si + 1]; return !!nx && nx.cast.includes(pid) && noCues(its.slice(ii + 1)); }
+    const pv = scenes[si - 1]; return !!pv && pv.cast.includes(pid) && noCues(its.slice(0, ii));
+  };
+  const last = new Map();
+  x.entries.forEach(e => {
+    const id = e.item.id, sid = e.scene.id;
     e.item.cues.forEach(c => {
-      const sum = DEPT_L[c.dept] + ' ' + cueSummary(c);
-      if (c.status === 'tbd') at('tbd').push({ item: id, text: `${ref(e)} — ${sum}` });
-      if (!String(c.trigger || '').trim()) at('trig').push({ item: id, text: `${ref(e)} — ${sum}` });
-      if (c.dept === 'light' && c.status !== 'tbd' && !(c.light && c.light.channels.length) && !(c.light && c.light.anim.trim())) at('light').push({ item: id, text: `${ref(e)} — ${sum}` });
-      if (c.dept === 'sound' && c.sound && c.sound.track != null && !trackByNo(c.sound.track)) missing.push({ item: id, text: `${ref(e)} — BGM ${c.sound.track} 은 트랙 목록에 없음` });
+      const text = `${ref(e)} — ${DEPT_L[c.dept]} ${x.cueSummary(c)}`;
+      const own = () => ({ dept: c.dept, person: c.dept === 'cast' && c.cast ? c.cast.personId || null : null, sid, item: id, text });
+      if (c.status === 'tbd') add('tbd', own());
+      if (!String(c.trigger || '').trim()) add('trig', own());
+      if (c.dept === 'light' && c.status !== 'tbd' && !(c.light && c.light.channels.length) && !(c.light && String(c.light.anim || '').trim())) add('light', own());
+      if (c.dept === 'sound' && c.sound && c.sound.track != null && !x.trackByNo(c.sound.track)) add('track', { dept: 'sound', person: null, sid, item: id, text: `${ref(e)} — BGM ${c.sound.track} 은 트랙 목록에 없음` });
       if (c.dept === 'cast' && c.cast && c.cast.personId && (c.cast.move === 'in' || c.cast.move === 'out')) {
         const pid = c.cast.personId, mv = c.cast.move, pr = last.get(pid), M = MOVES[mv];
-        if (pr && pr.move === mv) at('cast').push({ item: id, text: `${ref(e)} — ${pname(pid)} ${M} 다음 또 ${M} (앞: ${ref(pr.e)})` });
-        if (!e.scene.cast.includes(pid)) at('cast').push({ item: id, fix: IDX.people.has(pid) ? { scene: e.scene.id, person: pid } : null, text: `${ref(e)} — ${pname(pid)} ${M} 큐가 있지만 씬 출연에 없음` });
+        const base = { dept: 'cast', person: pid, sid, item: id };
+        if (pr && pr.move === mv) add('cast', Object.assign(base, { text: `${ref(e)} — ${x.pname(pid)} ${M} 다음 또 ${M} (앞: ${ref(pr.e)})` }));
+        if (!e.scene.cast.includes(pid) && !edge(e, mv, pid)) add('castlist', Object.assign({}, base, { fix: x.hasPerson(pid) ? { scene: sid, person: pid } : null, text: `${ref(e)} — ${x.pname(pid)} ${M} 큐가 있지만 씬 출연에 없음` }));
         last.set(pid, { move: mv, e });
       }
     });
-    e.item.comments.forEach(cm => { if (!cm.resolved) at('cmt').push({ item: id, text: `${ref(e)} — ${cm.author}: ${cut(cm.text, 50)}` }); });
+    e.item.comments.forEach(cm => { if (!cm.resolved) add('cmt', { dept: 'common', person: null, sid, who: e.scene.cast.slice(), item: id, text: `${ref(e)} — ${cm.author}: ${cut(cm.text, 50)}` }); });
   });
-  state.show.parts.forEach(p => p.scenes.forEach(sc => sc.comments.forEach(cm => {
-    if (!cm.resolved) at('cmt').push({ scene: sc.id, sp: true, text: `씬 ${sceneTitle(sc)} — ${cm.author}: ${cut(cm.text, 50)}` });
-  })));
-  state.show.tracks.forEach(t => {
-    if (trackUrl(t)) return;
-    const uses = trackUses(t);
-    at('sound').push({ item: uses.length ? uses[0].e.item.id : null, track: t.id, text: `BGM ${t.no == null ? '?' : t.no}${t.title ? ' ' + t.title : ''} — 파일 없음${uses.length ? ' · 큐 ' + uses.length + '개' : ' · 쓰는 큐 없음'}` });
+  scenes.forEach(sc => sc.comments.forEach(cm => {
+    if (!cm.resolved) add('cmt', { dept: 'common', person: null, sid: sc.id, who: sc.cast.slice(), scene: sc.id, sp: true, text: `씬 ${x.sceneTitle(sc)} — ${cm.author}: ${cut(cm.text, 50)}` });
+  }));
+  let have = 0;
+  S.tracks.forEach(t => {
+    if (x.hasFile(t)) { have++; return; }
+    const n = x.useCount(t);
+    add('files', { dept: 'sound', person: null, track: t.id, text: `BGM ${t.no == null ? '?' : t.no}${t.title ? ' ' + t.title : ''}${n ? ' · 큐 ' + n + '개' : ' · 쓰는 큐 없음'}` });
   });
-  at('sound').push(...missing);
-  // 소품: 무대 상황 뷰와 같은 누적 계산(stageStates)에서 나온 문제
-  stageStates().issues.forEach(x => at('props').push(x.e
-    ? { item: x.e.item.id, text: `${ref(x.e)} — ${x.text}${x.prev ? ` (앞: ${ref(x.prev)})` : ''}` }
-    : { pv: true, text: `공연 전 무대 — ${x.text}` }));
-  state.show.parts.forEach(p => p.scenes.forEach(sc => { if (sc.type === 'act' && !sc.items.length) at('empty').push({ scene: sc.id, text: `${sceneTitle(sc)} — ${p.name}` }); }));
-  return { groups: G, total: G.reduce((n, g) => n + g.list.length, 0) };
+  // 소품: 소품 목록이 비어 있는데 무대 큐가 있으면 검사하지 않는다 (소품을 안 쓰는 공연에서 전부 "목록에 없음" 이 되지 않게)
+  const hasStage = x.entries.some(e => e.item.cues.some(c => c.dept === 'stage'));
+  const propsSkip = !(S.props || []).length && hasStage;
+  if (!propsSkip) x.propIssues().forEach(p => add('props', p.e
+    ? { dept: 'stage', person: null, sid: p.e.scene.id, item: p.e.item.id, text: `${ref(p.e)} — ${p.text}${p.prev ? ` (앞: ${ref(p.prev)})` : ''}` }
+    : { dept: 'stage', person: null, pv: true, text: `공연 전 무대 — ${p.text}` }));
+  S.parts.forEach(p => p.scenes.forEach(sc => {
+    if (sc.type === 'act' && !sc.items.length) add('empty', { dept: 'common', person: null, sid: sc.id, who: sc.cast.slice(), scene: sc.id, text: `${x.sceneTitle(sc)} — ${p.name}` });
+  }));
+  const groups = CK_GROUPS.map(g => Object.assign({}, g, { list: out[g.k] }));
+  groups.find(g => g.k === 'files').note = (x.fileWhere || '') + ' 파일이 없는 BGM.';
+  return { groups, files: { have, total: S.tracks.length }, propsSkip };
+}
+// role: 'all' | 'light' | 'sound' | 'stage' | 'p:<사람 id>'. 공연자는 자기 IN/OUT 과 자기가 나오는 씬의 공통 항목(코멘트·빈 액트)만
+function ckMine(it, role) {
+  if (role === 'all') return true;
+  if (role.indexOf('p:') === 0) { const p = role.slice(2); return it.person === p || (it.dept === 'common' && (!it.who || it.who.includes(p))); }
+  return it.dept === role || it.dept === 'common';
+}
+function ckRelevant(g, role) {
+  if (role === 'all' || g.depts === 'any' || g.depts.includes('common')) return true;
+  return g.depts.includes(role.indexOf('p:') === 0 ? 'cast' : role);
+}
+// 건수 = 막힘 + 확인. 참고는 세지 않고, 음원 파일은 몇 곡이든 한 건(올리는 일 하나)
+function ckCount(groups, sev) {
+  return groups.reduce((a, g) => a + ((sev ? g.sev === sev : g.sev !== 'info') ? (g.k === 'files' ? Math.min(1, g.list.length) : g.list.length) : 0), 0);
+}
+// r = checkCollect 결과. showAll 이면 역할과 상관없이 전부 (역할 선택은 그대로)
+function checkFilter(r, role, showAll) {
+  const all = role === 'all' || !!showAll;
+  const groups = r.groups.map(g => Object.assign({}, g, { rel: all || ckRelevant(g, role), list: all ? g.list : g.list.filter(it => ckMine(it, role)) }));
+  return {
+    groups, filtered: !all, total: ckCount(groups), block: ckCount(groups, 'block'), info: ckCount(groups, 'info'),
+    fullTotal: ckCount(r.groups), fullInfo: ckCount(r.groups, 'info'),
+    files: r.files, propsSkip: r.propsSkip && (all || role === 'stage')
+  };
+}
+// "다음" 순서: 화면에 보이는 순서 그대로 — 접힌 그룹(open[k] 아님)은 건너뛰고, 음원 파일 묶음은 한 줄(누르면 첫 트랙)
+function checkNav(v, open) {
+  const out = [];
+  v.groups.forEach(g => {
+    if (!g.list.length || (g.fold && !(open && open[g.k]))) return;
+    if (g.k === 'files') out.push(Object.assign({}, g.list[0], { key: 'files|*', bundle: true }));
+    else g.list.forEach(it => out.push(it));
+  });
+  return out;
+}
+function ckNavIndex(nav, key) { return key ? nav.findIndex(x => x.key === key || (x.bundle && key.indexOf('files|') === 0)) : -1; }
+
+/* ================= 뷰: 점검 ================= */
+// 공연 전에 한 번에 봐야 하는 문제들 — 규칙은 checkCollect, 여기서는 지금 화면의 데이터·역할로 묶는다. total = 막힘 + 확인 (내비·런 버튼 숫자)
+function checkIssues() {
+  const r = checkCollect({
+    show: state.show, entries: IDX.entries, sceneTitle, pname, hasPerson: id => IDX.people.has(id), cueSummary, trackByNo,
+    hasFile: t => !!trackUrl(t), useCount: t => trackUses(t).length, propIssues: () => stageStates().issues,
+    fileWhere: Store.mode === 'server' ? '서버에' : '이 브라우저에'
+  });
+  return checkFilter(r, state.role, state.ckAll);
+}
+function ckBtn(x, label) {
+  return `<button type="button" class="ref-link ck-i" data-act="check-goto" data-key="${esc(x.key)}">${label == null ? esc(x.text) : label}</button>`;
 }
 function viewCheck() {
-  const r = checkIssues();
-  let h = `<div class="sec-h"><h2>공연 전 점검</h2><span class="note">항목을 누르면 해당 문단(패널) 또는 씬으로 이동합니다</span></div>`;
-  h += r.total ? `<p class="ck-sum" id="ck-sum">남은 문제 <b>${r.total}</b>건</p>` : `<p class="ck-sum ok" id="ck-sum"><b>문제 없음</b></p>`;
-  r.groups.forEach(g => {
-    h += `<section class="ck-g" id="ck-${g.k}"><h3>${esc(g.t)}<span class="n ${g.list.length ? '' : 'zero'}">${g.list.length ? g.list.length : '없음'}</span></h3>`;
-    if (g.list.length) {
-      if (g.note) h += `<p class="note">${esc(g.note)}</p>`;
-      h += `<ol>${g.list.map(x => `<li class="${x.fix ? 'fix' : ''}"><button type="button" class="ref-link ck-i" data-act="check-goto" ${x.item ? `data-item="${esc(x.item)}"` : ''} ${x.scene ? `data-scene="${esc(x.scene)}"` : ''} ${x.sp ? 'data-sp="1"' : ''} ${x.pv ? 'data-pv="1"' : ''} ${x.track ? `data-track="${esc(x.track)}"` : ''}>${esc(x.text)}</button>${x.fix && state.edit ? `<button type="button" class="tb ck-fix" data-act="cast-add" data-scene="${esc(x.fix.scene)}" data-person="${esc(x.fix.person)}">출연에 추가</button>` : ''}</li>`).join('')}</ol>`;
+  const v = checkIssues(), last = state.ckLast;
+  const who = rolePerson() ? pname(rolePerson()) : roleDept() ? DEPT_L[roleDept()] : '';
+  let h = `<div class="sec-h"><h2>공연 전 점검</h2><span class="note">항목을 누르면 해당 문단(패널)·씬·음원으로 이동합니다</span></div>`;
+  const head = v.filtered ? `${esc(who)} ` : state.role !== 'all' ? '전체 ' : '남은 문제 ';
+  h += `<p class="ck-sum ${v.total ? '' : 'ok'} ${v.block ? 'has-block' : ''}" id="ck-sum"><span>${v.total ? `${head}<b>${v.total}</b>건` : `${v.filtered ? esc(who) + ' ' : ''}<b>문제 없음</b>`}</span>`;
+  if (v.block) h += `<span class="sep">·</span>막힘 <span class="mono">${v.block}</span>`;
+  if (v.info) h += `<span class="sep">·</span><span class="muted">참고 ${v.info}</span>`;
+  if (state.role !== 'all') h += `<span class="sep">·</span><button type="button" class="tb" id="ck-all" data-act="ck-all" aria-pressed="${!!state.ckAll}">${state.ckAll ? `${esc(roleLabel())}만 보기` : `전체 ${v.fullTotal}건 보기`}</button>`;
+  h += '</p>';
+  let sev = '';
+  const none = [];
+  v.groups.forEach(g => {
+    if (!g.list.length) { if (g.rel && !(g.k === 'props' && v.propsSkip)) none.push(g.short); return; }
+    if (g.sev !== sev) { sev = g.sev; h += `<h3 class="ck-sev ${sev}">${CK_SEV_L[sev]}</h3>`; }
+    const n = g.list.length, open = g.fold ? !!state.ckOpen[g.k] : true;
+    const title = g.fold ? `<button type="button" class="ck-fold" data-act="ck-fold" data-k="${g.k}" aria-expanded="${open}">${esc(g.t)}</button>` : esc(g.t);
+    h += `<section class="ck-g ${g.sev}" id="ck-${g.k}"><h4><span class="ck-t">${title}</span>${g.k === 'files' ? '' : `<span class="n">${n}</span>`}${g.note ? `<span class="ck-note">${esc(g.note)}</span>` : ''}</h4>`;
+    if (!open) { h += '</section>'; return; }
+    h += '<ol>';
+    if (g.k === 'files') {
+      const fo = !!state.ckOpen.files, first = g.list[0];
+      h += `<li class="fix ${last === 'files|*' || (last && last.indexOf('files|') === 0 && !fo) ? 'last' : ''}">${ckBtn(Object.assign({}, first, { key: 'files|*' }), `음원 파일 ${v.files.have}/${v.files.total} 올림`)}<button type="button" class="tb ck-fix" data-act="ck-fold" data-k="files" aria-expanded="${fo}">${fo ? '접기' : `없는 ${g.list.length}곡 보기`}</button></li>`;
+      if (fo) h += g.list.map(x => `<li class="ck-sub ${last === x.key ? 'last' : ''}">${ckBtn(x)}</li>`).join('');
+    } else {
+      h += g.list.map(x => `<li class="${x.fix ? 'fix' : ''} ${last === x.key ? 'last' : ''}">${ckBtn(x)}${x.fix && state.edit ? `<button type="button" class="tb ck-fix" data-act="cast-add" data-scene="${esc(x.fix.scene)}" data-person="${esc(x.fix.person)}">출연에 추가</button>` : ''}</li>`).join('');
     }
-    h += '</section>';
+    h += '</ol></section>';
   });
+  if (none.length) h += `<p class="ck-none" id="ck-none">문제 없음: ${esc(none.join(', '))}</p>`;
+  if (v.propsSkip) h += `<p class="ck-none" id="ck-props-skip">소품 미등록 — 검사 안 함</p>`;
   return h;
+}
+// 점검에서 이동: 마지막으로 누른 항목·순번을 기억하고, 패널(또는 본문 위) 머리에 "← 점검 (n/N) · 다음 →"
+// step: "다음" 으로 온 이동 — 브라우저 기록을 하나 더 쌓지 않는다 (뒤로가기 한 번에 점검으로)
+let hashReplace = false;
+function ckGo(x, pos, step) {
+  const prev = state.ckNav, usePanel = !!(x.item || x.sp), narrow = innerWidth <= 1100;
+  const panelWas = prev ? prev.panelWas : state.panel;
+  state.ckLast = x.key;
+  state.ckNav = { key: x.key, pos, panelWas, panel: usePanel };
+  // 패널을 쓰지 않는 대상: 좁은 화면에서는 패널이 본문을 덮으므로 닫는다. 넓은 화면은 점검에서 왔을 때 상태로
+  if (!usePanel && (narrow || (prev && prev.panel))) state.panel = narrow ? false : panelWas;
+  hashReplace = !!step;
+  try {
+    if (x.track) {
+      setView('tracks'); render();
+      const r = document.getElementById('track-' + x.track); if (r) { r.scrollIntoView({ block: 'center' }); flashEl(r); }
+    } else if (x.item && IDX.byItem.has(x.item)) { cmtJump({ item: x.item }); openItem(x.item); }
+    else if (x.scene) { cmtJump({ scene: x.scene }); if (x.sp) act('scene-cmts', { dataset: { scene: x.scene } }); }
+    else if (x.pv) { setView('props'); render(); const s = document.getElementById('pre-props'); if (s) s.scrollIntoView({ block: 'start' }); }
+  } finally { hashReplace = false; }
+  // 점검 → 다른 뷰로 쌓인 기록에 표시: "← 점검" 은 이 표시가 있으면 브라우저 뒤로가기와 같게
+  if (!step) { try { history.replaceState({ ck: 1 }, ''); } catch (e) { /* 무시 */ } }
+  renderPanel();
+}
+function ckStep() {
+  const nav = checkNav(checkIssues(), state.ckOpen), cur = state.ckNav; if (!cur) return;
+  const i = ckNavIndex(nav, cur.key), next = i >= 0 ? i + 1 : cur.pos;
+  if (next >= nav.length) { toast('점검 항목의 마지막입니다'); return; }
+  ckGo(nav[next], next, true);
+}
+function ckBack() {
+  if (history.state && history.state.ck && state.view !== 'check') { history.back(); return; }
+  setView('check'); render();
+}
+function ckBarHtml() {
+  const cur = state.ckNav; if (!cur) return '';
+  const nav = checkNav(checkIssues(), state.ckOpen), i = ckNavIndex(nav, cur.key), at = i >= 0 ? i + 1 : Math.min(cur.pos + 1, nav.length);
+  const end = (i >= 0 ? i + 1 : cur.pos) >= nav.length;
+  return `<button type="button" class="tb" data-act="ck-back">← 점검</button><span class="ck-pos mono">(${at}/${nav.length})</span><span class="sep">·</span><button type="button" class="tb" data-act="ck-next" ${end ? 'disabled' : ''}>다음 →</button>`;
+}
+// 본문 위 줄 — 점검에서 온 이동이 패널을 열었으면 패널 머리에 대신 그린다 (renderPanel 이 부른다)
+function renderCkBar() {
+  const bar = $('#ckbar'); if (!bar) return;
+  const on = !!state.ckNav && state.view !== 'check' && !(state.panel && state.ckNav.panel);
+  bar.hidden = !on;
+  bar.innerHTML = on ? ckBarHtml() : '';
 }
 
 /* ================= 뷰: 사람 ================= */
@@ -3765,8 +3925,8 @@ function viewTracks() {
 /* ================= 내비 / 상단 / 패널 ================= */
 function renderNav() {
   const S = state.show;
-  const nCheck = checkIssues().total;
-  let h = nCheck ? `<button type="button" class="nav-check" id="nav-check" data-act="view" data-view="check">점검<span class="count">${nCheck}</span></button>` : '';
+  const ck = checkIssues(), nCheck = ck.total; // 막힘 + 확인 (지금 역할 기준). 막힘이 없으면 숫자를 회색으로
+  let h = nCheck ? `<button type="button" class="nav-check" id="nav-check" data-act="view" data-view="check">점검<span class="count ${ck.block ? '' : 'soft'}">${nCheck}</span></button>` : '';
   h += S.preShowSetup ? `<div class="nav-pre">공연 전 세팅 · ${esc(S.preShowSetup)}</div>` : '';
   h += '<ol>';
   S.parts.forEach(p => {
@@ -3875,6 +4035,7 @@ function commentLi(x, withRef) {
 function renderPanel() {
   const panel = $('#panel');
   panel.hidden = !state.panel;
+  renderCkBar();
   if (!state.panel) return;
   const all = allComments(), open = all.filter(x => !x.c.resolved).length;
   const nNew = all.filter(x => isNewCmt(x.c)).length;
@@ -3883,7 +4044,8 @@ function renderPanel() {
   const form = `<div class="cmt-form"><div class="row"><label for="author-name">작성자</label><input type="text" id="author-name" data-act="author" value="${esc(state.author)}" placeholder="이름 (기억됨)" autocomplete="name"></div>
         <label class="sr-only" for="comment-text">코멘트 입력</label><textarea id="comment-text" rows="3" placeholder="코멘트 (Ctrl+Enter 등록)">${esc(state.commentDraft)}</textarea>
         <div><button type="button" class="btn" id="comment-add" data-act="comment-add">코멘트 등록</button></div></div>`;
-  let h = `<div class="pn-h"><div class="pn-tabs" role="tablist" aria-label="패널 범위">
+  const ckb = state.ckNav && state.ckNav.panel && state.view !== 'check' ? ckBarHtml() : '';
+  let h = (ckb ? `<div class="ckbar in-panel" id="ckbar-pn">${ckb}</div>` : '') + `<div class="pn-h"><div class="pn-tabs" role="tablist" aria-label="패널 범위">
       <button type="button" role="tab" id="ptab-item" aria-selected="${state.panelTab === 'item'}" data-act="panel-tab" data-tab="item">이 문단</button>
       ${pse ? `<button type="button" role="tab" id="ptab-scene" aria-selected="${state.panelTab === 'scene'}" data-act="panel-tab" data-tab="scene">이 씬</button>` : ''}
       <button type="button" role="tab" id="ptab-all" aria-selected="${state.panelTab === 'all'}" data-act="panel-tab" data-tab="all">전체 코멘트 <span class="mono">${open}/${all.length}</span>${nNew ? `<span class="new">새 ${nNew}</span>` : ''}</button>
@@ -4017,6 +4179,11 @@ function render() {
   buildIndex();
   if (rolePerson() && !IDX.people.has(rolePerson())) state.role = 'all';
   if (state.selItem && !IDX.byItem.has(state.selItem)) state.selItem = null;
+  // 점검으로 돌아옴(뒤로가기·"← 점검"·탭): 점검에서 연 패널은 닫는다 — 좁은 화면은 늘, 넓은 화면은 점검에서 떠날 때 상태로
+  if (state.view === 'check' && state.lastView !== 'check' && state.ckNav) {
+    if (state.ckNav.panel) { state.panel = innerWidth <= 1100 ? false : state.ckNav.panelWas; savePrefs(); }
+    state.ckNav = null;
+  }
   const main = $('#main'), view = $('#view');
   const vk = myLinesOn() ? 'mylines' : state.view; // 출연자 시점 + 내 대사만 → 대본 자리에 읽기 전용 목록
   if (vk === 'script' && mountedView === 'script' && $('#script') && scriptSig === sig()) {
@@ -4040,7 +4207,8 @@ function render() {
     state.lastView = state.view;
     if (changed) {
       const sc = state.curScene && document.getElementById('sc-' + state.curScene);
-      if (sc && state.view !== 'run') sc.scrollIntoView({ block: 'start' }); else main.scrollTop = 0;
+      if (state.view === 'check') main.scrollTop = state.ckScroll || 0; // 점검: 떠날 때 위치로 (마지막으로 누른 항목은 .last)
+      else if (sc && state.view !== 'run') sc.scrollIntoView({ block: 'start' }); else main.scrollTop = 0;
     }
   }
   if (state.view !== 'run' && state.view !== 'stage') spy(); // 두 뷰는 고른 위치로 현재 씬을 정한다
@@ -4605,8 +4773,10 @@ function cmtOwner(el) {
 function setView(v) {
   if (!VIEWS.includes(v) || state.view === v) return;
   flushSave();
+  if (state.view === 'check') state.ckScroll = $('#main').scrollTop;
   state.view = v;
-  try { if (location.hash.slice(1) !== v) location.hash = v; } catch (e) { /* 무시 */ }
+  // hashReplace: 점검의 "다음" 이동 — 기록을 쌓지 않고 바꿔 쓴다 (점검에서 쌓은 표시 { ck } 는 그대로)
+  try { if (location.hash.slice(1) !== v) { if (hashReplace) history.replaceState(history.state, '', '#' + v); else location.hash = v; } } catch (e) { /* 무시 */ }
 }
 function gotoScene(id) {
   state.navOpen = false;
@@ -4742,7 +4912,7 @@ function createImported(show) {
 function act(a, el) {
   const S = state.show;
   switch (a) {
-    case 'view': setView(el.dataset.view); render(); break;
+    case 'view': if (el.dataset.view !== 'check') state.ckNav = null; setView(el.dataset.view); render(); break;
     case 'role-pick': { const r = 'p:' + el.dataset.person; state.role = state.role === r ? 'all' : r; savePrefs(); render(); break; }
     case 'mode':
       // 서버 모드에서 편집 비밀번호를 모르면 먼저 묻는다
@@ -4902,12 +5072,19 @@ function act(a, el) {
     case 'cue-status': { const e = IDX.byItem.get(el.dataset.item); const c = e && e.item.cues.find(x => x.id === el.dataset.cue); if (c) { c.status = c.status === 'tbd' ? 'set' : 'tbd'; commit(); } break; }
     case 'cue-play': { const e = IDX.byItem.get(el.dataset.item); const c = e && e.item.cues.find(x => x.id === el.dataset.cue); if (c) cueRun(c); break; }
     case 'check-goto': {
-      if (el.dataset.item && IDX.byItem.has(el.dataset.item)) { cmtJump({ item: el.dataset.item }); openItem(el.dataset.item); }
-      else if (el.dataset.scene) { cmtJump({ scene: el.dataset.scene }); if (el.dataset.sp) act('scene-cmts', el); }
-      else if (el.dataset.pv) { setView('props'); render(); const s = document.getElementById('pre-props'); if (s) s.scrollIntoView({ block: 'start' }); }
-      else if (el.dataset.track) { setView('tracks'); render(); const r = document.getElementById('track-' + el.dataset.track); if (r) r.scrollIntoView({ block: 'center' }); }
+      // 이동 대상은 ckGo 에서 track → item → scene → pv 순 (음원 파일 항목은 음원 탭의 그 트랙으로)
+      const v = checkIssues(), nav = checkNav(v, state.ckOpen), k = el.dataset.key;
+      let x = nav.find(n => n.key === k);
+      if (!x) v.groups.some(g => (x = g.list.find(n => n.key === k)));
+      if (!x) { render(); break; }
+      if (state.view === 'check') state.ckScroll = $('#main').scrollTop;
+      ckGo(x, Math.max(0, ckNavIndex(nav, k)), false);
       break;
     }
+    case 'ck-all': state.ckAll = !state.ckAll; render(); break;
+    case 'ck-fold': state.ckOpen[el.dataset.k] = !state.ckOpen[el.dataset.k]; render(); break;
+    case 'ck-back': ckBack(); break;
+    case 'ck-next': ckStep(); break;
     case 'theme':
       if (state.booth) state.booth = false;
       else state.theme = THEMES[(THEMES.indexOf(state.theme) + 1) % THEMES.length];
@@ -5477,7 +5654,7 @@ $('#main').addEventListener('scroll', () => {
 }, { passive: true });
 window.addEventListener('hashchange', () => {
   const v = (location.hash || '').slice(1);
-  if (VIEWS.includes(v) && v !== state.view) { flushSave(); state.view = v; render(); }
+  if (VIEWS.includes(v) && v !== state.view) { flushSave(); if (state.view === 'check') state.ckScroll = $('#main').scrollTop; state.view = v; render(); }
 });
 window.addEventListener('resize', () => { if (mountedView === 'script') queuePaint(); if (spkOpenNow()) spkPlace(); });
 // 화자 목록: 마우스로 고르기 (포커스는 편집기에 그대로) · 편집 모드에서 화자 이름을 누르면 목록
