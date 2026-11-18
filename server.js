@@ -17,6 +17,7 @@ const { Store, ID_RE, KEY_RE, invalidShow } = require('./lib/store');
 const { createMcp } = require('./lib/mcp');
 const { hashKey, verifyKey, badNewKey, FailLimiter } = require('./lib/editkey');
 const { Tokens, TokenError } = require('./lib/tokens');
+const { SHOW_VER } = require('./lib/validate');
 
 const INDEX = path.join(__dirname, 'index.html');
 const JSON_LIMIT = 5 * 1024 * 1024;
@@ -192,7 +193,8 @@ function createServer(opts) {
     const M = req.method;
     // /api/health 는 인증 없이 — 프론트가 서버 존재와 비밀번호 필요 여부를 알기 위해
     if (parts[0] === 'health' && parts.length === 1 && M === 'GET') {
-      return sendJson(res, 200, { ok: true, hasPassword: !!pwDigest, showCount: await store.count() });
+      // schema = 서버가 아는 큐시트 형식(lib/validate.js SHOW_VER). 열어 둔 화면은 이것이 자기보다 높으면 새로고침을 요구한다
+      return sendJson(res, 200, { ok: true, hasPassword: !!pwDigest, showCount: await store.count(), schema: SHOW_VER });
     }
     if (!authed(req, query)) { await settleUnreadBody(req, res); throw new HttpError(401, 'unauthorized'); }
     // 휴지통: 목록·복구는 보기 권한만 — 편집 비밀번호를 빼앗겨 삭제당해도 원래 편집자가 되살릴 수 있게 (복구는 아무것도 지우지 않는다)
@@ -238,6 +240,8 @@ function createServer(opts) {
         checkShow(body && body.show);
         const r = await store.put(id, body.baseRev, body.show, BROWSER);
         if (!r) throw new HttpError(404, 'not_found');
+        // 옛 화면(옛 index.html)의 저장: 409 가 아닌 426 — 옛 화면은 409 에만 "내 버전으로 덮어쓰기"를 띄우고, 그 밖의 코드는 백업하고 재시도한다
+        if (r.outdated) return sendJson(res, 426, { error: 'client_outdated', version: r.outdated.show.version, schema: SHOW_VER, message: `저장본(version ${r.outdated.show.version})보다 옛 형식(version ${body.show.version})이라 저장하지 않았습니다 — 화면을 새로고침하세요` });
         if (r.conflict) return sendJson(res, 409, { error: 'conflict', rev: r.conflict.rev, updatedAt: r.conflict.updatedAt, show: r.conflict.show }, { ETag: `"${r.conflict.rev}"` });
         return sendJson(res, 200, r, { ETag: `"${r.rev}"` });
       }

@@ -1189,10 +1189,11 @@ const LocalStore = {
 
 // 서버 모드 상태. rev = 마지막으로 서버와 맞춘 판 번호, dirty = 아직 PUT 하지 않은 변경
 // editKeys = 프로젝트별 편집 비밀번호(이 브라우저에 기억), editDefault = 지금 프로젝트가 아직 1234 인지, locked = 편집 키가 없어 저장이 멈춤
+// outdated = 서버가 이 화면보다 새 형식(SHOW_VER)을 안다 — 저장을 멈추고 새로고침을 요구한다(프로젝트를 바꿔도 유지). schemaAt = 마지막 /api/health 확인 시각
 const Srv = {
   key: '', showId: null, rev: 0, etag: null, list: [], audioKeys: null, hasPassword: false,
   dirty: false, inflight: false, conflict: null, err: false, gone: false, retryT: null, pollT: null, polling: false, deferred: false,
-  runPos: {}, localRun: null, editKeys: loadEditKeys(), editDefault: false, locked: false
+  runPos: {}, localRun: null, editKeys: loadEditKeys(), editDefault: false, locked: false, outdated: false, schemaAt: 0
 };
 // 편집 비밀번호는 설정(KEY_PREF)과 따로 둔다 — { showId: 비밀번호 }
 function loadEditKeys() {
@@ -1233,16 +1234,16 @@ async function api(method, p, body, headers) {
     return { status: r.status, data, etag: r.headers.get('ETag') };
   }
 }
-function pendingLocal() { return !!(saveT || Srv.dirty || Srv.inflight || Srv.conflict || Srv.locked); }
+function pendingLocal() { return !!(saveT || Srv.dirty || Srv.inflight || Srv.conflict || Srv.locked || Srv.outdated); }
 function backupLocal() {
   if (!Srv.showId || !state.show) return;
   lsSet('cueSheet.backup.' + Srv.showId, JSON.stringify({ baseRev: Srv.rev, savedAt: new Date().toISOString(), show: state.show }));
 }
 // PUT 은 한 번에 하나. 끝났을 때 또 바뀌어 있으면 이어서 한 번 더
 async function push() {
-  // 편집 잠김 동안 이어진 수정도 이 브라우저 백업에 계속 반영한다(잠금을 못 풀어도 최신 변경이 남게)
-  if (Srv.locked && Srv.dirty && Store.mode === 'server') backupLocal();
-  if (Store.mode !== 'server' || !Srv.showId || Srv.inflight || Srv.conflict || !Srv.dirty || Srv.gone || Srv.locked) { renderSync(); return; }
+  // 편집 잠김·새 버전 대기 동안 이어진 수정도 이 브라우저 백업에 계속 반영한다(잠금을 못 풀어도 최신 변경이 남게)
+  if ((Srv.locked || Srv.outdated) && Srv.dirty && Store.mode === 'server') backupLocal();
+  if (Store.mode !== 'server' || !Srv.showId || Srv.inflight || Srv.conflict || !Srv.dirty || Srv.gone || Srv.locked || Srv.outdated) { renderSync(); return; }
   clearTimeout(Srv.retryT); Srv.retryT = null;
   const id = Srv.showId;
   if (!editKey(id)) { lockSave(); return; }
@@ -1261,6 +1262,8 @@ async function push() {
     Srv.dirty = true; Srv.gone = true; backupLocal(); showGone(); return;
   } else if (r && r.status === 403) {
     Srv.dirty = true; lockSave(); return;
+  } else if (r && r.status === 426) {
+    Srv.dirty = true; markOutdated(); return; // 서버 데이터가 이 화면보다 새 형식 — 재시도하지 않는다
   } else {
     Srv.dirty = true; Srv.err = true; backupLocal();
     Srv.retryT = setTimeout(push, RETRY_MS);
@@ -1276,7 +1279,7 @@ function flushServer() {
     (function wait() {
       if (Store.mode !== 'server' || !Srv.showId) return res(true);
       if (!Srv.inflight && !Srv.dirty) return res(true);
-      if (Srv.conflict || Srv.err || Srv.gone || Srv.locked || Date.now() - t0 > 15000) return res(false);
+      if (Srv.conflict || Srv.err || Srv.gone || Srv.locked || Srv.outdated || Date.now() - t0 > 15000) return res(false);
       setTimeout(wait, 60);
     })();
   });
@@ -1351,6 +1354,7 @@ function renderSync() {
   let t = '', red = false;
   if (Store.mode === 'local') t = '로컬 모드 — 이 브라우저에만 저장';
   else if (!Srv.showId || !state.show) t = '';
+  else if (Srv.outdated) { t = '저장 안 됨 — 새 버전 있음'; red = true; }
   else if (Srv.gone) { t = '저장 안 됨 — 프로젝트 없음'; red = true; }
   else if (Srv.locked) { t = '저장 안 됨 — 편집 잠김'; red = true; }
   else if (Srv.conflict) { t = '저장 안 됨 — 충돌'; red = true; }
@@ -1365,6 +1369,12 @@ function renderSyncBar() {
   const b = $('#syncbar'); if (!b) return;
   const c = Srv.conflict;
   renderPwBar();
+  if (Srv.outdated && Store.mode === 'server') {
+    b.hidden = false;
+    b.innerHTML = `<span><b>새 버전이 있습니다</b> — 이 화면은 옛 버전이라 저장을 멈췄습니다. 이 기기의 변경은 이 브라우저에 백업했습니다</span>
+      <button type="button" class="btn" id="outdated-reload" data-act="gate-retry">새로고침</button>`;
+    return;
+  }
   if (!c && Srv.locked && Store.mode === 'server' && Srv.showId) {
     b.hidden = false;
     b.innerHTML = `<span><b>편집 잠김</b> — 이 기기의 변경이 서버에 저장되지 않았습니다. 이 프로젝트의 편집 비밀번호가 필요합니다 (다른 기기에서 바뀌었을 수 있음)</span>
@@ -1391,6 +1401,14 @@ function lockSave() {
   backupLocal(); renderSync(); renderSyncBar();
   if (!state.modal) openUnlock({ why: 'save' });
 }
+// 서버가 이 화면보다 새 형식을 안다(저장 426 client_outdated, /api/health 의 schema, 받은 show.version) — 저장을 멈추고 새로고침 바
+function markOutdated() {
+  if (Srv.outdated) return;
+  Srv.outdated = true; clearTimeout(Srv.retryT); Srv.retryT = null;
+  if (Srv.dirty || saveT) backupLocal();
+  renderSync(); renderSyncBar();
+}
+const newerShow = d => !!(d && d.show && Number(d.show.version) > SHOW_VER);
 
 /* ---- 다른 기기의 변경 반영 ---- */
 // 지금 입력 중인 곳: null(없음) · 'other'(모달·패널·입력칸) · { scene }(대본 편집기의 씬)
@@ -1449,10 +1467,17 @@ async function poll() {
   Srv.polling = true;
   const id = Srv.showId;
   try {
+    // 1분에 한 번 서버가 아는 형식도 본다(데이터가 아직 안 바뀌었어도 서버가 새 버전으로 바뀌었으면 저장 전에 멈춘다)
+    if (!Srv.outdated && Date.now() - Srv.schemaAt > 60000) {
+      Srv.schemaAt = Date.now();
+      const h = await detectServer();
+      if (h && Number(h.schema) > SHOW_VER) { markOutdated(); return; }
+    }
     const r = await api('GET', showPath(id), undefined, Srv.etag ? { 'If-None-Match': Srv.etag } : {});
     if (id !== Srv.showId || r.status === 304) return;
     if (r.status === 404) { if (!pendingLocal()) { Srv.gone = true; showGone(); } return; }
     if (r.status !== 200 || !r.data) return;
+    if (newerShow(r.data)) { markOutdated(); return; }
     if (r.data.rev === Srv.rev) { Srv.etag = r.etag; return; }
     if (pendingLocal()) return; // 내 변경이 대기 중이면 저장의 409 처리에 맡긴다
     if (applyRemote(r.data, false)) toast('다른 기기의 변경을 불러왔습니다');
@@ -1503,6 +1528,7 @@ async function openShow(id) {
   mountedView = null;
   hideGate(); savePrefs(); render(); renderSync(); renderSyncBar(); renderProj();
   loadAudioFiles(); startPoll();
+  if (newerShow(r.data)) markOutdated();
   return true;
 }
 async function switchShow(id) {
@@ -1629,6 +1655,8 @@ function localBoot() {
 async function serverBoot(h) {
   Store = ServerStore;
   Srv.hasPassword = !!h.hasPassword;
+  Srv.schemaAt = Date.now();
+  if (Number(h.schema) > SHOW_VER) markOutdated();
   if (h.hasPassword && !Srv.key) await askPassword(false);
   await refreshList();
   // ?show=<id> (scripts/upload.js 가 알려 주는 주소): 그 프로젝트로 바로 연다. 새로고침 때 다시 끌려가지 않게 주소에서 지운다

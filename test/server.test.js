@@ -5,6 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { createServer } = require('../server');
+const { SHOW_VER } = require('../lib/validate');
 
 function start(password) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuesheet-test-'));
@@ -25,7 +26,7 @@ test('health: 비밀번호 없음, showCount', async () => {
   const r = await fetch(S.base + '/api/health');
   assert.equal(r.status, 200);
   assert.equal(r.headers.get('cache-control'), 'no-store');
-  assert.deepEqual(await r.json(), { ok: true, hasPassword: false, showCount: 0 });
+  assert.deepEqual(await r.json(), { ok: true, hasPassword: false, showCount: 0, schema: SHOW_VER });
   assert.equal((await fetch(S.base + '/healthz')).status, 200);
   assert.equal((await fetch(S.base + '/')).status, 200);
   assert.equal((await fetch(S.base + '/nope')).status, 404);
@@ -225,7 +226,7 @@ test('인증: APP_PASSWORD 설정 시 401/200, 헤더와 쿼리 둘 다', async 
   const P = await start('s3cret-비번');
   try {
     let r = await fetch(P.base + '/api/health');
-    assert.deepEqual(await r.json(), { ok: true, hasPassword: true, showCount: 0 });
+    assert.deepEqual(await r.json(), { ok: true, hasPassword: true, showCount: 0, schema: SHOW_VER });
     r = await fetch(P.base + '/api/shows');
     assert.equal(r.status, 401);
     assert.deepEqual(await r.json(), { error: 'unauthorized' });
@@ -250,4 +251,132 @@ test('인증: APP_PASSWORD 설정 시 401/200, 헤더와 쿼리 둘 다', async 
     assert.equal((await fetch(Q.base + '/api/shows?key=ascii-pw')).status, 200);
     assert.equal((await fetch(Q.base + '/', { headers: {} })).status, 200, '정적 페이지는 인증 없음');
   } finally { await stop(Q); }
+});
+
+// ---- 옛 화면 차단: 업데이트 전에 열어 둔 탭(옛 index.html)이 모르는 필드(v6 소품)를 떨어뜨린 채 저장하지 못하게
+const v6show = (title, extra) => show(title, Object.assign({
+  version: 6, props: [{ id: 'pr1', name: '모자', note: '' }], preShowProps: [{ propId: 'pr1', at: '테이블' }],
+  parts: [{ id: 'pt1', name: '1부', scenes: [{ id: 's1', items: [{ id: 'i1', kind: 'action', text: '(등장)', cues: [{ id: 'q1', dept: 'stage', stage: { text: '', props: [{ propId: 'pr1', action: 'in', at: '테이블' }] } }] }] }] }]
+}, extra));
+// index.html 의 상수~상태 구간(migrate 포함)을 Node 에서 돌린다 (test/validate.test.js 와 같은 방식)
+function frontend() {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const a = html.indexOf('/* ================= 상수'), b = html.indexOf('/* ================= 상태');
+  assert.ok(a > 0 && b > a, 'index.html 에서 상수~상태 구간 표시를 찾지 못했습니다');
+  return require('vm').runInNewContext(html.slice(a, b) + '\n;({ migrate, SHOW_VER })', {});
+}
+
+test('스키마 상수: lib/validate.js SHOW_VER 가 index.html 의 SHOW_VER·migrate 결과와 같다', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const m = /^const SHOW_VER = (\d+);/m.exec(html);
+  assert.ok(m, 'index.html 에서 const SHOW_VER 를 찾지 못했습니다');
+  assert.equal(Number(m[1]), SHOW_VER);
+  const FE = frontend();
+  assert.equal(FE.SHOW_VER, SHOW_VER);
+  assert.equal(FE.migrate({ version: 5, parts: [] }).version, SHOW_VER, '프런트가 저장하는 version 이 서버 스키마와 같아야 한다');
+});
+
+test('옛 화면 차단: 저장본보다 낮은 version 의 PUT 은 426 client_outdated, 같거나 높으면 저장', async () => {
+  const { id } = await (await fetch(S.base + '/api/shows', J('POST', { show: v6show('소품') }))).json();
+  const get = async () => (await fetch(`${S.base}/api/shows/${id}`)).json();
+  // 옛 화면(v5 migrate 는 props·preShowProps·stage.props 를 버린다)이 같은 rev 위에 저장 → 거절, 저장본 그대로
+  const old = show('옛 화면');
+  let r = await fetch(`${S.base}/api/shows/${id}`, J('PUT', { baseRev: 1, show: old }));
+  assert.equal(r.status, 426);
+  assert.equal(r.headers.get('etag'), null);
+  const body = await r.json();
+  assert.deepEqual(Object.keys(body).sort(), ['error', 'message', 'schema', 'version']);
+  assert.deepEqual([body.error, body.version, body.schema], ['client_outdated', 6, SHOW_VER]);
+  assert.match(body.message, /새로고침/);
+  let g = await get();
+  assert.deepEqual([g.rev, g.show.title, g.show.props.length, g.show.preShowProps.length], [1, '소품', 1, 1]);
+  assert.deepEqual(g.show.parts[0].scenes[0].items[0].cues[0].stage.props, [{ propId: 'pr1', action: 'in', at: '테이블' }]);
+
+  // 옛 rev 를 기준으로 와도 409 가 아니라 426 — 옛 화면은 409 에만 "내 버전으로 덮어쓰기"를 띄운다
+  r = await fetch(`${S.base}/api/shows/${id}`, J('PUT', { baseRev: 0, show: old }));
+  assert.equal(r.status, 426);
+  // 그래도 덮어쓰기(서버 rev 를 base 로 다시 PUT)를 시도하면 같은 답. 재시도해도 마찬가지
+  for (let i = 0; i < 3; i++) {
+    r = await fetch(`${S.base}/api/shows/${id}`, J('PUT', { baseRev: g.rev, show: old }));
+    assert.equal(r.status, 426);
+    assert.equal((await r.json()).error, 'client_outdated');
+  }
+  assert.equal((await get()).rev, 1, '아무것도 저장되지 않았다');
+
+  // 같은 version 은 저장, 높은 version 도 저장(높은 쪽이 기준이 된다)
+  r = await fetch(`${S.base}/api/shows/${id}`, J('PUT', { baseRev: 1, show: v6show('같은 형식') }));
+  assert.equal(r.status, 200); assert.equal((await r.json()).rev, 2);
+  r = await fetch(`${S.base}/api/shows/${id}`, J('PUT', { baseRev: 2, show: v6show('새 형식', { version: 7 }) }));
+  assert.equal(r.status, 200); assert.equal((await r.json()).rev, 3);
+  r = await fetch(`${S.base}/api/shows/${id}`, J('PUT', { baseRev: 3, show: v6show('이제 옛 형식') }));
+  assert.equal(r.status, 426);
+  assert.deepEqual(await r.json().then(x => [x.version, x.schema]), [7, SHOW_VER]);
+  assert.equal((await get()).show.title, '새 형식');
+
+  // 편집 비밀번호 검사가 먼저다(키 없는 옛 화면은 지금처럼 403)
+  r = await fetch(`${S.base}/api/shows/${id}`, J('PUT', { baseRev: 3, show: old }, { 'X-Edit-Key': '' }));
+  assert.equal(r.status, 403);
+  // v5 저장본에는 v5 저장이 그대로 된다(지울 새 필드가 없다)
+  const { id: id5 } = await (await fetch(S.base + '/api/shows', J('POST', { show: show('v5') }))).json();
+  r = await fetch(`${S.base}/api/shows/${id5}`, J('PUT', { baseRev: 1, show: show('v5 수정') }));
+  assert.equal(r.status, 200);
+});
+
+test('옛 화면 차단: POST·복제는 기존 저장본을 덮어쓰지 않고, 복제는 version 을 그대로 둔다', async () => {
+  // 새 프로젝트는 덮어쓸 저장본이 없다 — 옛 형식도 받는다(사이트가 불러올 때 migrate)
+  let r = await fetch(S.base + '/api/shows', J('POST', { show: show('옛 형식 새 프로젝트') }));
+  assert.equal(r.status, 201);
+  const { id } = await (await fetch(S.base + '/api/shows', J('POST', { show: v6show('복제 원본') }))).json();
+  r = await fetch(`${S.base}/api/shows/${id}/duplicate`, { method: 'POST' });
+  assert.equal(r.status, 201);
+  const d = await (await fetch(`${S.base}/api/shows/${(await r.json()).id}`)).json();
+  assert.deepEqual([d.show.version, d.show.props.length, d.show.preShowProps.length], [6, 1, 1]);
+});
+
+test('옛 화면 차단: MCP edit_show 는 version 을 낮추지 않는다 (v6 소품 유지, v5 는 v6 으로)', async () => {
+  const H = { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', 'MCP-Protocol-Version': '2025-03-26', 'X-Edit-Key': '1234' };
+  const call = async (args, n) => {
+    const r = await fetch(S.base + '/mcp', { method: 'POST', headers: H, body: JSON.stringify({ jsonrpc: '2.0', id: n, method: 'tools/call', params: { name: 'edit_show', arguments: args } }) });
+    const t = await r.text();
+    return JSON.parse((r.headers.get('content-type') || '').includes('text/event-stream') ? /^data: (.*)$/m.exec(t)[1] : t).result;
+  };
+  const { id } = await (await fetch(S.base + '/api/shows', J('POST', { show: v6show('MCP v6') }))).json();
+  let res = await call({ showId: id, ops: [{ op: 'set', id: 'i1', fields: { text: '(MCP 가 고침)' } }] }, 1);
+  assert.ok(!res.isError, JSON.stringify(res));
+  let g = await (await fetch(`${S.base}/api/shows/${id}`)).json();
+  assert.deepEqual([g.rev, g.show.version, g.show.props.length, g.show.preShowProps.length, g.show.parts[0].scenes[0].items[0].cues[0].stage.props.length], [2, 6, 1, 1, 1]);
+  const { id: id5 } = await (await fetch(S.base + '/api/shows', J('POST', { show: show('MCP v5') }))).json();
+  res = await call({ showId: id5, ops: [{ op: 'set', kind: 'show', fields: { title: 'MCP v5 → v6' } }] }, 2);
+  assert.ok(!res.isError, JSON.stringify(res));
+  g = await (await fetch(`${S.base}/api/shows/${id5}`)).json();
+  assert.deepEqual([g.show.version, g.show.props, g.show.preShowProps], [6, [], []]);
+});
+
+test('옛 화면 차단: 버전 복원은 의도한 옛 내용을 그대로 쓰고(version 포함), 사이트는 불러올 때 현재 형식으로 올린다', async () => {
+  const P = await new Promise(res => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuesheet-test-'));
+    const server = createServer({ dataDir: dir, log: null, putSnapshotMs: 0 });
+    server.listen(0, '127.0.0.1', () => res({ server, dir, base: `http://127.0.0.1:${server.address().port}` }));
+  });
+  try {
+    const { id } = await (await fetch(P.base + '/api/shows', J('POST', { show: show('v5 시절') }))).json();
+    let r = await fetch(`${P.base}/api/shows/${id}`, J('PUT', { baseRev: 1, show: v6show('v6 소품') }));
+    assert.equal(r.status, 200);
+    // 사용자가 기록에서 v5 시절(rev 1)을 고른다 → 그대로 복원(소품이 없던 내용)
+    r = await fetch(`${P.base}/api/shows/${id}/restore`, J('POST', { rev: 1, baseRev: 2 }));
+    assert.equal(r.status, 200);
+    const g = await (await fetch(`${P.base}/api/shows/${id}`)).json();
+    assert.deepEqual([g.rev, g.restoredFrom, g.show.version, g.show.title], [3, 1, 5, 'v5 시절']);
+    // 사이트는 불러올 때 migrate 로 현재 형식(빈 소품)으로 올리고, 그 저장은 막히지 않는다
+    const m = frontend().migrate(g.show);
+    assert.equal(m.version, SHOW_VER);
+    assert.deepEqual([JSON.parse(JSON.stringify(m.props)), JSON.parse(JSON.stringify(m.preShowProps))], [[], []]);
+    r = await fetch(`${P.base}/api/shows/${id}`, J('PUT', { baseRev: 3, show: JSON.parse(JSON.stringify(m)) }));
+    assert.equal(r.status, 200);
+    // 복원으로 되돌린 v6 기록(rev 2)은 다시 복원할 수 있다 — 소품이 돌아온다
+    r = await fetch(`${P.base}/api/shows/${id}/restore`, J('POST', { rev: 2 }));
+    assert.equal(r.status, 200);
+    const g2 = await (await fetch(`${P.base}/api/shows/${id}`)).json();
+    assert.deepEqual([g2.show.version, g2.show.props.length], [6, 1]);
+  } finally { await stop(P); }
 });

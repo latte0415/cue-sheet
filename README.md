@@ -121,11 +121,11 @@ DATA_DIR/tokens.json                      사람별 MCP 토큰 [{ id, name, hash
 
 | 메서드 | 경로 | 응답 |
 |---|---|---|
-| GET | `/api/health` | `{ ok, hasPassword, showCount }` — 인증 없음 |
+| GET | `/api/health` | `{ ok, hasPassword, showCount, schema }` — 인증 없음. `schema` = 서버가 아는 큐시트 형식(`lib/validate.js` `SHOW_VER`). 열어 둔 화면은 이것이 자기보다 높으면 저장을 멈추고 새로고침을 요구한다 |
 | GET | `/api/shows` | `[{ id, title, rev, updatedAt, sceneCount, cueCount, editDefault }]` (최근 수정 순). `editDefault` = 아직 편집 비밀번호 1234 |
 | POST | `/api/shows` | body `{ show }` → `201 { id, rev: 1, updatedAt }` |
 | GET | `/api/shows/:id` | `{ rev, updatedAt, by?, via?, show }` + `ETag: "rev"`. `If-None-Match` 가 같으면 `304`. 없으면 `404` |
-| PUT | `/api/shows/:id` | **편집**. body `{ baseRev, show }` (≤5MB) → `{ rev, updatedAt }`. `baseRev` 가 현재 rev 와 다르면 `409 { error:'conflict', rev, updatedAt, show }`. 직전 레코드는 기록으로(10분에 한 번) |
+| PUT | `/api/shows/:id` | **편집**. body `{ baseRev, show }` (≤5MB) → `{ rev, updatedAt }`. `baseRev` 가 현재 rev 와 다르면 `409 { error:'conflict', rev, updatedAt, show }`. `show.version` 이 저장본보다 낮으면(업데이트 전에 열어 둔 옛 화면) baseRev 와 상관없이 `426 { error:'client_outdated', version, schema, message }` — 저장하지 않는다. 직전 레코드는 기록으로(10분에 한 번) |
 | DELETE | `/api/shows/:id` | **편집**. `{ ok: true, trashId, trashDays }` — 레코드와 `shows/<id>/`(음원·기록·비밀번호)를 그대로 휴지통으로 옮긴다 |
 | GET | `/api/trash` | `{ days, items: [{ trashId, id, title, rev, deletedAt, expiresAt, daysLeft }] }` 최근 삭제 먼저. 보기 권한 (삭제 IP 는 `meta.json` 에만) |
 | POST | `/api/trash/:trashId/restore` | 보기 권한. `{ id, originalId, title }` — 같은 id 가 이미 있으면 새 `id`. 없는 항목이면 `404` |

@@ -120,6 +120,7 @@ async function main(argv) {
     return { status: r.status, data: j };
   }
   const editHeaders = () => ({ 'X-Edit-Key': encodeURIComponent(editKey) });
+  const outdatedMsg = (mine, theirs) => `이 파일은 version ${mine} 형식인데 서버의 프로젝트는 version ${theirs} 입니다 — 옛 형식으로 덮어쓰면 새 형식에만 있는 정보(소품 목록 등)가 지워지므로 서버가 받지 않습니다. 덮어쓰지 않았습니다.\n  파일을 현재 형식(version ${theirs}, docs/cue-format.md)으로 고친 뒤 다시 올리거나, --project 없이 새 프로젝트로 올리세요`;
   const fail = (what, r) => new Fail(2, `${what} 실패 (HTTP ${r.status}${r.data && r.data.error ? ' ' + r.data.error : ''}${r.data && r.data.message ? ': ' + r.data.message : ''})`);
 
   let target = null; // 덮어쓸 프로젝트 id
@@ -169,6 +170,9 @@ async function main(argv) {
     }
     const cur = await api('GET', '/shows/' + encodeURIComponent(target));
     if (cur.status !== 200 || !cur.data) throw fail('기존 프로젝트 조회', cur);
+    // 서버는 저장본보다 옛 형식(version)으로 덮어쓰는 PUT 을 막는다(426 client_outdated) — 새 형식의 정보(v6 소품 등)가 지워지지 않게. 미리 알린다
+    const curVer = Number(cur.data.show && cur.data.show.version);
+    if (Number(show.version) < curVer) throw new Fail(1, outdatedMsg(show.version, curVer));
     // 사이트에서 올린 음원 연결(fileKey)은 이 파일에 없으므로 같은 트랙 번호에서 이어받는다
     const old = Array.isArray(cur.data.show && cur.data.show.tracks) ? cur.data.show.tracks : [];
     const kept = [];
@@ -202,6 +206,7 @@ async function main(argv) {
     catch (e) { log(`경고 백업을 남기지 못했습니다: ${e.message}`); }
     const r = await api('PUT', '/shows/' + encodeURIComponent(target), body, editHeaders());
     if (r.status === 409) throw new Fail(2, `그 사이 사이트에서 누군가 저장했습니다 (rev ${r.data && r.data.rev}) — 다시 실행하면 그 버전 위에 덮어씁니다`);
+    if (r.status === 426 && r.data && r.data.error === 'client_outdated') throw new Fail(1, outdatedMsg(show.version, r.data.version));
     if (r.status !== 200 || !r.data) throw fail('업로드', r);
     Object.assign(result, { ok: true, action: 'update', id: target, rev: r.data.rev });
   }

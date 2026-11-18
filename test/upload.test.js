@@ -219,3 +219,18 @@ test('서버도 구조가 깨진 show 는 받지 않는다 (경로 포함 메시
   assert.equal(j.error, 'invalid_show');
   assert.match(j.message, /parts\[0\]\.scenes\[0\]\.items 가 배열이 아닙니다/);
 });
+
+test('옛 형식(version 5) 파일로 v6 프로젝트를 덮어쓰면: 이유와 방법을 알리고 올리지 않는다(종료 코드 1)', async () => {
+  const v6 = Object.assign(cueDoc('소품 있는 공연'), { version: 6, props: [{ id: 'pr-1', name: '모자', note: '' }], preShowProps: [{ propId: 'pr-1', at: '테이블' }] });
+  const { id } = await (await fetch(S.base + '/api/shows', J('POST', { show: v6 }))).json();
+  const r = await run([file(cueDoc('옛 파일')), '--project', id, '--edit-key', '1234', '--url', S.base]);
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.stderr, /version 5 형식인데 서버의 프로젝트는 version 6/);
+  assert.match(r.stderr, /덮어쓰지 않았습니다/);
+  const g = await get(id);
+  assert.deepEqual([g.rev, g.show.title, g.show.props.length], [1, '소품 있는 공연', 1]);
+  // 같은 형식(version 6) 파일은 그대로 덮어쓴다
+  const ok = await run([file(Object.assign(cueDoc('새 파일'), { version: 6, props: [], preShowProps: [] })), '--project', id, '--edit-key', '1234', '--url', S.base]);
+  assert.equal(ok.code, 0, ok.out);
+  assert.equal((await get(id)).show.title, '새 파일');
+});
