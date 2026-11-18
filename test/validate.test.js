@@ -208,7 +208,7 @@ test('action-echo: 큐의 대상·액션·트리거만 다시 적은 지문은 "
   const v = validateShow(e);
   assert.deepEqual(v.errors, []);
   assert.deepEqual(v.warnings.map(w => [w.path, w.code]), [['parts[0].scenes[0].items[0].text', 'action-echo']]);
-  assert.match(v.warnings[0].msg, /큐를 다시 적은 지문 — .*큐 지점으로 바꾸세요 \(kind:"cue"/);
+  assert.match(v.warnings[0].msg, /큐를 다시 적은 지문 — .*큐만 있는 문단으로 바꾸세요 \(kind:"cue"/); // 화면 용어: 큐 지점 → 큐만 있는 문단
 });
 
 // 정리 전 실데이터(v5 고정 사본)에서 걸리던 15개 — 규칙 회귀 확인용. 현재 cues/ 데이터는 아래 테스트처럼 0개
@@ -406,7 +406,7 @@ test('빈 문단에 붙은 큐(empty-cued): 본문이 빈 대사·지문에 큐 
   let v = validateShow(s);
   const w = v.warnings.filter(x => x.code === 'empty-cued');
   assert.deepEqual(w.map(x => x.path), ['parts[0].scenes[0].items[1].text']);
-  assert.match(JSON.stringify(w[0]), /큐 지점으로/);
+  assert.match(JSON.stringify(w[0]), /큐만 있는 문단으로/);
   assert.deepEqual(v.errors, []);
   // 큐 지점으로 바꾸면 경고 없음
   its[1].kind = 'cue'; its[1].text = '';
