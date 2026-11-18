@@ -327,8 +327,8 @@ tr.tbd .cs-num{border-left:2px dashed var(--red)}
 .rz::after{content:"";position:absolute;top:0;bottom:0;left:4px;border-left:1px solid transparent}
 .rz:hover::after,.rz:focus-visible::after,.rz.drag::after{border-left-color:var(--accent)}
 .rz:focus-visible{outline:0}
-.cs-table thead th:last-child .rz{right:0}
-.cs-table thead th:last-child .rz::after{left:7px}
+.cs-table thead th:last-child .rz,.cs-table thead th:has(+th.strip) .rz{right:0}
+.cs-table thead th:last-child .rz::after,.cs-table thead th:has(+th.strip) .rz::after{left:7px}
 body.rz-on,body.rz-on *{cursor:col-resize!important;user-select:none!important;-webkit-user-select:none!important}
 /* 접기: 머리글 오른쪽 끝 − · 접힌 열은 28px 띠(+ · 세로 부서 이름), 칸에는 큐마다 2×12px 눈금(미정은 빨강) */
 .cs-table .dh-in{display:flex;align-items:baseline;justify-content:space-between;gap:6px;min-width:0}
@@ -336,7 +336,7 @@ body.rz-on,body.rz-on *{cursor:col-resize!important;user-select:none!important;-
 .cs-table .fold{font-family:var(--mono);font-size:12px;color:var(--ink-3);padding:0 2px;border-bottom:1px solid transparent;line-height:1.2;flex:none}
 .cs-table .fold:hover{color:var(--accent);border-bottom-color:var(--accent)}
 .cs-table th.strip,.cs-table td.strip{padding:8px 0 9px;text-align:center}
-.cs-table th.strip{cursor:pointer}
+.cs-table th.strip{cursor:pointer;z-index:3}
 .strip-h{display:flex;flex-direction:column;align-items:center;gap:6px;width:100%;color:var(--ink-3);font-size:12px;line-height:1.1}
 .strip-h .vt{writing-mode:vertical-rl;text-orientation:upright;letter-spacing:.08em}
 .cs-table th.strip:hover .strip-h,.cs-table th.strip:hover .fold{color:var(--accent)}
@@ -859,7 +859,7 @@ body.has-player .app{padding-bottom:var(--player-h)}
   .cs-table tbody{break-inside:avoid}
   .cs-scene th{border-top:1.5px solid #000}
   .cs-ctx{white-space:normal;max-width:none}
-  .cs-table th.col-dim>*,.cs-table td.col-dim>*,.cs-table tr.col-dim>td,.cs-table tr.col-dim>td>*{opacity:1}
+  .cs-table th.col-dim>*,.cs-table td.col-dim>*,.cs-table tr.col-dim>td,.cs-table tr.col-dim>td>*{opacity:1!important}
   /* 큐시트: 접힌 열도 펼쳐서, 부서 바탕·너비 조절·접기 단추 없이. 열 너비는 종이에 맞춰 자동 */
   .cs-wrap{padding-left:0}
   .cs-table{table-layout:auto!important;width:100%!important;min-width:0!important}
