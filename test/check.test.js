@@ -174,7 +174,7 @@ test('빈 문단에 붙은 큐: 큐 지점이 아닌 문단의 본문이 비었�
   assert.equal(g.sev, 'check');
   assert.deepEqual(plain(g.list.map(x => [x.item, x.dept, x.fix])), [[blank.id, 'common', { item: blank.id }]], '큐 지점·큐 없는 빈 문단·본문 있는 문단은 아님');
   assert.match(g.list[0].text, /빈 문단에 큐 2개 \(조명·음향\)/);
-  assert.match(g.note, /큐 지점으로/);
+  assert.match(g.note, /큐만 있는 문단으로/); // 화면 용어: 큐 지점 → 큐만 있는 문단
   // 확인 건수에 들고, 모든 역할에 보인다(공통)
   assert.equal(FE.checkFilter(r, 'all').total, 1);
   assert.equal(keys(FE.checkFilter(r, 'stage')).emptyq, 1);
