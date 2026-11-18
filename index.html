@@ -534,6 +534,59 @@ body.has-player .app{padding-bottom:calc(var(--player-h) + env(safe-area-inset-b
 .pl-t{min-width:0}
 @media (max-width:600px){.pl-list .ref-link{grid-template-columns:minmax(0,1fr)}}
 
+/* ---------- 8차: 소품 · 무대 상황 ---------- */
+.pr-table input[type=text]{width:100%;min-width:80px}
+.pr-table select{max-width:100%}
+.pre-txt{padding:8px 0 0}
+.pr-none{padding:8px 0;border-bottom:1px solid var(--rule)}
+.sv-nav{display:flex;align-items:baseline;justify-content:flex-end;gap:8px;padding:0 0 8px;background:var(--paper)}
+.sv-nav #sv-pos{margin-right:auto}
+.sv{display:grid;grid-template-columns:minmax(220px,300px) minmax(0,1fr);gap:0 32px;align-items:start;padding-top:10px}
+.sv-list{list-style:none;margin:0;padding:0}
+.sv-part{font-size:12px;font-weight:500;color:var(--ink-3);padding:14px 0 4px;border-bottom:1px solid var(--ink)}
+.sv-i{display:flex;align-items:baseline;gap:8px;width:100%;text-align:left;padding:5px 0 5px 10px;font-size:13px;border-bottom:1px solid var(--rule);box-shadow:inset 2px 0 0 transparent}
+.sv-i:hover{background:var(--tint-2)}
+.sv-i.cur{background:var(--tint);box-shadow:inset 2px 0 0 var(--accent)}
+.sv-i.pre{font-weight:500;border-bottom-color:var(--rule-2)}
+.sv-i.sc{font-weight:600;padding-top:9px}
+.sv-i.sc.mc{font-weight:400;font-size:12px;color:var(--ink-3);padding-top:5px}
+.sv-i.q{padding-left:20px}
+.sv-q{font-family:var(--mono);font-size:12px;color:var(--accent);font-weight:500;min-width:2.8em;flex:none}
+.sv-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sv-d{font-size:11px;color:var(--ink-3);font-weight:400;white-space:nowrap;flex:none}
+.sv-i.other .sv-t,.sv-i.other .sv-q{color:var(--ink-3)}
+.sv-panel{position:sticky;top:0;max-height:calc(100vh - 110px);overflow:auto;padding:0 2px 24px 0}
+.sv-head{border-top:2px solid var(--accent);border-bottom:1px solid var(--rule-2);padding:10px 0 8px}
+.sv-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 14px}
+.sv-pos{font-family:var(--mono);font-size:26px;font-weight:500;color:var(--accent);line-height:1.15}
+.sv-pos.t{font-family:var(--sans);font-size:18px;font-weight:600}
+.sv-where{font-size:13px;color:var(--ink-2);min-width:0;overflow-wrap:anywhere}
+.sv-where b{font-weight:600;color:var(--ink)}
+.sv-text{font-size:16px;line-height:1.55;margin:6px 0 8px;overflow-wrap:anywhere}
+.sv-text.k-action{color:var(--ink-2)}
+.sv-text .spk{font-weight:600;font-size:14px;margin-right:6px}
+.sv-cues,.sv-tab{border-collapse:collapse;width:100%}
+.sv-cues th,.sv-cues td,.sv-tab th,.sv-tab td{border-top:1px solid var(--rule);padding:6px 10px 6px 0;text-align:left;vertical-align:baseline;font-weight:400;overflow-wrap:anywhere}
+.sv-cues th{width:44px}
+.sv-cues td{font-size:13px;font-variant-numeric:tabular-nums}
+.sv-cues tr.other td{color:var(--ink-3)}
+.sv-m{text-align:right!important;white-space:nowrap;font-size:12px;color:var(--accent);padding-right:0!important}
+.sv-m .tb{margin-left:6px}
+.sv-sec{padding:14px 0 6px;border-bottom:1px solid var(--rule)}
+.sv-sec h3{margin:0 0 4px;font-size:12px;font-weight:500;color:var(--ink-3);display:flex;gap:10px;align-items:baseline}
+.sv-sec h3 .mono{font-weight:400}
+.sv-tab{font-size:14px}
+.sv-tab tr:first-child th,.sv-tab tr:first-child td{border-top:0}
+.sv-tab th{width:34%;padding-left:10px;box-shadow:inset 2px 0 0 transparent}
+.sv-tab tr.chg th{box-shadow:inset 2px 0 0 var(--accent);font-weight:600}
+.sv-tab tr.gone td,.sv-tab tr.gone th{color:var(--ink-3)}
+.sv-tab tr.gone .sv-n{text-decoration:line-through}
+.sv-tab tr.mine td,.sv-tab tr.mine th{background:var(--tint)}
+.sv-sec .empty{padding:4px 0 6px}
+.sv-ref{font-size:12px;color:var(--ink-2);margin:6px 0 4px;overflow-wrap:anywhere}
+.sv-ref div{padding:2px 0}
+.sv-ref .lbl{margin-right:4px}
+
 /* ---------- 반응형 ---------- */
 @media (max-width:1100px){
   .panel{position:fixed;right:0;top:0;bottom:0;z-index:40;width:min(380px,100%);background:var(--paper);border-left:1px solid var(--rule-2);padding:calc(12px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) 16px}
@@ -545,6 +598,10 @@ body.has-player .app{padding-bottom:calc(var(--player-h) + env(safe-area-inset-b
   .nav{position:fixed;left:0;top:0;bottom:0;z-index:40;width:min(290px,86vw);background:var(--paper);border-right:1px solid var(--rule-2);padding:calc(12px + env(safe-area-inset-top, 0px)) 14px 24px max(16px, env(safe-area-inset-left, 0px));transform:translateX(-105%);visibility:hidden;transition:transform .2s ease, visibility .2s}
   .nav.open{transform:none;visibility:visible}
   .main{padding-left:0}
+  /* 무대 상황: 상태 패널을 위로, 시점 목록은 아래로 (이전/다음 버튼과 ←/→ 로 넘김) */
+  .sv{grid-template-columns:minmax(0,1fr)}
+  .sv-panel{position:static;max-height:none;overflow:visible;order:-1;padding-bottom:10px}
+  .sv-list-w{padding-top:10px}
 }
 @media (max-width:600px){
   :root{--gut:50px}
@@ -683,8 +740,9 @@ const S_ACT = ['play', 'fadeIn', 'fadeOut', 'stop', 'volume'];
 const S_ACT_L = { play: 'play', fadeIn: 'fadeIn', fadeOut: 'fadeOut', stop: 'stop', volume: '볼륨' };
 const MOVES = { in: 'IN', out: 'OUT', move: '이동' };
 const ROLES = { performer: '공연자', mc: 'MC', light: '조명', sound: '음향', stage: '무대', other: '기타' };
-const VIEWS = ['script', 'cuesheet', 'run', 'people', 'tracks', 'check'];
-const VIEW_L = { script: '대본', cuesheet: '큐시트', run: '런', people: '사람', tracks: '음원', check: '점검' };
+const VIEWS = ['script', 'cuesheet', 'run', 'stage', 'people', 'props', 'tracks', 'check'];
+const VIEW_L = { script: '대본', cuesheet: '큐시트', run: '런', stage: '무대 상황', people: '사람', props: '소품', tracks: '음원', check: '점검' };
+const SHOW_VER = 6; // v6: 소품 목록(props) · 공연 전 무대 소품(preShowProps) · 무대 큐 소품 동작(stage.props)
 const FADE_DEFAULT = 3; // fadeOut 시간이 비어 있을 때 쓰는 기본 페이드(초)
 const THEMES = ['system', 'light', 'dark'];
 const THEME_L = { system: '시스템', light: '라이트', dark: '다크' };
@@ -739,7 +797,13 @@ function sampleShow() {
   const Q = (dept, trigger, offsetSec, body, o) => { o = o || {}; const c = { id: id('q'), dept, trigger, offsetSec: offsetSec == null ? null : offsetSec, memo: o.memo || '', status: o.tbd ? 'tbd' : 'set' }; c[dept] = body; return c; };
   const Lt = (trig, off, channels, o) => Q('light', trig, off, { channels, anim: '' }, o);
   const Sd = (trig, off, track, action, o) => Q('sound', trig, off, { track, action, timeSec: (o && o.time) != null ? o.time : null, level: (o && o.level) != null ? o.level : null }, o);
-  const St = (trig, off, text, o) => Q('stage', trig, off, { text }, o);
+  const St = (trig, off, text, o) => Q('stage', trig, off, { text, props: (o && o.props) || [] }, o);
+  const PR = { table: 'pr-tophat-table', hat: 'pr-tophat', rope: 'pr-rope' };
+  const props = [
+    { id: PR.table, name: '탑햇테이블', note: '' },
+    { id: PR.hat, name: '탑햇', note: '' },
+    { id: PR.rope, name: '로프', note: '박대훈 묶는 용' }
+  ];
   const Ca = (trig, off, personId, move, o) => Q('cast', trig, off, { personId, move, text: (o && o.text) || '' }, o);
   const it = (kind, speaker, text, cues, cms) => ({ id: id('i'), kind, speaker, text, label: null, isCue: !!(cues && cues.length), cues: cues || [], comments: cms || [] });
   const L = (spk, text, cues, cms) => it('line', spk, text, cues, cms);
@@ -782,7 +846,7 @@ function sampleShow() {
     ]),
     S('mc', '', [P.dh, P.yj], null, [
       L(P.dh, '와 답답해서 죽는 줄 알았네요 박대훈입니다. 자 입도 풀렸겠다 기대가 되는데요?'),
-      L(P.yj, '다음 사람 소개해야….', [St('이 대사 즈음', null, '탑햇테이블에 탑햇 세팅')]),
+      L(P.yj, '다음 사람 소개해야….', [St('이 대사 즈음', null, '탑햇테이블에 탑햇 세팅', { props: [{ propId: PR.hat, action: 'in', at: '탑햇테이블 위' }] })]),
       L(P.dh, '(말 끊고) 다음 마술은 뭐죠? 뭐죠?'),
       L(P.yj, '(한숨 한 번 쉬고) 에휴 나가계세요 제가 진행할게요…'),
       A('(로프로 박대훈 묶음)'),
@@ -801,7 +865,8 @@ function sampleShow() {
   ] }];
   const T = (no, title, loop) => ({ id: 'tr-' + no, no, title, durationSec: null, fileName: null, fileKey: null, note: '', loop: !!loop });
   const tracks = [T(1, '하우스 음악', true), T(2, '제로존 음원'), T(3, '멘탈 음원'), T(4, '카드 매니 음원')];
-  const show = { id: 'show-1bu-draft', title: '1부 (초안)', version: 5, revision: '', updatedAt: new Date(t0).toISOString(), preShowSetup: '탑햇테이블', people, tracks, parts };
+  const show = { id: 'show-1bu-draft', title: '1부 (초안)', version: SHOW_VER, revision: '', updatedAt: new Date(t0).toISOString(), preShowSetup: '탑햇테이블', people, props,
+    preShowProps: [{ propId: PR.table, at: '무대 중앙' }], tracks, parts };
   renumberLabels(show);
   return show;
 }
@@ -860,6 +925,10 @@ function migrate(raw) {
     }
     return p.id;
   }
+  // v6: 소품 참조 — 모르는 propId 도 지우지 않고 남겨 "(삭제된 소품)" 으로 표시 (사람 참조와 같은 방식). 빈 id 만 버린다
+  const propRef = v => (v == null || v === '' ? null : String(v));
+  const normPropActs = a => (Array.isArray(a) ? a : []).filter(x => x && typeof x === 'object' && propRef(x.propId))
+    .map(x => ({ propId: propRef(x.propId), action: MOVES[x.action] ? x.action : 'in', at: String(x.at || '') }));
   function normCue(c) {
     c = c && typeof c === 'object' ? c : {};
     const dept = DEPTS.includes(c.dept) ? c.dept : 'stage';
@@ -879,7 +948,7 @@ function migrate(raw) {
       const lv = num(s.level);
       out.sound = { track: num(s.track), action: S_ACT.includes(s.action) ? s.action : 'play', timeSec: num(s.timeSec), level: lv == null ? null : Math.round(Math.max(0, Math.min(100, lv))) };
     } else if (dept === 'stage') {
-      out.stage = { text: String((c.stage && c.stage.text) || '') };
+      out.stage = { text: String((c.stage && c.stage.text) || ''), props: normPropActs(c.stage && c.stage.props) };
     } else {
       const k = c.cast || {};
       out.cast = { personId: ensure(k.personId != null ? k.personId : k.name), move: MOVES[k.move] ? k.move : 'in', text: String(k.text || '') };
@@ -929,10 +998,16 @@ function migrate(raw) {
     parts.forEach(p => p.scenes.forEach(s => s.items.forEach(i => i.cues.forEach(c => { if (c.dept === 'sound' && c.sound.track != null) used.add(c.sound.track); }))));
     tracks = Array.from(used).sort((a, b) => a - b).map(no => ({ id: uid('tr'), no, title: '', durationSec: null, fileName: null, fileKey: null, note: '', loop: false }));
   }
+  const props = Array.isArray(src.props) ? src.props.filter(p => p && typeof p === 'object').map(p => ({
+    id: String(p.id || uid('pr')), name: String(p.name || '이름 없음'), note: String(p.note || '')
+  })) : [];
+  // 공연 전 무대 소품: 'in' 으로 간주하므로 action 없이 { propId, at }
+  const preShowProps = (Array.isArray(src.preShowProps) ? src.preShowProps : []).filter(x => x && typeof x === 'object' && propRef(x.propId))
+    .map(x => ({ propId: propRef(x.propId), at: String(x.at || '') }));
   const show = {
-    id: String(src.id || uid('show')), title: String(src.title || '제목 없는 공연'), version: 5,
+    id: String(src.id || uid('show')), title: String(src.title || '제목 없는 공연'), version: SHOW_VER,
     revision: cut(String(src.revision || '').trim(), 40), updatedAt: isNaN(Date.parse(src.updatedAt)) ? null : new Date(src.updatedAt).toISOString(),
-    preShowSetup: String(src.preShowSetup || ''), people, tracks, parts
+    preShowSetup: String(src.preShowSetup || ''), people, props, preShowProps, tracks, parts
   };
   // v3 → v4: 지금 보이는 순서대로 번호를 고정
   if (ver < 4) renumberLabels(show); else assignLabels(show);
@@ -955,6 +1030,8 @@ function validateImport(txt) {
   }
   if (data.people != null && !Array.isArray(data.people)) return { err: 'people 이 배열이 아닙니다.' };
   if (data.tracks != null && !Array.isArray(data.tracks)) return { err: 'tracks 가 배열이 아닙니다.' };
+  if (data.props != null && !Array.isArray(data.props)) return { err: 'props 가 배열이 아닙니다.' };
+  if (data.preShowProps != null && !Array.isArray(data.preShowProps)) return { err: 'preShowProps 가 배열이 아닙니다.' };
   try { return { show: migrate(data), from: data }; } catch (e) { return { err: '변환 중 오류: ' + e.message }; }
 }
 
@@ -971,7 +1048,9 @@ const state = {
   // 6차
   projOpen: false,
   // 7차: 내 대사만 보기(prefs) · 사람 뷰에서 펼친 사람 · 사람 목록에 없는 화자 이름(편집기를 떠날 때 모음)
-  myLines: false, peopleOpen: null, unknown: []
+  myLines: false, peopleOpen: null, unknown: [],
+  // 8차: 무대 상황 뷰에서 고른 시점('pre' | 'scene:<id>' | 문단 id, 세션 메모리만) · 소품 탭에서 펼친 소품
+  stageAt: null, propOpen: null
 };
 const SETUP_DONE = new Set(); // 런: 무대 세팅 체크 (세션 메모리만, 저장 안 함)
 let IDX = null;
@@ -1332,7 +1411,7 @@ function showGone() {
 /* ---- 프로젝트 ---- */
 function blankShow(title) {
   return migrate({
-    id: uid('show'), title: title || '새 공연', version: 5, revision: '', updatedAt: new Date().toISOString(), preShowSetup: '',
+    id: uid('show'), title: title || '새 공연', version: SHOW_VER, revision: '', updatedAt: new Date().toISOString(), preShowSetup: '',
     people: [], tracks: [], parts: [{ id: uid('pt'), name: '1부', scenes: [{ id: uid('s'), type: 'act', title: '', cast: [], durationSec: null, setup: '', items: [], comments: [] }] }]
   });
 }
@@ -1765,9 +1844,10 @@ function buildIndex() {
       seq++;
     });
   });
-  IDX = { entries, byItem, byScene, byPart, runSeq, stopById, people: new Map(state.show.people.map(p => [p.id, p])), cueItems: q };
+  IDX = { entries, byItem, byScene, byPart, runSeq, stopById, people: new Map(state.show.people.map(p => [p.id, p])), props: new Map((state.show.props || []).map(p => [p.id, p])), cueItems: q, stage: null };
 }
 function pname(id) { if (!id) return ''; const p = IDX.people.get(id); return p ? p.name : '(삭제된 사람)'; }
+function propName(id) { if (!id) return ''; const p = IDX.props.get(id); return p ? p.name : '(삭제된 소품)'; }
 // 진행(mc) 씬은 제목이 없으면 "진행" 대신 출연자 이름(없으면 MC)
 function mcLabel(s) { return s.cast.length ? s.cast.map(pname).join(', ') : 'MC'; }
 function sceneTitle(s) { return s.title || (s.type === 'mc' ? mcLabel(s) : '(제목 없음)'); }
@@ -1842,11 +1922,17 @@ function cueSummary(c) {
       return s || (c.status === 'tbd' ? '상세 미정' : '(채널 없음)');
     }
     case 'sound': return soundSummary(c.sound || {});
-    case 'stage': return (c.stage && c.stage.text) || (c.status === 'tbd' ? '상세 미정' : '(내용 없음)');
+    case 'stage': {
+      const x = c.stage || {}, ops = propActsText(x.props);
+      return [x.text, ops].filter(Boolean).join(' · ') || (c.status === 'tbd' ? '상세 미정' : '(내용 없음)');
+    }
     case 'cast': { const x = c.cast || {}; return `${pname(x.personId) || (c.status === 'tbd' ? '(사람 미정)' : '(사람 미지정)')} ${MOVES[x.move] || ''}${x.text ? ` (${x.text})` : ''}`; }
   }
   return '';
 }
+// 소품 동작 요약: in "+탑햇" · out "−컵" · move "→탑햇"
+const PROP_SIGN = { in: '+', out: '−', move: '→' };
+function propActsText(a) { return (a || []).map(x => (PROP_SIGN[x.action] || '') + propName(x.propId)).join(' '); }
 function trigLabel(c) { const a = []; if (c.trigger) a.push(c.trigger); if (c.offsetSec != null) a.push('+' + c.offsetSec + 's'); return a.join(' '); }
 function trigLabels(cues) { return Array.from(new Set(cues.map(trigLabel).filter(Boolean))); }
 function itemRefText(e, n) {
@@ -2642,11 +2728,12 @@ function viewMyLines() {
 }
 
 /* ================= 뷰: 큐시트 ================= */
-function bgmTimeline() {
+function bgmTimeline(after) {
   // 각 Item 시점에 흐르는 BGM. play/fadeIn → 켜짐, fadeOut/stop → 꺼짐, volume → 유지. 종료 큐가 없으면 다음 BGM 큐까지 계속
+  // after: 그 문단의 큐까지 반영한 값 (무대 상황 뷰). 기본은 반영 전 (큐시트 "계속" 표시)
   const at = new Map(); let cur = null;
   IDX.entries.forEach(e => {
-    at.set(e.item.id, cur);
+    if (!after) at.set(e.item.id, cur);
     e.item.cues.forEach(c => {
       if (c.dept !== 'sound') return;
       const s = c.sound || {};
@@ -2654,11 +2741,12 @@ function bgmTimeline() {
       else if (s.action === 'volume') { if (!cur && s.track != null) cur = { no: s.track, since: e }; }
       else cur = null;
     });
+    if (after) at.set(e.item.id, cur);
   });
   return at;
 }
 // 조명 상태: 큐 순서대로 채널별 on/off·dim·색을 이어 계산. 미정 큐·빈 채널은 상태를 바꾸지 않는다
-// 반환: entries 순번 → { text: 그 문단의 큐까지 반영한 상태, changed }
+// 반환: entries 순번 → { text: 그 문단의 큐까지 반영한 상태, changed, st: 채널별 상태 사본 (바뀐 채널은 새 객체) }
 function lightTimeline() {
   const st = {}, out = [];
   IDX.entries.forEach(e => {
@@ -2675,17 +2763,17 @@ function lightTimeline() {
         changed = true;
       });
     });
-    out.push({ text: lightStateText(st), changed });
+    out.push({ text: lightStateText(st), changed, st: Object.assign({}, st) });
   });
   return out;
 }
+function lightChText(s) {
+  if (!s.on) return 'off';
+  if (s.anim) return `anim "${s.anim}"`;
+  return (s.dim != null ? s.dim + '%' : 'on') + (s.color ? ' ' + s.color : '');
+}
 function lightStateText(st) {
-  return CH.filter(ch => st[ch]).map(ch => {
-    const s = st[ch], n = CH_L[ch];
-    if (!s.on) return n + ' off';
-    if (s.anim) return `${n} anim "${s.anim}"`;
-    return n + ' ' + (s.dim != null ? s.dim + '%' : 'on') + (s.color ? ' ' + s.color : '');
-  }).join(' · ');
+  return CH.filter(ch => st[ch]).map(ch => CH_L[ch] + ' ' + lightChText(st[ch])).join(' · ');
 }
 function itemTextHtml(it, cls) {
   const spk = it.kind === 'line' && it.speaker ? `<span class="spk">${esc(pname(it.speaker))}</span>` : '';
@@ -2920,6 +3008,242 @@ function cueCountdown(it, c) {
   startCountdown(c.offsetSec, `${DEPT_L[c.dept]} · ${cueSummary(c)}${c.trigger ? ' — ' + c.trigger : ''} +${c.offsetSec}s`);
 }
 
+/* ================= 뷰: 무대 상황 ================= */
+// 시점 = 공연 전 · 씬 시작 · 큐가 있는 문단. 각 시점에 그 문단의 큐까지 누적한 출연·소품 상태와 소품 연속성 문제를 한 번에 계산한다
+// 출연은 cast 큐(IN/OUT)로만 센다 — 씬 출연(cast[])은 명단이라 상태를 바꾸지 않는다 (점검의 인/아웃 연속성과 같은 기준)
+// 미정 큐도 반영하되 tbd 로 표시. OUT 미정은 "나갔을 수도" 라서 지우지 않고 { on:false, tbd:true } 로 남긴다
+// 반환 { points: [{ kind, id, part, scene, e, lord(조명·BGM 을 볼 entries 순번, 없으면 -1), cast, props, dCast, dProps, texts }], issues: [{ e, prev, text }] }
+function stageStates() {
+  if (IDX.stage) return IDX.stage;
+  const S = state.show, points = [], issues = [];
+  const cast = new Map(), props = new Map(); // personId → { on, tbd, e } · propId → { on, at, tbd, e }
+  let texts = [], lord = -1;
+  const keep = (m, k, v) => { if (v.on || v.tbd) m.set(k, v); else m.delete(k); };
+  const snap = (pt, dCast, dProps) => { points.push(Object.assign(pt, { cast: new Map(cast), props: new Map(props), dCast, dProps, texts: texts.slice(), lord })); };
+  // 소품 동작 하나. e = 문단 항목 (공연 전이면 null). 무대에 없는 소품의 OUT·이동은 상태를 바꾸지 않고 bad 로 표시
+  const propAct = (x, tbd, e, d) => {
+    const pid = x.propId, cur = props.get(pid), on = !!(cur && cur.on), nm = propName(pid), M = MOVES[x.action];
+    if (!IDX.props.has(pid)) issues.push({ e, text: `${nm} ${M} — 소품 목록에 없음` });
+    if (x.action === 'in') {
+      if (on) issues.push({ e, prev: cur.e, text: `${nm} IN 인데 이미 무대에 있음` });
+      props.set(pid, { on: true, at: x.at, tbd, e });
+    } else if (!on) {
+      issues.push({ e, prev: cur && cur.e, text: `${nm} ${M} 인데 무대에 없음` });
+      d.push({ propId: pid, action: x.action, at: x.at, tbd, bad: true });
+      return;
+    } else if (x.action === 'out') keep(props, pid, { on: false, at: cur.at, tbd, e });
+    else props.set(pid, { on: true, at: x.at || cur.at, tbd, e });
+    d.push({ propId: pid, action: x.action, at: x.at, tbd });
+  };
+  const d0 = [];
+  (S.preShowProps || []).forEach(x => propAct({ propId: x.propId, action: 'in', at: x.at }, false, null, d0));
+  snap({ kind: 'pre', id: 'pre' }, [], d0);
+  let n = 0;
+  S.parts.forEach(p => p.scenes.forEach(s => {
+    texts = []; lord = n - 1;
+    snap({ kind: 'scene', id: 'scene:' + s.id, part: p, scene: s }, [], []);
+    s.items.forEach(it => {
+      n++;
+      if (!it.cues.length) return;
+      const e = IDX.byItem.get(it.id), dC = [], dP = [];
+      it.cues.forEach(c => {
+        const tbd = c.status === 'tbd';
+        if (c.dept === 'cast' && c.cast && c.cast.personId) {
+          const pid = c.cast.personId, mv = c.cast.move;
+          if (mv === 'in') cast.set(pid, { on: true, tbd, e });
+          else if (mv === 'out') keep(cast, pid, { on: false, tbd, e });
+          dC.push({ pid, move: mv, tbd });
+        } else if (c.dept === 'stage' && c.stage) {
+          if (c.stage.text) texts.push({ e, text: c.stage.text, tbd });
+          (c.stage.props || []).forEach(x => propAct(x, tbd, e, dP));
+        }
+      });
+      lord = e.ord;
+      snap({ kind: 'item', id: it.id, part: p, scene: s, e }, dC, dP);
+    });
+  }));
+  IDX.stage = { points, issues };
+  return IDX.stage;
+}
+function stagePoint() {
+  const pts = stageStates().points;
+  let i = pts.findIndex(x => x.id === state.stageAt);
+  // 큐가 없어진 문단 → 그 씬 시작으로
+  if (i < 0 && state.stageAt) { const e = IDX.byItem.get(state.stageAt); if (e) i = pts.findIndex(x => x.id === 'scene:' + e.scene.id); }
+  return { pts, i: Math.max(0, i) };
+}
+function stageGo(i) {
+  const { pts } = stagePoint(); if (!pts.length) return;
+  const inList = !!(document.activeElement && document.activeElement.closest && document.activeElement.closest('#sv-list'));
+  i = Math.max(0, Math.min(pts.length - 1, i));
+  state.stageAt = pts[i].id; render(); svScroll(inList);
+}
+// 넓은 화면: 고른 항목이 목록에서 보이게. 좁은 화면(상태 패널이 위)은 스크롤하지 않는다
+function svScroll(focus) {
+  const el = $('#sv-list .sv-i.cur'); if (!el) return;
+  if (focus) el.focus({ preventScroll: true });
+  if (matchMedia('(min-width: 821px)').matches) el.scrollIntoView({ block: 'nearest' });
+}
+function svCueOther(it) {
+  const d = roleDept(), p = rolePerson();
+  if (d) return !it.cues.some(c => c.dept === d);
+  if (p) return !it.cues.some(c => isPersonCue(c, p));
+  return false;
+}
+function svList(pts, i) {
+  let h = '', lastPart = null;
+  pts.forEach((x, k) => {
+    const cur = k === i ? 'cur' : '', a = `type="button" data-act="sv-go" data-pt="${esc(x.id)}" aria-current="${k === i ? 'true' : 'false'}"`;
+    if (x.kind === 'pre') {
+      const n = x.dProps.length;
+      h += `<li><button ${a} class="sv-i pre ${cur}" id="sv-pre"><span class="sv-t">공연 전</span><span class="sv-d">${n ? '소품 ' + n : ''}</span></button></li>`;
+      return;
+    }
+    if (x.part !== lastPart) { h += `<li class="sv-part">${esc(x.part.name)}</li>`; lastPart = x.part; }
+    if (x.kind === 'scene') {
+      const s = x.scene;
+      h += `<li><button ${a} class="sv-i sc ${s.type === 'mc' ? 'mc' : ''} ${cur}"><span class="sv-t">${esc(s.type === 'mc' ? mcNavLabel(s, 0) : sceneTitle(s))}</span><span class="sv-d">${s.type === 'act' ? '액트' : '진행'}</span></button></li>`;
+      return;
+    }
+    const it = x.e.item, tbd = it.cues.some(c => c.status === 'tbd');
+    const depts = DEPTS.filter(d => it.cues.some(c => c.dept === d)).map(d => DEPT_L[d]).join('·');
+    h += `<li><button ${a} class="sv-i q ${svCueOther(it) ? 'other' : ''} ${cur}"><span class="sv-q">${x.e.q ? 'Q' + esc(x.e.q) : '—'}</span><span class="sv-t">${esc(itemRefText(x.e, 40))}</span><span class="sv-d">${depts}${tbd ? ' <span class="red">미정</span>' : ''}</span></button></li>`;
+  });
+  return h;
+}
+function svSec(id, title, n, body) {
+  return `<section class="sv-sec" id="sv-${id}"><h3>${title}${n != null ? `<span class="mono">${n}</span>` : ''}</h3>${body}</section>`;
+}
+function svCast(x) {
+  const pr = rolePerson(), sc = x.scene, rows = [];
+  const dmap = new Map(x.dCast.map(d => [d.pid, d]));
+  const mark = d => d ? (d.move === 'in' ? '방금 IN' : d.move === 'out' ? '방금 OUT' : '이동') : '';
+  const miss = pid => sc && dmap.has(pid) && dmap.get(pid).move !== 'move' && !sc.cast.includes(pid) ? ' <span class="red sm">씬 출연에 없음</span>' : '';
+  let nOn = 0;
+  x.cast.forEach((v, pid) => {
+    const d = dmap.get(pid);
+    if (v.on) nOn++;
+    const st = v.on ? (v.tbd ? '<span class="red">IN 미정</span>' : '') : '<span class="red">OUT 미정</span>';
+    rows.push(`<tr class="${d ? 'chg' : ''} ${v.on ? '' : 'gone'} ${pr === pid ? 'mine' : ''}"><th><span class="sv-n">${esc(pname(pid))}</span></th><td>${st}${miss(pid)}</td><td class="sv-m">${mark(d)}</td></tr>`);
+  });
+  // 이 시점에 확정 OUT 으로 나간 사람 (상태에서는 빠짐) · 무대 밖에서의 이동
+  x.dCast.forEach(d => { if (!x.cast.has(d.pid)) rows.push(`<tr class="chg gone ${pr === d.pid ? 'mine' : ''}"><th><span class="sv-n">${esc(pname(d.pid))}</span></th><td>${miss(d.pid)}</td><td class="sv-m">${mark(d)}</td></tr>`); });
+  let h = rows.length ? `<table class="sv-tab"><tbody>${rows.join('')}</tbody></table>` : '<p class="empty">무대에 아무도 없음</p>';
+  if (sc && sc.cast.length) {
+    const off = sc.cast.filter(pid => !(x.cast.get(pid) || {}).on);
+    h += `<p class="sv-ref"><span class="lbl">씬 출연</span> ${esc(sc.cast.map(pname).join(', '))}${off.length ? ` · 지금 무대 밖 ${esc(off.map(pname).join(', '))}` : ''}</p>`;
+  }
+  return svSec('cast', '무대 위 사람', nOn, h);
+}
+function svProps(x) {
+  const S = state.show, rows = [];
+  const dmap = new Map(); x.dProps.forEach(d => dmap.set(d.propId, d));
+  const mark = d => !d ? '' : d.bad ? `<span class="red">${MOVES[d.action]} — 무대에 없음</span>` : d.action === 'in' ? '+ IN' : d.action === 'out' ? '− OUT' : '이동';
+  let nOn = 0;
+  x.props.forEach((v, pid) => {
+    const d = dmap.get(pid);
+    if (v.on) nOn++;
+    const st = v.tbd ? ` <span class="red sm">${v.on ? '미정' : 'OUT 미정'}</span>` : '';
+    rows.push(`<tr class="${d ? 'chg' : ''} ${v.on ? '' : 'gone'}"><th><span class="sv-n">${esc(propName(pid))}</span></th><td>${esc(v.at) || '<span class="muted">위치 없음</span>'}${st}</td><td class="sv-m">${mark(d)}</td></tr>`);
+  });
+  dmap.forEach((d, pid) => { if (!x.props.has(pid)) rows.push(`<tr class="chg gone"><th><span class="sv-n">${esc(propName(pid))}</span></th><td>${esc(d.at)}</td><td class="sv-m">${mark(d)}</td></tr>`); });
+  let h = rows.length ? `<table class="sv-tab"><tbody>${rows.join('')}</tbody></table>` : `<p class="empty">무대 위 소품 없음${S.props.length ? '' : ' — 소품 탭에서 소품을 등록하고 무대 큐에 IN/OUT 을 적으세요'}</p>`;
+  // 참고: 자유 텍스트 세팅 지시
+  const ref = [];
+  if (S.preShowSetup) ref.push(`<div><span class="lbl">공연 전 세팅</span> ${esc(S.preShowSetup)}</div>`);
+  if (x.scene && x.scene.setup) ref.push(`<div><span class="lbl">씬 세팅</span> ${esc(x.scene.setup)}</div>`);
+  x.texts.forEach(t => ref.push(`<div><span class="lbl">${t.e.q ? 'Q' + esc(t.e.q) : '무대 큐'}</span> ${esc(t.text)}${t.tbd ? ' <span class="red sm">미정</span>' : ''}</div>`));
+  if (ref.length) h += `<div class="sv-ref">${ref.join('')}</div>`;
+  return svSec('props', '무대 소품', nOn, h);
+}
+function svLight(x, lt) {
+  const st = x.lord >= 0 ? lt[x.lord].st : {}, prev = x.kind === 'item' && x.lord > 0 ? lt[x.lord - 1].st : x.kind === 'item' ? {} : st;
+  const rows = CH.map(ch => {
+    const s = st[ch], chg = s !== prev[ch];
+    return `<tr class="${chg ? 'chg' : ''}"><th>${CH_L[ch]}</th><td class="${s && s.on ? '' : 'muted'}">${s ? esc(lightChText(s)) : '—'}</td><td class="sv-m">${chg ? '변경' : ''}</td></tr>`;
+  }).join('');
+  // 미정 조명 큐는 lightTimeline 이 반영하지 않는다 — 가장 최근 조명 큐가 미정이면 실제 상태와 다를 수 있다고 알린다
+  let lastQ = null;
+  for (let k = x.lord; k >= 0 && !lastQ; k--) if (IDX.entries[k].item.cues.some(c => c.dept === 'light')) lastQ = IDX.entries[k];
+  const tbd = lastQ && lastQ.item.cues.some(c => c.dept === 'light' && c.status === 'tbd');
+  return svSec('light', '조명', null, `<table class="sv-tab"><tbody>${rows}</tbody></table>${tbd ? `<p class="sv-ref red">${lastQ.q ? 'Q' + esc(lastQ.q) + ' ' : ''}미정 조명 큐는 반영하지 않음 — 실제 상태와 다를 수 있음</p>` : ''}`);
+}
+function svSound(x, bgm) {
+  const at = k => k >= 0 ? bgm.get(IDX.entries[k].item.id) : null;
+  const b = at(x.lord), pb = x.kind === 'item' ? at(x.lord - 1) : b;
+  let h;
+  if (b) {
+    const t = trackByNo(b.no), now = x.kind === 'item' && b.since === x.e;
+    h = `<table class="sv-tab"><tbody><tr class="${now ? 'chg' : ''}"><th class="mono">BGM ${b.no == null ? '?' : esc(b.no)}</th><td>${t && t.title ? esc(t.title) : '<span class="muted">제목 없음</span>'}${t && t.loop ? ' <span class="muted sm">반복</span>' : ''} <span class="muted sm">${b.since.q ? 'Q' + esc(b.since.q) + ' 부터' : ''}</span></td><td class="sv-m">${now ? '방금 시작' : ''}</td></tr></tbody></table>`;
+  } else h = '<p class="empty">재생 중인 BGM 없음</p>';
+  if (!b && pb) h += `<p class="sv-ref"><span class="lbl">이 큐에서 정지</span> BGM ${esc(pb.no)}</p>`;
+  return svSec('sound', '음향', null, h);
+}
+function viewStage() {
+  const { pts, i } = stagePoint(), x = pts[i];
+  const lt = lightTimeline(), bgm = bgmTimeline(true);
+  let h = `<div class="sec-h sv-top"><h2>무대 상황</h2><span class="note">시점을 고르면 그 큐까지 누적한 무대 · 조명 · 음향 상태<span class="run-keys"> · <kbd>←</kbd> <kbd>→</kbd> 이동</span></span></div>`;
+  // 이전/다음은 상태 패널 머리에 — 넓은 화면에서 패널이 고정이라 목록을 스크롤해도 보인다
+  const nav = `<div class="sv-nav"><span class="mono muted sm" id="sv-pos">${i + 1} / ${pts.length}</span><button type="button" class="btn" id="sv-prev" data-act="sv-prev" ${i === 0 ? 'disabled' : ''}>← 이전</button><button type="button" class="btn" id="sv-next" data-act="sv-next" ${i === pts.length - 1 ? 'disabled' : ''}>다음 →</button></div>`;
+  // 패널 머리: 고른 시점 자체
+  let head;
+  if (x.kind === 'pre') head = `<div class="sv-h"><span class="sv-pos t">공연 전</span><span class="sv-where">공연 시작 때의 무대</span></div>`;
+  else if (x.kind === 'scene') head = `<div class="sv-h"><span class="sv-pos t">씬 시작</span><span class="sv-where">${esc(x.part.name)} › <b>${esc(sceneTitle(x.scene))}</b> <span class="muted">${esc(sceneMetaText(x.scene))}</span></span></div>`;
+  else {
+    const it = x.e.item;
+    head = `<div class="sv-h"><span class="sv-pos">${x.e.q ? 'Q' + esc(x.e.q) : '—'}</span><span class="sv-where">${esc(x.part.name)} › ${esc(sceneTitle(x.scene))}</span></div>
+      ${itemTextHtml(it, 'sv-text')}
+      <table class="sv-cues"><tbody>${it.cues.map(c => `<tr class="${cueMine(c) ? '' : 'other'}"><th><span class="dl">${DEPT_L[c.dept]}</span></th><td>${esc(cueSummary(c))}${trigLabel(c) ? `<div class="rc-trig">↳ ${esc(trigLabel(c))}</div>` : ''}</td><td class="sv-m">${c.status === 'tbd' ? '<span class="red">미정</span> ' : ''}${state.edit ? `<button type="button" class="tb" data-act="cue-edit" data-item="${esc(it.id)}" data-cue="${esc(c.id)}">수정</button>` : ''}</td></tr>`).join('')}</tbody></table>`;
+  }
+  const secs = { cast: () => svCast(x), props: () => svProps(x), light: () => svLight(x, lt), sound: () => svSound(x, bgm) };
+  const order = { light: ['light', 'sound', 'cast', 'props'], sound: ['sound', 'light', 'cast', 'props'], stage: ['props', 'cast', 'light', 'sound'] }[roleDept()] || ['cast', 'props', 'light', 'sound'];
+  h += `<div class="sv"><div class="sv-list-w"><ol class="sv-list" id="sv-list" aria-label="공연 흐름 — 시점 선택">${svList(pts, i)}</ol></div>
+    <section class="sv-panel" id="sv-panel" aria-label="선택한 시점의 무대 상황">${nav}<div class="sv-head" aria-live="polite">${head}</div>${order.map(k => secs[k]()).join('')}</section></div>`;
+  state.curScene = x.scene ? x.scene.id : null; // 내비의 현재 씬 = 고른 시점의 씬 (공연 전이면 없음)
+  return h;
+}
+
+/* ================= 뷰: 소품 ================= */
+function propUses(id) {
+  const out = [];
+  IDX.entries.forEach(e => e.item.cues.forEach(c => { if (c.dept === 'stage' && c.stage && (c.stage.props || []).some(x => x.propId === id)) out.push({ e, c }); }));
+  return out;
+}
+function viewProps() {
+  const S = state.show, ed = state.edit;
+  let h = `<div class="sec-h"><h2>소품</h2><span class="note">${S.props.length}개 · 무대 큐에 소품별 IN/OUT/이동을 적으면 무대 상황 뷰와 점검에 반영됩니다</span>${ed ? '<button type="button" class="btn" id="btn-prop-add" data-act="prop-add">+ 소품</button>' : ''}</div>`;
+  if (!S.props.length) h += '<p class="empty">등록된 소품이 없습니다.</p>';
+  else {
+    h += `<div class="table-wrap"><table class="ltable pr-table"><thead><tr><th>이름</th><th>메모</th><th class="n">큐</th><th>공연 전</th>${ed ? '<th></th>' : ''}</tr></thead><tbody>`;
+    S.props.forEach(p => {
+      const id = esc(p.id), uses = propUses(p.id), pre = S.preShowProps.find(x => x.propId === p.id), open = state.propOpen === p.id && uses.length;
+      h += `<tr id="prop-${id}">
+        <td>${ed ? `<input type="text" id="prn-${id}" value="${esc(p.name)}" data-act="prop-field" data-k="name" data-prop="${id}" aria-label="이름">` : `<span class="pp-name">${esc(p.name)}</span>`}</td>
+        <td>${ed ? `<input type="text" id="prm-${id}" value="${esc(p.note)}" data-act="prop-field" data-k="note" data-prop="${id}" aria-label="메모">` : esc(p.note)}</td>
+        <td class="n">${uses.length ? `<button type="button" class="tb mono" id="pru-${id}" data-act="prop-uses" data-prop="${id}" aria-expanded="${!!open}" title="쓰는 큐 ${open ? '접기' : '펼치기'}">${uses.length} ${open ? '▴' : '▾'}</button>` : '<span class="muted">0</span>'}</td>
+        <td>${pre ? esc(pre.at || '무대') : '<span class="muted">—</span>'}</td>
+        ${ed ? `<td style="white-space:nowrap"><button type="button" class="tb red" id="prd-${id}" data-act="prop-del" data-prop="${id}" data-confirm="정말 삭제?">삭제</button></td>` : ''}</tr>`;
+      if (open) h += `<tr class="tr-uses"><td colspan="${ed ? 5 : 4}">${uses.map(u => `<button type="button" class="ref-link" data-act="comment-goto" data-item="${esc(u.e.item.id)}">${u.e.q ? 'Q' + esc(u.e.q) + ' · ' : ''}${esc(sceneTitle(u.e.scene))} — ${esc(cueSummary(u.c))}</button>`).join('')}</td></tr>`;
+    });
+    h += '</tbody></table></div>';
+  }
+  // 공연 전 무대: 공연 시작 때 이미 놓여 있는 소품 (IN 으로 셈)
+  h += `<div class="sec-h" id="pre-props"><h2>공연 전 무대</h2><span class="note">공연 시작 때 이미 무대에 있는 소품 — IN 으로 셉니다</span>${ed ? `<button type="button" class="btn" id="btn-pre-prop-add" data-act="pre-prop-add" ${S.props.length ? '' : 'disabled'}>+ 공연 전 소품</button>` : ''}</div>`;
+  if (S.preShowSetup) h += `<p class="note pre-txt">세팅 지시 (자유 텍스트) · ${esc(S.preShowSetup)}</p>`;
+  if (!S.preShowProps.length) h += `<p class="empty">공연 전 무대에 둔 소품이 없습니다.${S.props.length ? '' : ' 소품을 먼저 추가하세요.'}</p>`;
+  else {
+    h += `<div class="table-wrap"><table class="ltable pr-table"><thead><tr><th>소품</th><th>위치</th>${ed ? '<th></th>' : ''}</tr></thead><tbody>`;
+    S.preShowProps.forEach((x, i) => {
+      const known = IDX.props.has(x.propId);
+      h += `<tr id="pre-prop-${i}"><td>${ed ? `<select id="pp-prop-${i}" data-act="pre-prop" data-i="${i}" data-k="propId" aria-label="소품">${known ? '' : `<option value="${esc(x.propId)}" selected>(삭제된 소품)</option>`}${S.props.map(p => `<option value="${esc(p.id)}" ${p.id === x.propId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>` : `<span class="${known ? '' : 'red'}">${esc(propName(x.propId))}</span>`}</td>
+        <td>${ed ? `<input type="text" id="pp-at-${i}" value="${esc(x.at)}" data-act="pre-prop" data-i="${i}" data-k="at" placeholder="예: 무대 중앙" aria-label="위치">` : esc(x.at)}</td>
+        ${ed ? `<td style="white-space:nowrap"><button type="button" class="tb red" id="pp-del-${i}" data-act="pre-prop-del" data-i="${i}">삭제</button></td>` : ''}</tr>`;
+    });
+    h += '</tbody></table></div>';
+  }
+  return h;
+}
+
 /* ================= 뷰: 점검 ================= */
 // 공연 전에 한 번에 봐야 하는 문제들. 각 항목은 { item | scene | track, text }
 function checkIssues() {
@@ -2929,6 +3253,7 @@ function checkIssues() {
     { k: 'light', t: '채널이 비어 있는 확정 조명 큐', note: '확정인데 채널·애니메이션이 없습니다.' },
     { k: 'sound', t: '음원', note: '' },
     { k: 'cast', t: '인/아웃 연속성', note: '같은 사람의 IN 다음 IN, OUT 다음 OUT, 씬 출연에 없는 사람의 IN/OUT 큐.' },
+    { k: 'props', t: '소품 연속성', note: '이미 무대에 있는 소품을 또 IN, 무대에 없는 소품을 OUT·이동, 소품 목록에 없는 소품. 공연 전 무대 소품에서 시작해 무대 큐 순서대로 셉니다.' },
     { k: 'empty', t: '문단 없는 액트 씬', note: '코멘트·큐를 달 문단이 없습니다.' },
     { k: 'cmt', t: '미해결 코멘트', note: '' }
   ];
@@ -2963,6 +3288,10 @@ function checkIssues() {
     at('sound').push({ item: uses.length ? uses[0].e.item.id : null, track: t.id, text: `BGM ${t.no == null ? '?' : t.no}${t.title ? ' ' + t.title : ''} — 파일 없음${uses.length ? ' · 큐 ' + uses.length + '개' : ' · 쓰는 큐 없음'}` });
   });
   at('sound').push(...missing);
+  // 소품: 무대 상황 뷰와 같은 누적 계산(stageStates)에서 나온 문제
+  stageStates().issues.forEach(x => at('props').push(x.e
+    ? { item: x.e.item.id, text: `${ref(x.e)} — ${x.text}${x.prev ? ` (앞: ${ref(x.prev)})` : ''}` }
+    : { pv: true, text: `공연 전 무대 — ${x.text}` }));
   state.show.parts.forEach(p => p.scenes.forEach(sc => { if (sc.type === 'act' && !sc.items.length) at('empty').push({ scene: sc.id, text: `${sceneTitle(sc)} — ${p.name}` }); }));
   return { groups: G, total: G.reduce((n, g) => n + g.list.length, 0) };
 }
@@ -2974,7 +3303,7 @@ function viewCheck() {
     h += `<section class="ck-g" id="ck-${g.k}"><h3>${esc(g.t)}<span class="n ${g.list.length ? '' : 'zero'}">${g.list.length ? g.list.length : '없음'}</span></h3>`;
     if (g.list.length) {
       if (g.note) h += `<p class="note">${esc(g.note)}</p>`;
-      h += `<ol>${g.list.map(x => `<li class="${x.fix ? 'fix' : ''}"><button type="button" class="ref-link ck-i" data-act="check-goto" ${x.item ? `data-item="${esc(x.item)}"` : ''} ${x.scene ? `data-scene="${esc(x.scene)}"` : ''} ${x.sp ? 'data-sp="1"' : ''} ${x.track ? `data-track="${esc(x.track)}"` : ''}>${esc(x.text)}</button>${x.fix && state.edit ? `<button type="button" class="tb ck-fix" data-act="cast-add" data-scene="${esc(x.fix.scene)}" data-person="${esc(x.fix.person)}">출연에 추가</button>` : ''}</li>`).join('')}</ol>`;
+      h += `<ol>${g.list.map(x => `<li class="${x.fix ? 'fix' : ''}"><button type="button" class="ref-link ck-i" data-act="check-goto" ${x.item ? `data-item="${esc(x.item)}"` : ''} ${x.scene ? `data-scene="${esc(x.scene)}"` : ''} ${x.sp ? 'data-sp="1"' : ''} ${x.pv ? 'data-pv="1"' : ''} ${x.track ? `data-track="${esc(x.track)}"` : ''}>${esc(x.text)}</button>${x.fix && state.edit ? `<button type="button" class="tb ck-fix" data-act="cast-add" data-scene="${esc(x.fix.scene)}" data-person="${esc(x.fix.person)}">출연에 추가</button>` : ''}</li>`).join('')}</ol>`;
     }
     h += '</section>';
   });
@@ -3267,7 +3596,7 @@ function render() {
     renderTop();
     refreshScript();
   } else {
-    const fn = { script: viewScript, cuesheet: viewCuesheet, run: viewRun, people: viewPeople, tracks: viewTracks, check: viewCheck, mylines: viewMyLines }[vk];
+    const fn = { script: viewScript, cuesheet: viewCuesheet, run: viewRun, stage: viewStage, people: viewPeople, props: viewProps, tracks: viewTracks, check: viewCheck, mylines: viewMyLines }[vk];
     view.innerHTML = fn();
     mountedView = vk;
     renderTop();
@@ -3286,7 +3615,7 @@ function render() {
       if (sc && state.view !== 'run') sc.scrollIntoView({ block: 'start' }); else main.scrollTop = 0;
     }
   }
-  if (state.view !== 'run') spy();
+  if (state.view !== 'run' && state.view !== 'stage') spy(); // 두 뷰는 고른 위치로 현재 씬을 정한다
 }
 function spy() {
   const main = $('#main');
@@ -3322,7 +3651,7 @@ function blankCue() {
     id: uid('q'), dept: roleDept() || 'light', trigger: '', offsetSec: null, memo: '', status: 'set',
     light: { channels: [{ ch: 'front', action: 'on', dim: null, color: null, colorName: null, timeSec: null }], anim: '' },
     sound: { track: state.show.tracks.length ? state.show.tracks[0].no : 1, action: 'play', timeSec: null, level: null },
-    stage: { text: '' },
+    stage: { text: '', props: [] },
     cast: { personId: firstPerf ? firstPerf.id : null, move: 'in', text: '' }
   };
 }
@@ -3332,6 +3661,7 @@ function openCueModal(itemId, cueId, extra) {
   if (cueId) {
     const c = e.item.cues.find(x => x.id === cueId); if (!c) return;
     Object.assign(draft, clone(c));
+    if (!Array.isArray(draft.stage.props)) draft.stage.props = [];
   } else if (rolePerson()) { draft.dept = 'cast'; draft.cast.personId = rolePerson(); }
   state.modal = Object.assign({ type: 'cue', itemId, cueId: cueId || null, draft, err: '' }, extra || {});
   renderModal(true);
@@ -3379,6 +3709,20 @@ function cueModalBody() {
     }
   } else if (d.dept === 'stage') {
     h += `<div class="field"><label for="stage-text">무대 보조 내용</label><input type="text" id="stage-text" data-f="stage.text" value="${esc(d.stage.text)}" placeholder="예: 탑햇테이블에 탑햇 세팅"></div>`;
+    // v6: 소품 동작 행 (조명 채널 행과 같은 모양) — 무대 상황 뷰·점검의 소품 연속성에 쓰인다
+    const PS = state.show.props;
+    h += '<div class="field"><span class="lbl">소품 동작</span><div class="ch-rows" id="m-pr-rows">';
+    d.stage.props.forEach((x, i) => {
+      const known = !x.propId || IDX.props.has(x.propId);
+      h += `<div class="ch-row pr-row" data-i="${i}">
+        <div class="field"><label for="pr-prop-${i}">소품</label><select id="pr-prop-${i}" data-f="pr" data-i="${i}" data-k="propId"><option value="">(선택)</option>${known ? '' : `<option value="${esc(x.propId)}" selected>(삭제된 소품)</option>`}${PS.map(p => `<option value="${esc(p.id)}" ${p.id === x.propId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></div>
+        <div class="field"><label for="pr-act-${i}">동작</label><select id="pr-act-${i}" data-f="pr" data-i="${i}" data-k="action">${opts(Object.keys(MOVES), x.action, MOVES)}</select></div>
+        <div class="field wide"><label for="pr-at-${i}">위치</label><input type="text" id="pr-at-${i}" data-f="pr" data-i="${i}" data-k="at" value="${esc(x.at)}" placeholder="예: 탑햇테이블 위"></div>
+        <div class="field"><button type="button" class="tb red" id="pr-del-${i}" data-act="m-pr-del" data-i="${i}">소품 행 삭제</button></div>
+      </div>`;
+    });
+    if (!d.stage.props.length) h += `<p class="note pr-none">${PS.length ? '소품 동작 없음 — 소품이 들어오고 나가는 큐면 행을 추가하세요' : '등록된 소품이 없습니다 — 소품 탭에서 먼저 추가하세요'}</p>`;
+    h += `</div><div style="padding-top:6px"><button type="button" class="tb" id="m-pr-add" data-act="m-pr-add" ${PS.length ? '' : 'disabled'}>+ 소품 행</button></div></div>`;
   } else {
     h += `<div class="grid3">
       <div class="field"><label for="cast-person">사람</label><select id="cast-person" data-f="cast.personId"><option value="">(선택)</option>${state.show.people.map(p => `<option value="${esc(p.id)}" ${p.id === d.cast.personId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></div>
@@ -3428,7 +3772,7 @@ function renderModal(focusFirst) {
     title = 'JSON 가져오기';
     body = `<div class="field"><label for="import-file">파일 선택</label><input type="file" id="import-file" accept=".json,application/json" data-act="import-file"></div>
       <div class="field"><label for="import-text">또는 붙여넣기</label><textarea id="import-text" class="code" placeholder='{"title": "...", "parts": [...]}'>${esc(m.text || '')}</textarea></div>
-      <p class="note">${Store.mode === 'server' ? '덮어쓰기는 지금 프로젝트를 대체합니다(이 프로젝트를 여는 모든 기기에 반영). 새 프로젝트로 가져오면 지금 프로젝트는 그대로입니다.' : '현재 데이터를 대체합니다.'} 이전 형식(v1~v4)은 자동 변환합니다.</p>
+      <p class="note">${Store.mode === 'server' ? '덮어쓰기는 지금 프로젝트를 대체합니다(이 프로젝트를 여는 모든 기기에 반영). 새 프로젝트로 가져오면 지금 프로젝트는 그대로입니다.' : '현재 데이터를 대체합니다.'} 이전 형식(v1~v5)은 자동 변환합니다.</p>
       ${m.err ? `<p class="err" role="alert">${esc(m.err)}</p>` : ''}${m.warn ? `<p class="err" role="alert" id="import-warn">${esc(m.warn)}</p>` : ''}`;
     foot = Store.mode === 'server'
       ? `<button type="button" class="btn" data-act="modal-close">취소</button><button type="button" class="btn" id="btn-import-new" data-act="import-do" data-mode="new">새 프로젝트로 가져오기</button><button type="button" class="btn ${m.warn ? 'armed' : 'strong'}" id="btn-import-do" data-act="import-do" data-mode="over">${m.warn ? '그래도 덮어쓰기' : '현재 프로젝트에 덮어쓰기'}</button>`
@@ -3441,6 +3785,13 @@ function renderModal(focusFirst) {
       <div class="field"><label for="person-note">메모</label><input type="text" id="person-note" data-f="p.note" value="${esc(d.note)}"></div>
       ${m.err ? `<p class="err" role="alert">${esc(m.err)}</p>` : ''}`;
     foot = '<button type="button" class="btn" data-act="modal-close">취소</button><button type="button" class="btn strong" id="btn-person-save" data-act="person-save">추가</button>';
+  } else if (m.type === 'prop') {
+    title = '소품 추가';
+    const d = m.draft;
+    body = `<div class="field"><label for="prop-name">이름</label><input type="text" id="prop-name" data-f="pr.name" value="${esc(d.name)}" placeholder="예: 탑햇"></div>
+      <div class="field"><label for="prop-note">메모</label><input type="text" id="prop-note" data-f="pr.note" value="${esc(d.note)}"></div>
+      ${m.err ? `<p class="err" role="alert">${esc(m.err)}</p>` : ''}`;
+    foot = '<button type="button" class="btn" data-act="modal-close">취소</button><button type="button" class="btn strong" id="btn-prop-save" data-act="prop-save">추가</button>';
   }
   root.innerHTML = `<div class="overlay"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <div class="modal-h"><h2 id="modal-title">${title}</h2><button type="button" class="tb" data-act="modal-close" aria-label="닫기">닫기</button></div>
@@ -3474,6 +3825,9 @@ function modalField(t) {
   else if (f === 'sound.levelr') { d.sound.level = Math.round(Number(v)); const n = $('#snd-level'); if (n) n.value = d.sound.level; }
   else if (f === 'sound.timeSec') d.sound.timeSec = num(v);
   else if (f === 'stage.text') d.stage.text = v;
+  else if (f === 'pr') { const x = d.stage.props[Number(t.dataset.i)], k = t.dataset.k; if (x && (k === 'propId' || k === 'action' || k === 'at')) x[k] = v; }
+  else if (f === 'pr.name') d.name = v;
+  else if (f === 'pr.note') d.note = v;
   else if (f === 'cast.personId') d.cast.personId = v || null;
   else if (f === 'cast.move') d.cast.move = v;
   else if (f === 'cast.text') d.cast.text = v;
@@ -3500,7 +3854,8 @@ function saveCue() {
   if (!tbd) {
     if (d.dept === 'light' && !d.light.channels.length && !d.light.anim.trim()) err = '조명 채널을 하나 이상 추가하거나 애니메이션을 입력하세요 (아직 모르면 상태를 "미정"으로).';
     if (d.dept === 'sound' && d.sound.track == null) err = 'BGM 트랙 번호를 입력하세요.';
-    if (d.dept === 'stage' && !d.stage.text.trim()) err = '무대 보조 내용을 입력하세요.';
+    if (d.dept === 'stage' && !d.stage.text.trim() && !d.stage.props.some(x => x.propId)) err = '무대 보조 내용이나 소품 동작을 하나 이상 입력하세요.';
+    else if (d.dept === 'stage' && d.stage.props.some(x => !x.propId)) err = '소품 행에서 소품을 고르거나 그 행을 삭제하세요.';
     if (d.dept === 'cast' && !d.cast.personId) err = '사람을 선택하세요.';
   }
   if (err) { m.err = err; renderModal(); return; }
@@ -3511,7 +3866,7 @@ function saveCue() {
     // level 은 volume(기본 100)·fadeIn(선택)에서만 저장
     cue.sound = { track: x.track, action: x.action, timeSec: x.timeSec, level: x.action === 'volume' ? (x.level == null ? 100 : x.level) : x.action === 'fadeIn' && x.level != null ? x.level : null };
   }
-  else if (d.dept === 'stage') cue.stage = { text: d.stage.text.trim() };
+  else if (d.dept === 'stage') cue.stage = { text: d.stage.text.trim(), props: d.stage.props.filter(x => x.propId).map(x => ({ propId: x.propId, action: MOVES[x.action] ? x.action : 'in', at: String(x.at || '').trim() })) };
   else cue.cast = { personId: d.cast.personId, move: d.cast.move, text: d.cast.text.trim() };
   if (m.newItem) {
     let t = (m.itemText || '').trim() || '(동작)';
@@ -3538,7 +3893,8 @@ function setView(v) {
 }
 function gotoScene(id) {
   state.navOpen = false;
-  if (state.view === 'people' || state.view === 'tracks' || state.view === 'check') setView('script');
+  if (state.view === 'people' || state.view === 'props' || state.view === 'tracks' || state.view === 'check') setView('script');
+  if (state.view === 'stage') { if (IDX.byScene.has(id)) state.stageAt = 'scene:' + id; render(); svScroll(); return; }
   if (state.view === 'run') {
     if (IDX.byScene.has(id)) state.runItemId = 'scene:' + id; // 씬 시작 지점은 "내 큐만" 에서도 목록에 있다
     savePrefs(); render(); return;
@@ -3553,7 +3909,7 @@ function gotoScene(id) {
 function gotoItem(id, focus) {
   const e = IDX.byItem.get(id); if (!e) return;
   state.selItem = id; state.curScene = e.scene.id;
-  if (state.view === 'run' || state.view === 'people' || state.view === 'tracks' || state.view === 'check' || (state.view === 'cuesheet' && !e.item.cues.length)) setView('script');
+  if (state.view === 'run' || state.view === 'stage' || state.view === 'people' || state.view === 'props' || state.view === 'tracks' || state.view === 'check' || (state.view === 'cuesheet' && !e.item.cues.length)) setView('script');
   // 내 대사만 보기에 없는 문단이면 보기를 끈다
   const pid = rolePerson();
   if (myLinesOn() && !isMyLine(e.item, pid) && !myCastCues(e.item, pid).length) { state.myLines = false; savePrefs(); toast('내 대사만 보기를 껐습니다 — 다른 사람 문단입니다'); }
@@ -3779,6 +4135,7 @@ function act(a, el) {
     case 'check-goto': {
       if (el.dataset.item && IDX.byItem.has(el.dataset.item)) { gotoItem(el.dataset.item); openItem(el.dataset.item); }
       else if (el.dataset.scene) { gotoScene(el.dataset.scene); if (el.dataset.sp) act('scene-cmts', el); }
+      else if (el.dataset.pv) { setView('props'); render(); const s = document.getElementById('pre-props'); if (s) s.scrollIntoView({ block: 'start' }); }
       else if (el.dataset.track) { setView('tracks'); render(); const r = document.getElementById('track-' + el.dataset.track); if (r) r.scrollIntoView({ block: 'center' }); }
       break;
     }
@@ -3875,6 +4232,41 @@ function act(a, el) {
       closeModal(true); mountedView = null; commit(); toast(`${name} 추가됨`); break;
     }
     case 'modal-close': closeModal(false); break;
+    // ---- 8차: 소품 · 무대 상황
+    case 'prop-add': state.modal = { type: 'prop', draft: { name: '', note: '' }, err: '' }; renderModal(true); break;
+    case 'prop-save': {
+      const m = state.modal, name = m.draft.name.trim();
+      if (!name) { m.err = '이름을 입력하세요.'; renderModal(); break; }
+      S.props.push({ id: uid('pr'), name, note: m.draft.note.trim() });
+      closeModal(true); commit(); toast(`${name} 추가됨`); break;
+    }
+    case 'prop-del': {
+      const id = el.dataset.prop;
+      S.props = S.props.filter(p => p.id !== id);
+      S.preShowProps = S.preShowProps.filter(x => x.propId !== id);
+      if (state.propOpen === id) state.propOpen = null;
+      commit(); toast('삭제했습니다 — 무대 큐의 참조는 "(삭제된 소품)" 으로 표시됩니다'); break;
+    }
+    case 'prop-uses': state.propOpen = state.propOpen === el.dataset.prop ? null : el.dataset.prop; render(); break;
+    case 'pre-prop-add': {
+      if (!S.props.length) break;
+      const used = S.preShowProps.map(x => x.propId), p = S.props.find(x => !used.includes(x.id)) || S.props[0];
+      S.preShowProps.push({ propId: p.id, at: '' }); commit();
+      const f = document.getElementById('pp-at-' + (S.preShowProps.length - 1)); if (f) f.focus();
+      break;
+    }
+    case 'pre-prop-del': S.preShowProps.splice(Number(el.dataset.i), 1); commit(); break;
+    case 'sv-go': { const pts = stagePoint().pts, k = pts.findIndex(x => x.id === el.dataset.pt); if (k >= 0) stageGo(k); break; }
+    case 'sv-prev': stageGo(stagePoint().i - 1); break;
+    case 'sv-next': stageGo(stagePoint().i + 1); break;
+    case 'm-pr-add': {
+      const ps = state.modal.draft.stage.props, used = ps.map(x => x.propId);
+      const p = S.props.find(x => !used.includes(x.id)) || S.props[0];
+      ps.push({ propId: p ? p.id : '', action: 'in', at: '' }); state.modal.err = ''; renderModal();
+      const f = document.getElementById('pr-prop-' + (ps.length - 1)); if (f) f.focus();
+      break;
+    }
+    case 'm-pr-del': state.modal.draft.stage.props.splice(Number(el.dataset.i), 1); renderModal(); break;
     case 'track-play': {
       const t = S.tracks.find(x => x.id === el.dataset.track); if (!t) break;
       const au = audioEl();
@@ -4061,6 +4453,18 @@ document.addEventListener('change', ev => {
   else if (a === 'setup-done') { const k = t.dataset.key; if (t.checked) SETUP_DONE.add(k); else SETUP_DONE.delete(k); const w = t.closest('.rs-setup'); if (w) w.classList.toggle('done', t.checked); }
   else if (a === 'filter-unresolved') { state.unresolvedOnly = t.checked; renderPanel(); }
   else if (a === 'author') { state.author = t.value.trim(); savePrefs(); }
+  else if (a === 'prop-field') {
+    const p = state.show.props.find(x => x.id === t.dataset.prop); if (!p) return;
+    if (t.dataset.k === 'name') p.name = t.value.trim() || p.name;
+    else if (t.dataset.k === 'note') p.note = t.value.trim();
+    commit();
+  }
+  else if (a === 'pre-prop') {
+    const x = state.show.preShowProps[Number(t.dataset.i)]; if (!x) return;
+    if (t.dataset.k === 'propId' && t.value) x.propId = t.value;
+    else if (t.dataset.k === 'at') x.at = t.value.trim();
+    commit();
+  }
   else if (a === 'person-field') {
     const p = state.show.people.find(x => x.id === t.dataset.person); if (!p) return;
     const k = t.dataset.k;
@@ -4243,6 +4647,13 @@ document.addEventListener('keydown', ev => {
     if (state.panel && innerWidth <= 1100) { state.panel = false; savePrefs(); renderTop(); renderPanel(); return; }
     return;
   }
+  // 무대 상황: ←/→ (↑/↓) 로 시점 이동
+  if (state.view === 'stage' && !state.modal && !mod && !ev.altKey && !(t.matches && t.matches('input, textarea, select, [contenteditable="true"]'))) {
+    const k = ev.key;
+    if (k === 'ArrowDown' || k === 'ArrowRight') { ev.preventDefault(); act('sv-next'); }
+    else if (k === 'ArrowUp' || k === 'ArrowLeft') { ev.preventDefault(); act('sv-prev'); }
+    return;
+  }
   if (state.view === 'run' && !state.modal && !(t.matches && t.matches('input, textarea, select, [contenteditable="true"]'))) {
     const k = ev.key;
     if (mod || ev.altKey) return;
@@ -4275,7 +4686,7 @@ document.addEventListener('keydown', ev => {
 let spyRaf = 0;
 $('#main').addEventListener('scroll', () => {
   if (spkOpenNow()) spkPlace();
-  if (state.view === 'run' || spyRaf) return;
+  if (state.view === 'run' || state.view === 'stage' || spyRaf) return;
   spyRaf = requestAnimationFrame(() => { spyRaf = 0; spy(); });
 }, { passive: true });
 window.addEventListener('hashchange', () => {
