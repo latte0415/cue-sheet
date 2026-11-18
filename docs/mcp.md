@@ -74,7 +74,7 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
 일부만 반영된 상태가 저장된다. ops 배열이면 "문단 넣고 → 큐 달고 → 트랙 번호 바꾸기" 가 한 번의 원자적 저장이 되고(하나라도
 틀리면 아무것도 안 바뀜), 저장 기록도 한 칸만 쓴다. 에이전트는 `get_show` 개요에서 id 를 보고 바로 op 를 만든다.
 
-**개요는 싸게.** `cues/backstage-part1.json`(85문단·36큐) 기준 JSON 전체가 약 20,000자, 개요는 약 5,300자.
+**개요는 싸게.** `cues/backstage-part1.json`(82문단·37큐) 기준 JSON 전체가 약 20,500자, 개요는 약 5,500자.
 씬 하나만 보려면 `sceneId` 로 더 줄인다. 모든 필드가 필요할 때만 `view:"full"`.
 
 ### ops
@@ -101,8 +101,11 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
 - **얕은 합치기.** 큐의 `light`·`sound`·`stage`·`cast` 객체는 한 단계만 합친다: `{ sound: { level: 80 } }` 은 track·action·timeSec 을
   그대로 두고 level 만 바꾼다. 배열(`light.channels`, `scene.cast`)은 통째로 바뀐다. 채널의 빠진 필드는 기본값
   (`ch:"front", action:"on"`, 나머지 null). `dept` 를 바꾸면 이전 부서 내용은 버리고 새 부서 기본값에서 시작한다.
-- **브라우저와 같은 정리.** action 문단은 화자를 지우고 본문이 `(`·`*` 로 시작하지 않으면 괄호를 씌운다(경고).
-  `data.kind` 없이 본문이 `(` 로 시작하면 action. 음향 `level` 은 `volume`(없으면 100)·`fadeIn` 에서만 남긴다(index.html `saveCue`).
+- **브라우저와 같은 정리.** action 문단은 화자를 지우고, 본문 첫 줄이 지문 머리(`(` `*` `—` 등, index.html `isActHead`)로
+  시작하지 않으면 괄호를 씌운다(경고). `data.kind` 없이 본문 첫 줄이 `(` 로 시작하면 action.
+- **표기 규칙** (`docs/cue-format.md` "표기 규칙"). 지문은 `(…)` 괄호 한 쌍 — `*`·`—` 시작, `)` 로 안 끝남, 괄호 안 괄호는
+  편집기처럼 저장은 하되 `validateShow` 의 `action-format` 경고가 edit_show 결과에 나온다(op 가 새로 만든 경고만). 서버가 `*` 를
+  괄호로 바꾸는 등 자동 고침은 하지 않는다 — 브라우저 편집기도 받는 값이고, 뜻을 바꾸지 않게 에이전트가 고치게 둔다. 음향 `level` 은 `volume`(없으면 100)·`fadeIn` 에서만 남긴다(index.html `saveCue`).
   `#rrggbb` 가 아닌 색은 `colorName` 으로 옮긴다(migrate). 큐가 바뀐 문단의 `isCue` 는 큐 유무를 따른다.
   내용 없는 큐(채널 없는 조명, 트랙 없는 음향 …)는 저장하되 "채우거나 `status:"tbd"`" 경고.
 - **새 항목.** id 는 브라우저 `uid()` 와 같은 접두어(`pt-` `s-` `i-` `q-` `c-` `p-` `tr-`)로 만든다. 같은 호출의 뒤 op 에서

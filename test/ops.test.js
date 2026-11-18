@@ -160,14 +160,16 @@ test('원자성: 뒤 op 가 실패하면 앞 op 도 반영되지 않는다 (검�
 
 test('트랙 no 를 바꾸면 그 트랙을 쓰는 음향 큐도 함께 바뀌고 트랙은 번호순', () => {
   const s = backstage();
-  const uses = items(s).flatMap(i => i.cues).filter(c => c.dept === 'sound' && c.sound.track === 3).length;
-  assert.ok(uses > 0);
-  const r = applyOps(s, [{ op: 'set', id: 'tr-3', fields: { no: 30 } }]);
+  const sound = items(s).flatMap(i => i.cues).filter(c => c.dept === 'sound');
+  const tr = s.tracks.find(t => sound.some(c => c.sound.track === t.no)); // 음향 큐가 쓰는 트랙 하나 (픽스처에서 고름)
+  const uses = sound.filter(c => c.sound.track === tr.no).length;
+  const to = Math.max(...s.tracks.map(t => t.no)) + 30;
+  const r = applyOps(s, [{ op: 'set', id: tr.id, fields: { no: to } }]);
   const all = items(r.show).flatMap(i => i.cues).filter(c => c.dept === 'sound');
-  assert.equal(all.filter(c => c.sound.track === 30).length, uses);
-  assert.equal(all.filter(c => c.sound.track === 3).length, 0);
-  assert.deepEqual(r.show.tracks.map(t => t.no), [1, 2, 4, 5, 6, 7, 30]);
-  assert.ok(r.changes.some(c => new RegExp(`BGM 3 → 30, ${uses} sound cue`).test(c.text)));
+  assert.equal(all.filter(c => c.sound.track === to).length, uses);
+  assert.equal(all.filter(c => c.sound.track === tr.no).length, 0);
+  assert.deepEqual(r.show.tracks.map(t => t.no), s.tracks.map(t => t.no).filter(n => n !== tr.no).sort((a, b) => a - b).concat(to));
+  assert.ok(r.changes.some(c => new RegExp(`BGM ${tr.no} → ${to}, ${uses} sound cue`).test(c.text)));
   assert.deepEqual(r.warnings, []);
 });
 
@@ -212,8 +214,8 @@ test('move: 순서 바꾸기, 다른 부모로, 큐를 다른 문단으로', () 
   assert.equal(r.show.parts[0].scenes[2].items[0].id, it.id);
   assert.equal(r.show.parts[0].scenes[2].items[0].label, it.label);
   // 큐를 큐 없는 문단으로 → 그 문단에 사이 번호, 원래 문단은 isCue false
-  const plainItem = sc[3].items.find(i => !i.cues.length);
   const src = items(s).find(i => i.cues.length === 1);
+  const plainItem = items(s).find(i => !i.cues.length && i.label == null);
   r = applyOps(s, [{ op: 'move', id: src.cues[0].id, parent: plainItem.id }]);
   const moved = find(r.show, plainItem.id);
   assert.equal(moved.cues.length, 1); assert.equal(moved.isCue, true); assert.match(moved.label, /^\d+\.1$/);
@@ -235,16 +237,37 @@ test('이미 있던 오류는 막지 않는다 (사이트에서 사람을 지워
 
 test('큰 공연(backstage-part1) 전체에 여러 op — 결과 검증 통과, 경고 없음', () => {
   const s = backstage();
-  const sc = s.parts[0].scenes;
+  // 픽스처에서 고른다: 번호 붙은 큐 문단(뒤에도 번호 붙은 문단이 있는 것) 하나와, 화자 있는 대사 하나
+  const all = s.parts.flatMap(p => p.scenes.flatMap(sc => sc.items.map(it => ({ sc, it }))));
+  const labeled = all.filter(x => x.it.label != null && x.it.cues.length);
+  const at = labeled[0];
+  const line = all.find(x => x.it.kind === 'line' && x.it.speaker);
   const r = applyOps(s, [
-    { op: 'add', kind: 'item', parent: sc[4].id, after: sc[4].items[0].id, data: { text: '(테이블 세팅)', cues: [{ dept: 'stage', stage: { text: '테이블' } }] } },
-    { op: 'set', id: sc[4].items[1].id, fields: { text: sc[4].items[1].text + '!' } },
-    { op: 'add', kind: 'comment', parent: sc[4].id, data: { author: '연출', text: '전환 시간 확인' } }
+    { op: 'add', kind: 'item', parent: at.sc.id, after: at.it.id, data: { text: '(테이블 세팅)', cues: [{ dept: 'stage', stage: { text: '테이블' } }] } },
+    { op: 'set', id: line.it.id, fields: { text: line.it.text + '!' } },
+    { op: 'add', kind: 'comment', parent: at.sc.id, data: { author: '연출', text: '전환 시간 확인' } }
   ]);
   assert.deepEqual(validateShow(r.show).errors, []);
   assert.deepEqual(r.warnings, []);
   assert.equal(r.labels.length, 1);
-  assert.match(r.labels[0].label, /^\d+\.1$/);
+  assert.match(r.labels[0].label, new RegExp(`^${String(at.it.label).split('.')[0]}\\.\\d+$`));
+});
+
+test('표기 규칙(docs/cue-format.md): 괄호 지문 (…) 을 어기는 수정은 저장하되 action-format 경고로 알린다', () => {
+  const s = docExample();
+  // "(암전)" 뒤에 글자를 붙이면 ")" 로 끝나지 않는다 — 편집기처럼 괄호를 덧씌우지 않고(이미 "(" 로 시작) 경고만
+  let r = applyOps(s, [{ op: 'set', id: 'i-1', fields: { text: '(암전) 천천히' } }]);
+  assert.equal(find(r.show, 'i-1').text, '(암전) 천천히');
+  assert.ok(r.warnings.some(w => w.code === 'action-format'), JSON.stringify(r.warnings));
+  // "(" 없이 쓴 지문은 편집기(isActHead)와 같이 괄호를 씌워 규칙에 맞춘다
+  r = applyOps(s, [{ op: 'add', kind: 'item', parent: 's-1', data: { kind: 'action', text: '탑햇 세팅' } }]);
+  assert.equal(r.show.parts[0].scenes[0].items.at(-1).text, '(탑햇 세팅)');
+  assert.ok(!r.warnings.some(w => w.code === 'action-format'));
+  // 여러 줄 지문(Shift+Enter): 첫 줄로 판단 — 첫 줄이 비고 둘째 줄이 "(" 면 지문 머리가 아니다
+  r = applyOps(s, [{ op: 'add', kind: 'item', parent: 's-1', data: { kind: 'action', text: '(조명 전환\n— 천천히)' } }]);
+  assert.equal(r.show.parts[0].scenes[0].items.at(-1).text, '(조명 전환\n— 천천히)');
+  r = applyOps(s, [{ op: 'add', kind: 'item', parent: 's-1', data: { text: '\n(둘째 줄)' } }]);
+  assert.equal(r.show.parts[0].scenes[0].items.at(-1).kind, 'line', '첫 줄이 지문 머리가 아니면 대사');
 });
 
 test('사이트가 불러와도(index.html migrate) op 결과가 그대로다', () => {
@@ -290,4 +313,16 @@ test('트랙 번호(track.no, sound.track)는 1 이상의 정수', () => {
   rejects(() => applyOps(s, [{ op: 'set', id: 'tr-1', fields: { no: null } }]), 'bad_field', /whole number ≥ 1/);
   assert.equal(find(applyOps(s, [{ op: 'set', id: 'q-2', fields: { sound: { track: null } } }]).show, 'q-2').sound.track, null, '음향 큐는 트랙 미정(null) 가능');
   assert.equal(applyOps(s, [{ op: 'set', id: 'tr-1', fields: { no: '3' } }]).show.tracks[0].no, 3);
+});
+
+test('지문 판정(isActHead)이 index.html 과 같다', () => {
+  const vm = require('vm');
+  const { isActHead } = require('../lib/ops');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const re = html.match(/^const ACT_RE = .*$/m), fn = html.match(/^function isActHead\(raw\) \{.*\}$/m);
+  assert.ok(re && fn, 'index.html 에서 ACT_RE / isActHead 한 줄 정의를 찾지 못했습니다 (모양이 바뀌었으면 이 테스트를 고치세요)');
+  const fe = vm.runInNewContext(`${re[0]}\n${fn[0]}\n;isActHead`, {});
+  for (const t of ['(암전)', '* 조예준 인', '— 암전', '-- x', '（전각）', '대사', '', '  (공백 뒤)', '(첫 줄\n둘째)', '\n(둘째 줄)', '대사\n(괄호)', null]) {
+    assert.equal(isActHead(t), fe(t), JSON.stringify(t));
+  }
 });

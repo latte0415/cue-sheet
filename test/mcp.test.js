@@ -82,8 +82,33 @@ test('비밀번호 없는 서버는 /mcp 도 인증 없이 (/api 와 같게)', a
   } finally { await stop(O); }
 });
 
+// 픽스처(cues/backstage-part1.json)는 원문 수정에 따라 바뀐다 — id·이름은 하드코딩하지 않고 여기서 골라 쓴다
+function fixtureFacts(show) {
+  const scenes = show.parts.flatMap(p => p.scenes);
+  const items = scenes.flatMap(sc => sc.items.map(it => ({ sc, it })));
+  const person = id => show.people.find(p => p.id === id);
+  const firstLabeled = items.find(x => x.it.label != null && x.it.cues.length);
+  const line = items.find(x => x.it.kind === 'line' && person(x.it.speaker));
+  // 제목 있는 씬 중, 큐 번호 붙은 문단이 있고 그 뒤(다른 씬 포함)에도 번호 붙은 문단이 있는 씬 → 사이에 끼우면 소수 번호
+  const labeledIdx = items.map((x, k) => (x.it.label != null && x.it.cues.length ? k : -1)).filter(k => k >= 0);
+  const k = labeledIdx.find((k, n) => items[k].sc.title && n < labeledIdx.length - 1);
+  const insert = items[k];
+  const other = scenes.find(sc => sc !== insert.sc && sc.items.length);
+  const usedNos = new Set(items.flatMap(x => x.it.cues).filter(c => c.dept === 'sound' && c.sound).map(c => c.sound.track));
+  const track = show.tracks.find(t => usedNos.has(t.no));
+  const stage = items.flatMap(x => x.it.cues).find(c => c.dept === 'stage' && c.stage && c.stage.text.trim().length >= 2);
+  return {
+    firstLabeled, line, speaker: person(line.it.speaker),
+    otherPerson: show.people.find(p => p.id !== line.it.speaker),
+    insert, other, track, maxNo: Math.max(...show.tracks.map(t => t.no)),
+    stageWord: stage.stage.text.trim().split(/\s+/)[0]
+  };
+}
+const esc = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 test('e2e: 도구 목록·annotations, list_shows → get_show → search → edit(dryRun·저장·오류·충돌) → 기록 → 복원', async () => {
-  const { id } = await S.server.store.create(backstage());
+  const show = backstage(), F = fixtureFacts(show);
+  const { id } = await S.server.store.create(show);
   const c = await connect(S.base);
   try {
     assert.match(c.getInstructions(), /get_show[\s\S]*edit_show[\s\S]*restore_revision/);
@@ -104,17 +129,18 @@ test('e2e: 도구 목록·annotations, list_shows → get_show → search → ed
     // 개요: id·큐 번호·화자 이름이 보이고, JSON 전체보다 훨씬 짧다
     r = await c.callTool({ name: 'get_show', arguments: { showId: id } });
     const o = text(r);
-    assert.match(o, /people: p-yejun=조예준\(mc\)/);
-    assert.match(o, /i-3 Q1 \(하우스 오픈/);
-    assert.match(o, /q-1 sound BGM 1 play/);
-    assert.match(o, /i-k 조예준: 안녕하세요/);
+    const p0 = show.people[0];
+    assert.match(o, new RegExp(`people: ${esc(p0.id)}=${esc(p0.name)}\\(${p0.role}\\)`));
+    assert.match(o, new RegExp(`${esc(F.firstLabeled.it.id)} Q${esc(F.firstLabeled.it.label)} `));
+    assert.match(o, new RegExp(`${esc(F.firstLabeled.it.cues[0].id)} ${F.firstLabeled.it.cues[0].dept} `));
+    assert.match(o, new RegExp(`${esc(F.line.it.id)}( Q[\\d.]+)? ${esc(F.speaker.name)}: `), '대사 줄에 화자 이름');
     assert.ok(o.length < JSON.stringify(backstage()).length / 3, `개요가 너무 깁니다: ${o.length}자`);
     assert.equal(r.structuredContent.rev, 1);
-    r = await c.callTool({ name: 'get_show', arguments: { showId: id, sceneId: 's-12' } });
-    assert.match(text(r), /scene s-12 "멘탈"/);
-    assert.doesNotMatch(text(r), /s-4/);
-    r = await c.callTool({ name: 'get_show', arguments: { showId: id, view: 'full', sceneId: 's-4' } });
-    assert.equal(r.structuredContent.data.items[0].id, 'i-3');
+    r = await c.callTool({ name: 'get_show', arguments: { showId: id, sceneId: F.insert.sc.id } });
+    assert.ok(text(r).includes(`scene ${F.insert.sc.id} "${F.insert.sc.title}"`), text(r));
+    assert.ok(!text(r).includes(`scene ${F.other.id} `), '고른 씬만');
+    r = await c.callTool({ name: 'get_show', arguments: { showId: id, view: 'full', sceneId: F.other.id } });
+    assert.equal(r.structuredContent.data.items[0].id, F.other.items[0].id);
     r = await c.callTool({ name: 'get_show', arguments: { showId: id, sceneId: 'nope' } });
     assert.equal(r.isError, true);
     assert.match(text(r), /no scene with id "nope"/);
@@ -122,36 +148,39 @@ test('e2e: 도구 목록·annotations, list_shows → get_show → search → ed
     assert.equal(r.isError, true);
     assert.match(text(r), /list_shows/);
 
-    r = await c.callTool({ name: 'search_show', arguments: { showId: id, query: '탑햇' } });
-    assert.ok(r.structuredContent.total >= 3);
+    r = await c.callTool({ name: 'search_show', arguments: { showId: id, query: F.stageWord } });
+    assert.ok(r.structuredContent.total >= 1);
     assert.ok(r.structuredContent.matches.some(m => m.kind === 'cue' && m.itemId));
 
     // dryRun: 저장 안 함
-    const ops = [{ op: 'add', kind: 'item', parent: 's-12', after: 'i-y', data: { text: '(테이블 정리)', cues: [{ dept: 'stage', stage: { text: '테이블 정리' } }] } }];
+    const ops = [{ op: 'add', kind: 'item', parent: F.insert.sc.id, after: F.insert.it.id, data: { text: '(테이블 정리)', cues: [{ dept: 'stage', stage: { text: '테이블 정리' } }] } }];
     r = await c.callTool({ name: 'edit_show', arguments: { showId: id, ops, dryRun: true } });
     assert.ok(!r.isError, text(r));
     assert.match(text(r), /dry run — nothing saved/);
     assert.equal((await S.server.store.get(id)).rev, 1);
 
-    // 저장: 새 큐 문단에 사이 번호 (Q11 과 Q12 사이 → 11.1)
+    // 저장: 번호 붙은 문단 사이에 끼운 새 큐 문단 → "앞 번호 정수부.k" 
     r = await c.callTool({ name: 'edit_show', arguments: { showId: id, ops, expectRev: 1 } });
     assert.ok(!r.isError, text(r));
     assert.equal(r.structuredContent.rev, 2);
-    assert.deepEqual(r.structuredContent.labels.map(l => l.label), ['11.1']);
-    assert.match(text(r), /Q11\.1 assigned/);
+    const newLabel = r.structuredContent.labels.map(l => l.label);
+    assert.equal(newLabel.length, 1);
+    assert.match(newLabel[0], new RegExp(`^${esc(String(F.insert.it.label).split('.')[0])}\\.\\d+$`));
+    assert.ok(text(r).includes(`Q${newLabel[0]} assigned`));
     assert.match(text(r), /restore_revision \{"showId":"[^"]+","rev":1\}/);
     const api = await (await fetch(`${S.base}/api/shows/${id}`, { headers: { Authorization: `Bearer ${PW}` } })).json();
     assert.equal(api.rev, 2, '브라우저가 폴링하는 API 에 바로 보인다');
-    assert.equal(api.show.parts[0].scenes.find(s => s.id === 's-12').items[1].text, '(테이블 정리)');
+    const sc2 = api.show.parts.flatMap(p => p.scenes).find(s => s.id === F.insert.sc.id);
+    assert.equal(sc2.items[sc2.items.findIndex(i => i.id === F.insert.it.id) + 1].text, '(테이블 정리)');
 
     // 실패는 isError 결과 + 고칠 방법 (아무것도 안 바뀜)
-    r = await c.callTool({ name: 'edit_show', arguments: { showId: id, ops: [{ op: 'set', id: 'i-k', fields: { speaker: '박대훈' } }] } });
+    r = await c.callTool({ name: 'edit_show', arguments: { showId: id, ops: [{ op: 'set', id: F.line.it.id, fields: { speaker: F.otherPerson.name } }] } });
     assert.equal(r.isError, true);
-    assert.match(text(r), /"박대훈" is a name, use id "p-daehoon"/);
-    r = await c.callTool({ name: 'edit_show', arguments: { showId: id, ops: [{ op: 'remove', id: 'p-yejun' }] } });
+    assert.ok(text(r).includes(`"${F.otherPerson.name}" is a name, use id "${F.otherPerson.id}"`), text(r));
+    r = await c.callTool({ name: 'edit_show', arguments: { showId: id, ops: [{ op: 'remove', id: F.speaker.id }] } });
     assert.equal(r.isError, true);
     assert.match(text(r), /still used in \d+ place/);
-    r = await c.callTool({ name: 'edit_show', arguments: { showId: id, ops: [{ op: 'set', id: 'i-k', fields: { text: 'x' } }], expectRev: 1 } });
+    r = await c.callTool({ name: 'edit_show', arguments: { showId: id, ops: [{ op: 'set', id: F.line.it.id, fields: { text: 'x' } }], expectRev: 1 } });
     assert.equal(r.isError, true);
     assert.match(text(r), /now at rev 2, not rev 1/);
     r = await c.callTool({ name: 'edit_show', arguments: { showId: id, ops: 'nope' } });
@@ -159,9 +188,9 @@ test('e2e: 도구 목록·annotations, list_shows → get_show → search → ed
     assert.equal((await S.server.store.get(id)).rev, 2);
 
     // 트랙 번호 변경 → 음향 큐 함께
-    r = await c.callTool({ name: 'edit_show', arguments: { showId: id, ops: [{ op: 'set', id: 'tr-3', fields: { no: 33 } }] } });
+    r = await c.callTool({ name: 'edit_show', arguments: { showId: id, ops: [{ op: 'set', id: F.track.id, fields: { no: F.maxNo + 30 } }] } });
     assert.ok(!r.isError, text(r));
-    assert.match(text(r), /BGM 3 → 33, \d+ sound cue/);
+    assert.ok(new RegExp(`BGM ${F.track.no} → ${F.maxNo + 30}, \\d+ sound cue`).test(text(r)), text(r));
 
     // 기록과 복원
     r = await c.callTool({ name: 'list_revisions', arguments: { showId: id } });
