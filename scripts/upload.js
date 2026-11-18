@@ -5,7 +5,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { validateShow, unwrapShow, fillIds } = require('../lib/validate');
+const { validateShow, unwrapShow, fillIds, SHOW_VER } = require('../lib/validate');
 
 const JSON_LIMIT = 5 * 1024 * 1024; // server.js 와 같은 본문 한도
 const USAGE = `사용법: node scripts/upload.js <파일.json> [옵션]
@@ -94,6 +94,10 @@ async function main(argv) {
   result.title = String(show.title || '');
   log(`검증 통과: "${show.title || '(제목 없음)'}" — 파트 ${c.parts} · 씬 ${c.scenes} · 문단 ${c.items} · 큐 ${c.cues} · 사람 ${c.people} · 트랙 ${c.tracks}${v.warnings.length ? ` (경고 ${v.warnings.length})` : ''}`);
   if (filled) log(`id 없는 항목 ${filled}개에 id 를 붙여 올립니다 (파일은 그대로)`);
+  // v8 안내: 옛 형식은 사이트가 불러올 때 바꾼다 · 소품 없는 무대 큐는 올라가지만 사이트에 빨간 "소품 미지정"
+  if (typeof show.version === 'number' && show.version < SHOW_VER && show.version >= 5) log(`version ${show.version} 형식 — 그대로 올리고, 사이트가 불러올 때 version ${SHOW_VER} 로 바꿉니다 (큐 memo · cast.text · stage.text → 상세 note, 객석 채널은 ON/OFF 만). 새 파일은 version ${SHOW_VER} 로 쓰세요 (docs/cue-format.md)`);
+  const noProps = v.warnings.filter(w => w.code === 'stage-no-props').length;
+  if (noProps) log(`소품 없는 무대 큐 ${noProps}개 — 올라가지만 사이트에 빨간 "소품 미지정" 으로 보입니다. props 에 소품을 등록하고 stage.props 에 넣으세요 (설명 글은 note)`);
 
   // ---- 2. 서버
   const base = String(o.url || process.env.CUE_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/+$/, '');
@@ -120,7 +124,7 @@ async function main(argv) {
     return { status: r.status, data: j };
   }
   const editHeaders = () => ({ 'X-Edit-Key': encodeURIComponent(editKey) });
-  const outdatedMsg = (mine, theirs) => `이 파일은 version ${mine} 형식인데 서버의 프로젝트는 version ${theirs} 입니다 — 옛 형식으로 덮어쓰면 새 형식에만 있는 정보(소품 목록 등)가 지워지므로 서버가 받지 않습니다. 덮어쓰지 않았습니다.\n  파일을 현재 형식(version ${theirs}, docs/cue-format.md)으로 고친 뒤 다시 올리거나, --project 없이 새 프로젝트로 올리세요`;
+  const outdatedMsg = (mine, theirs) => `이 파일은 version ${mine} 형식인데 서버의 프로젝트는 version ${theirs} 입니다 — 옛 형식으로 덮어쓰면 새 형식에만 있는 정보(소품 목록, v8 의 큐 상세 note 등)가 지워지므로 서버가 받지 않습니다. 덮어쓰지 않았습니다.\n  파일을 현재 형식(version ${theirs}, docs/cue-format.md)으로 고친 뒤 다시 올리거나, --project 없이 새 프로젝트로 올리세요`;
   const fail = (what, r) => new Fail(2, `${what} 실패 (HTTP ${r.status}${r.data && r.data.error ? ' ' + r.data.error : ''}${r.data && r.data.message ? ': ' + r.data.message : ''})`);
 
   let target = null; // 덮어쓸 프로젝트 id

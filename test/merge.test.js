@@ -69,6 +69,16 @@ test('입력은 바꾸지 않고, 같은 입력이면 같은 결과', () => {
   assert.deepEqual(a.show, b.show);
 });
 
+test('v8: 큐 상세(note)를 양쪽에서 다르게 고치면 충돌 — 설명은 "상세" (사람·소품의 note 는 "메모")', () => {
+  const base = backstage();
+  const remote = remoteOps(base, [{ op: 'set', id: 'q-5', fields: { note: '서버 상세' } }, { op: 'set', id: 'p-yejun', fields: { note: '서버 메모' } }]);
+  const local = plain(base); find(local, 'q-5').note = '로컬 상세'; find(local, 'p-yejun').note = '로컬 메모';
+  const r = merge(base, local, remote);
+  assert.equal(r.conflicts.length, 2);
+  assert.match(r.conflicts.find(c => c.kind === 'cue').text, / — 상세: 양쪽에서 다르게 고침$/);
+  assert.match(r.conflicts.find(c => c.kind === 'person').text, / — 메모: 양쪽에서 다르게 고침$/);
+});
+
 test('서로 다른 항목·필드를 고치면 충돌 없이 합친다', () => {
   const base = backstage();
   const remote = remoteOps(base, [

@@ -86,8 +86,8 @@ Codex 를 다시 시작한 뒤 `/mcp` 로 `cue-sheet` 와 도구 6개가 보이�
 | 도구 | 하는 일 | 성격 |
 |---|---|---|
 | `list_shows` | 공연 목록 `{ id, title, rev, updatedAt, sceneCount, cueCount }` | 읽기 |
-| `get_show { showId, view?, partId?, sceneId? }` | `outline`(기본): 한 줄에 하나씩 id·큐 번호·화자 이름·잘린 본문·큐 한 줄 요약(무대 큐는 소품 동작 포함) + 사람·소품·트랙 목록. `full`: 고른 파트/씬(또는 전체)의 JSON 그대로 | 읽기 |
-| `search_show { showId, query }` | 대본·화자·큐(trigger·memo·무대/출연 내용·무대 큐 소품 이름·트랙 제목)·코멘트·씬 제목/세팅·사람·소품·공연 전 무대 소품·트랙에서 대소문자 무시 부분 일치. `Q12`/`12` 는 큐 번호. 최대 50개, id·위치·발췌 | 읽기 |
+| `get_show { showId, view?, partId?, sceneId? }` | `outline`(기본): 한 줄에 하나씩 id·큐 번호·화자 이름·잘린 본문·큐 한 줄 요약 — 사이트와 같은 머리글(`lib/cuehead.js`, 예: `q-3 cast 박대훈 IN @ "멘트 후"`, `q-4 stage 탑햇 IN \| → 테이블 위 — 시점 리허설 때 확정 [tbd]`) + 사람·소품·트랙 목록. `full`: 고른 파트/씬(또는 전체)의 JSON 그대로 | 읽기 |
+| `search_show { showId, query }` | 대본·화자·큐(trigger·note(상세)·무대 큐 소품 이름·트랙 제목, v7 이하 원본은 memo·무대/출연 글도)·코멘트·씬 제목/세팅·사람·소품·공연 전 무대 소품·트랙에서 대소문자 무시 부분 일치. `Q12`/`12` 는 큐 번호. 최대 50개, id·위치·발췌 | 읽기 |
 | `edit_show { showId, ops, dryRun?, expectRev?, editKey? }` | ops 를 원자적으로 적용 → 새 rev, 바뀐 내용 요약(새로 매긴 큐 번호 포함), 경고, 저장한 사람 `by`. `dryRun` 은 저장하지 않으므로 편집 비밀번호 없이도 된다 | 쓰기 (편집 비밀번호) |
 | `list_revisions { showId }` | 저장 기록, 최신 먼저(맨 앞이 현재). 버전마다 누가(`by`)·어떤 경로로(`via`) 저장했는지, 복원이면 `restoredFrom` | 읽기 |
 | `restore_revision { showId, rev, editKey? }` | 그 버전을 새 버전으로 저장(복원도 되돌릴 수 있음), 결과에 `by`. 이미 같은 내용이면 아무것도 안 함 | 쓰기 (편집 비밀번호) |
@@ -126,6 +126,11 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
   열거형(`type`, `kind`, `dept`, `role`, `ch`, `action`, `move`, `status`)은 `docs/cue-format.md` 의 값만.
   사람 참조(`speaker`, `cast`, `cast.personId`)는 `people[].id` 만 — 이름을 주면 그 사람의 id 를 알려 주며 거부.
   소품 참조(`stage.props[].propId`, `preShowProps[].propId`)도 같게 `props[].id` 만. 소품 행에 propId 가 없으면 거부(브라우저 `saveCue` 와 같음).
+- **show v8 필드.** 큐 상세는 `note` 하나(모든 부서). `memo`·`cast.text`·`stage.text` 는 없어졌다 — 주면 "note 를 쓰세요" 로 거부.
+  무대 소품 액션은 `in`·`out`·`move`·`clean`(치우기). 객석 채널(`ch:"house"`)은 `action` `on`·`off` 만, `dim`·`color`·`colorName`·`timeSec` 을 주면 거부.
+  **무대 큐는 소품 필수**: 소품 없는 확정(`status:"set"`) 무대 큐를 새로 만들거나, 무대 큐의 `dept`·`stage`·`status` 를 바꿔 그렇게 되면 거부
+  (먼저 `kind:"prop"` 으로 등록하고 `stage.props` 에 넣거나 `status:"tbd"`). 다른 필드만 고친 옛 큐(소품 없는 v7 무대 큐)는 경고만.
+  머리글(`조예준 OUT`, `BGM 4 PLAY`, `BLACKOUT`, `카드 CLEAN`)은 대상·액션에서 만들어지므로 `note` 에 다시 쓰지 않는다.
 - **얕은 합치기.** 큐의 `light`·`sound`·`stage`·`cast` 객체는 한 단계만 합친다: `{ sound: { level: 80 } }` 은 track·action·timeSec 을
   그대로 두고 level 만 바꾼다. 배열(`light.channels`, `stage.props`, `scene.cast`, show 의 `preShowProps`)은 통째로 바뀐다. 채널의 빠진 필드는 기본값
   (`ch:"front", action:"on"`, 나머지 null), 소품 행은 `action:"in"`, `at:""`. `dept` 를 바꾸면 이전 부서 내용은 버리고 새 부서 기본값에서 시작한다.
@@ -135,20 +140,21 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
   편집기처럼 저장은 하되 `validateShow` 의 `action-format` 경고가 edit_show 결과에 나온다(op 가 새로 만든 경고만). 서버가 `*` 를
   괄호로 바꾸는 등 자동 고침은 하지 않는다 — 브라우저 편집기도 받는 값이고, 뜻을 바꾸지 않게 에이전트가 고치게 둔다. 음향 `level` 은 `volume`(없으면 100)·`fadeIn` 에서만 남긴다(index.html `saveCue`).
   `#rrggbb` 가 아닌 색은 `colorName` 으로 옮긴다(migrate). 큐가 바뀐 문단의 `isCue` 는 큐 유무를 따른다.
-  내용 없는 큐(채널 없는 조명, 트랙 없는 음향, text 도 소품 동작도 없는 무대 …)는 저장하되 "채우거나 `status:"tbd"`" 경고.
+  내용 없는 큐(채널 없는 조명, 트랙 없는 음향, 사람 없는 출연)는 저장하되 "채우거나 `status:"tbd"`" 경고. 무대는 위 "소품 필수".
 - **새 항목.** id 는 브라우저 `uid()` 와 같은 접두어(`pt-` `s-` `i-` `q-` `c-` `p-` `pr-` `tr-`)로 만든다. 같은 호출의 뒤 op 에서
   가리키려면 `data.id` 를 직접 줘도 된다(`[A-Za-z0-9_-]{1,64}`, 쓰지 않은 값). 기본값은 브라우저가 새로 만들 때와 같다
-  (씬 `type:"act"`, 사람 `role:"other"`, 무대 큐 `stage:{text:"", props:[]}`, 코멘트 작성자 `"익명"`, 트랙 `no` = 지금 최댓값 + 1). `data` 에 자식을 함께 넣을 수 있다:
+  (씬 `type:"act"`, 사람 `role:"other"`, 무대 큐 `stage:{props:[]}`, 출연 큐 `cast:{personId:null, move:"in"}`, 큐 `note:""`, 코멘트 작성자 `"익명"`, 트랙 `no` = 지금 최댓값 + 1). `data` 에 자식을 함께 넣을 수 있다:
   part.`scenes`, scene.`items`/`comments`, item.`cues`/`comments`.
 - **트랙.** 항상 `no` 순으로 정렬된다(add 에 `after`, move 는 거부). `no` 를 바꾸면 그 번호를 쓰던 음향 큐의 `sound.track` 도
   함께 바뀐다. 겹치는 번호는 거부. 올린 음원이 있던 트랙을 지우면 파일은 서버에 남는다(경고).
 - **사람 force 삭제.** 브라우저의 사람 삭제와 같이 씬 출연자 목록에서는 빼고, 대사 화자·출연 큐는 그대로 둬 사이트에
   "(삭제된 사람)" 으로 보인다(경고 한 줄로 개수를 알려 줌).
-- **소품 (show v6).** `props[]` 는 사람처럼 `kind:"prop"` 의 add/set(name·note)/remove/move 로 고친다. force 삭제는 브라우저 소품
+- **소품 (show v6~).** `props[]` 는 사람처럼 `kind:"prop"` 의 add/set(name·note)/remove/move 로 고친다. force 삭제는 브라우저 소품
   삭제와 같이 `preShowProps` 에서는 빼고, 무대 큐의 소품 행은 그대로 둬 "(삭제된 소품)" 으로 보인다(validateShow 경고).
   `preShowProps` 는 항목 id 가 없어 `set kind:"show"` 의 배열 통째 교체만 된다.
-- **v5 → v6.** v5 공연에 op 를 적용하면 사이트가 불러올 때(migrate)처럼 `version:6`, 빈 `props`·`preShowProps`, 무대 큐의
-  빈 `stage.props` 를 붙여 저장한다. 다른 값은 바꾸지 않는다(v4 이하는 그대로 두고 사이트의 변환에 맡긴다).
+- **v5~v7 → v8.** 옛 공연에 op 를 적용하면 사이트가 불러올 때(migrate)처럼 `version:8` 로 올린다: 빈 `props`·`preShowProps`·`stage.props` 를 붙이고,
+  큐(코멘트 snapshot 안의 큐 포함)의 `note` = 기존 note · `cast.text`/`stage.text` · `memo` 를 `" / "` 로 이어 붙인 것, 객석 채널은 on/off 로 접고
+  지운 값은 `note` 에 `"(객석: 원래 FADE IN 40% 3s)"` 로 남긴다(`lib/ops.js` `upgradeShow`). 다른 값은 바꾸지 않는다(v4 이하는 그대로 두고 사이트의 변환에 맡긴다).
 
 ### 큐 번호
 
