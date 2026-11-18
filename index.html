@@ -688,6 +688,7 @@ body.has-player .app{padding-bottom:calc(var(--player-h) + env(safe-area-inset-b
           <button type="button" role="menuitem" id="menu-editpw" data-act="editpw-open" hidden>편집 비밀번호 변경</button>
           <button type="button" role="menuitem" id="menu-lock" data-act="edit-lock" hidden>이 기기에서 편집 잠그기</button>
           <button type="button" role="menuitem" id="menu-agent" data-act="agent-open" hidden>에이전트 연결</button>
+          <button type="button" role="menuitem" id="menu-trash" data-act="trash-open" hidden>휴지통 — 지운 프로젝트 되살리기</button>
           <button type="button" role="menuitem" id="menu-undo-del" data-act="undo-del" data-confirm="정말? (삭제 이후의 변경도 함께 되돌아감)">마지막 삭제 되돌리기</button>
           <button type="button" role="menuitem" id="menu-renumber" data-act="renumber" data-confirm="정말 다시 매기기? (1부터 순서대로)">큐 번호 다시 매기기</button>
           <button type="button" role="menuitem" id="menu-reset" data-act="reset" data-confirm="정말 초기화? (현재 데이터 삭제)">샘플로 초기화</button>
@@ -1528,11 +1529,11 @@ function renderProj() {
   h += '<ol class="pj-list" id="pj-list">' + Srv.list.map(x => {
     const id = esc(x.id), isCur = x.id === cur;
     return `<li class="pj-i ${isCur ? 'cur' : ''}" data-id="${id}"><button type="button" class="pj-open" data-act="proj-open" data-id="${id}" ${isCur ? 'aria-current="true"' : ''}>${esc(isCur ? state.show.title : x.title) || '(제목 없음)'}</button>
-      <span class="pj-a"><button type="button" class="tb" data-act="proj-dup" data-id="${id}">복제</button><button type="button" class="tb red" data-act="proj-del" data-id="${id}" data-confirm="정말 삭제? 복구 불가">삭제</button></span>
+      <span class="pj-a"><button type="button" class="tb" data-act="proj-dup" data-id="${id}">복제</button><button type="button" class="tb red" data-act="proj-del" data-id="${id}" data-confirm="휴지통으로 이동? (${TRASH.days}일 뒤 영구 삭제)">삭제</button></span>
       <span class="note">${esc(projMeta(x))}${isCur ? ' · 지금 보는 중' : ''}</span></li>`;
   }).join('') + '</ol>';
   h += `<div class="pj-new"><label class="sr-only" for="pj-new-title">새 프로젝트 제목</label><input type="text" id="pj-new-title" placeholder="새 프로젝트 제목" maxlength="80"><button type="button" class="btn" id="pj-new-blank" data-act="proj-new" data-kind="blank">새 프로젝트</button><button type="button" class="btn" id="pj-new-sample" data-act="proj-new" data-kind="sample">샘플로</button></div>`;
-  h += '<p class="note">삭제는 서버에서 지워져 되돌릴 수 없습니다. 복제는 음원 파일도 함께 복사합니다.</p>';
+  h += `<p class="note">삭제하면 휴지통으로 옮겨져 ${TRASH.days}일 동안 <button type="button" class="tb" id="pj-trash" data-act="trash-open">휴지통</button>에서 되살릴 수 있습니다. 복제는 음원 파일도 함께 복사합니다.</p>`;
   const keep = document.activeElement && m.contains(document.activeElement) ? document.activeElement.id : null;
   const draft = $('#pj-new-title') ? $('#pj-new-title').value : '';
   m.innerHTML = h;
@@ -1569,10 +1570,12 @@ function renderGate() {
     <div class="field"><label for="gate-pw">비밀번호</label><input type="password" id="gate-pw" autocomplete="current-password"></div>${err}
     <div class="gate-f"><button type="button" class="btn strong" id="gate-pw-go" data-act="gate-pw">들어가기</button></div></div>`;
   else if (GATE.type === 'first') h = `<div class="gate-box" role="dialog" aria-modal="true" aria-labelledby="gate-h"><h2 id="gate-h">첫 프로젝트 만들기</h2>
-    <p class="note">서버에 프로젝트가 없습니다. 공연 하나가 프로젝트 하나입니다 — 만들면 모든 기기에서 함께 봅니다.</p>${newShowFields('gate')}${err}</div>`;
+    <p class="note">서버에 프로젝트가 없습니다. 공연 하나가 프로젝트 하나입니다 — 만들면 모든 기기에서 함께 봅니다.</p>${newShowFields('gate')}${err}${gateTrashLink()}</div>`;
   else if (GATE.type === 'pick') h = `<div class="gate-box" role="dialog" aria-modal="true" aria-labelledby="gate-h"><h2 id="gate-h">프로젝트 선택</h2>
     <ul class="gate-list" id="gate-list">${Srv.list.map(x => `<li><button type="button" data-act="gate-open" data-id="${esc(x.id)}">${esc(x.title) || '(제목 없음)'}<span class="note">${esc(projMeta(x))}</span></button></li>`).join('')}</ul>
-    <p class="note">또는 새로 만들기</p>${newShowFields('gate')}${err}</div>`;
+    <p class="note">또는 새로 만들기</p>${newShowFields('gate')}${err}${gateTrashLink()}</div>`;
+  else if (GATE.type === 'trash') h = `<div class="gate-box" role="dialog" aria-modal="true" aria-labelledby="gate-h"><h2 id="gate-h">휴지통</h2>${trashBody()}${err}
+    <div class="gate-f"><button type="button" class="btn" id="gate-trash-back" data-act="trash-back">돌아가기</button></div></div>`;
   else h = `<div class="gate-box" role="alertdialog" aria-labelledby="gate-h"><h2 id="gate-h">서버 오류</h2>${err}
     <div class="gate-f"><button type="button" class="btn strong" id="gate-retry" data-act="gate-retry">다시 시도</button></div></div>`;
   g.innerHTML = h;
@@ -3529,6 +3532,7 @@ function renderTop() {
   tb.setAttribute('aria-label', state.booth ? '부스 모드 켜짐 — 눌러서 끄기' : `화면 테마 ${THEME_L[state.theme]} — 눌러서 바꾸기`);
   $('#data-menu').hidden = !state.menuOpen;
   $('#menu-agent').hidden = Store.mode !== 'server';
+  $('#menu-trash').hidden = Store.mode !== 'server';
   $('#btn-data').setAttribute('aria-expanded', String(state.menuOpen));
   const ud = $('#menu-undo-del'), last = DEL[DEL.length - 1];
   ud.disabled = !last;
@@ -3863,6 +3867,10 @@ function renderModal(focusFirst) {
       <div class="field"><label for="m-pw-new2">새 비밀번호 확인</label><input type="password" id="m-pw-new2" autocomplete="new-password" data-enter="editpw-do"></div>
       <p class="note">이 프로젝트(${esc(state.show.title) || '제목 없음'})에만 적용됩니다. 바꾸면 다른 기기는 다음에 저장할 때 새 비밀번호를 다시 입력해야 합니다.</p>${modalErr(m)}`;
     foot = '<button type="button" class="btn" data-act="modal-close">취소</button><button type="button" class="btn strong" id="m-pw-save" data-act="editpw-do">변경</button>';
+  } else if (m.type === 'trash') {
+    title = '휴지통';
+    body = trashBody();
+    foot = '<button type="button" class="btn" data-act="modal-close">닫기</button>';
   } else if (m.type === 'history') {
     title = '버전 기록';
     // 서버 목록(store.revisions)의 맨 앞이 현재 버전(current) — MCP 의 list_revisions 와 같은 기록
@@ -3951,6 +3959,47 @@ async function editPwDo() {
   render(); renderSync(); renderSyncBar();
   toast('편집 비밀번호를 바꿨습니다 — 다른 기기는 새 비밀번호를 다시 입력해야 합니다', { ms: 5000 });
   if (Srv.dirty) push();
+}
+// ---- 휴지통 (서버 모드). 목록·복구는 보기 권한만 — 편집 비밀번호를 빼앗겨 삭제당해도 되살릴 수 있게
+const TRASH = { days: 30, items: null, err: '', busy: false };
+function gateTrashLink() { return '<p class="note"><button type="button" class="tb" id="gate-trash" data-act="trash-open">휴지통</button> — 지운 프로젝트 되살리기</p>'; }
+function trashBody() {
+  if (!TRASH.items) return `<p class="note">${TRASH.err ? '' : '불러오는 중…'}</p>${TRASH.err ? `<p class="err" role="alert">${esc(TRASH.err)}</p>` : ''}`;
+  const row = x => `<tr><td>${esc(x.title) || '(제목 없음)'}</td><td>${esc(fmtTime(x.deletedAt))}</td><td class="n">${esc(x.daysLeft)}일</td>
+    <td><button type="button" class="tb" id="trash-restore-${esc(x.trashId)}" data-act="trash-restore" data-tid="${esc(x.trashId)}" data-confirm="복구할까요?" ${TRASH.busy ? 'disabled' : ''}>복구</button></td></tr>`;
+  return (TRASH.items.length ? `<div class="table-wrap"><table class="ltable" id="trash-table"><thead><tr><th>제목</th><th>삭제 시각</th><th class="n">남은 일수</th><th></th></tr></thead><tbody>${TRASH.items.map(row).join('')}</tbody></table></div>`
+    : '<p class="note">휴지통이 비어 있습니다.</p>') +
+    `<p class="note">지운 프로젝트는 ${TRASH.days}일 동안 여기 남았다가 영구 삭제됩니다. 복구하면 대본·큐·음원·버전 기록·편집 비밀번호가 지우기 전 그대로 돌아옵니다(같은 id 가 이미 있으면 새 id 로).</p>${TRASH.err ? `<p class="err" role="alert">${esc(TRASH.err)}</p>` : ''}`;
+}
+function renderTrash() { if (GATE.type === 'trash') renderGate(); else if (state.modal && state.modal.type === 'trash') renderModal(); }
+function loadTrash() {
+  return api('GET', '/trash').then(r => {
+    if (r.status !== 200 || !r.data) throw new Error('HTTP ' + r.status);
+    TRASH.days = r.data.days || TRASH.days; TRASH.items = r.data.items || []; TRASH.err = '';
+  }).catch(e => { TRASH.err = '휴지통을 불러오지 못했습니다: ' + e.message; }).then(renderTrash);
+}
+function openTrash() {
+  if (Store.mode !== 'server') return;
+  TRASH.items = null; TRASH.err = '';
+  state.menuOpen = false; state.projOpen = false; renderProj();
+  if (GATE.type) showGate('trash');
+  else { if (state.show) renderTop(); state.modal = { type: 'trash' }; renderModal(); }
+  loadTrash();
+}
+async function restoreTrash(tid) {
+  if (TRASH.busy) return;
+  TRASH.busy = true; renderTrash();
+  let r = null;
+  try { r = await api('POST', '/trash/' + enc(tid) + '/restore'); } catch (e) { r = null; }
+  TRASH.busy = false;
+  if (!r || r.status !== 200 || !r.data) { TRASH.err = r ? (r.status === 404 ? '이미 복구했거나 영구 삭제된 항목입니다' : '복구 실패 (HTTP ' + r.status + ')') : '서버에 연결할 수 없습니다'; return loadTrash(); }
+  const d = r.data;
+  await refreshList().catch(() => {});
+  toast(`복구했습니다 — ${d.title || '(제목 없음)'}${d.id !== d.originalId ? ' (같은 id 가 있어 새 id 로)' : ''}`, { ms: 5000 });
+  if (state.modal && state.modal.type === 'trash') closeModal(true);
+  // 되살린 프로젝트로 연다 (지금 프로젝트의 저장 대기분은 switchShow 가 먼저 보낸다)
+  if (GATE.type || !Srv.showId) await openShow(d.id).catch(bootFail);
+  else await switchShow(d.id).catch(e => toast('전환 실패: ' + e.message));
 }
 function openHistory(err) {
   const id = Srv.showId; if (Store.mode !== 'server' || !id) return;
@@ -4286,7 +4335,8 @@ function act(a, el) {
         }
         if (r.status !== 200 && r.status !== 404) { toast('삭제 실패 (HTTP ' + r.status + ')'); return; }
         return refreshList().then(list => {
-          toast('프로젝트를 삭제했습니다 (복구 불가)');
+          if (r.data && r.data.trashDays) TRASH.days = r.data.trashDays;
+          toast(`휴지통으로 옮겼습니다 — ${TRASH.days}일 안에 휴지통에서 되살릴 수 있습니다`, { ms: 5000 });
           if (!cur) { renderProj(); return; }
           Srv.showId = null; state.projOpen = false; renderProj(); stopAllAudio(); clearInterval(Srv.pollT);
           if (list.length) return openShow(list[0].id);
@@ -4295,6 +4345,10 @@ function act(a, el) {
       }).catch(e => toast('삭제 실패: ' + e.message));
       break;
     }
+    // 휴지통
+    case 'trash-open': openTrash(); break;
+    case 'trash-restore': restoreTrash(el.dataset.tid); break;
+    case 'trash-back': showGate(Srv.list.length ? 'pick' : 'first'); break;
     // 편집 비밀번호 · 버전 기록
     case 'unlock-open': openUnlock({ why: Srv.locked ? 'save' : '' }); break;
     case 'unlock-do': unlockDo(); break;

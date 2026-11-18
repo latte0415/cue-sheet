@@ -4,7 +4,8 @@
 //   /api/*       프로젝트(공연)별 큐시트 JSON + 음원 파일. README 의 API 표 참고
 //   /mcp         원격 MCP 서버 (에이전트용 읽기·부분 수정). docs/mcp.md — 이 경로만 npm 의존성(MCP SDK)을 쓴다
 // 환경변수: PORT, DATA_DIR(기본 ./data), APP_PASSWORD(설정 시 /api·/mcp 에 X-App-Key, Authorization: Bearer 또는 ?key= 필요),
-//          HISTORY_KEEP(프로젝트별 보관할 이전 버전 수, 기본 100), TRUST_PROXY(1 이면 X-Forwarded-For 로 IP 판별. Railway 에서는 자동)
+//          HISTORY_KEEP(프로젝트별 보관할 이전 버전 수, 기본 100), TRUST_PROXY(1 이면 X-Forwarded-For 로 IP 판별. Railway 에서는 자동),
+//          TRASH_DAYS(삭제한 프로젝트를 휴지통에 두는 일수, 기본 30), ADMIN_KEY(설정 시에만 편집 비밀번호 초기화 POST …/edit-password/reset)
 // 권한 두 단계: APP_PASSWORD = 보기(읽기·새 프로젝트), 프로젝트별 편집 비밀번호(X-Edit-Key) = 그 프로젝트를 바꾸는 모든 쓰기 (/mcp 쓰기 도구 포함)
 const http = require('http');
 const fs = require('fs');
@@ -68,7 +69,7 @@ function parseRange(h, size) {
 
 function createServer(opts) {
   opts = opts || {};
-  const store = new Store(opts.dataDir || process.env.DATA_DIR || './data', { historyKeep: opts.historyKeep, putSnapshotMs: opts.putSnapshotMs });
+  const store = new Store(opts.dataDir || process.env.DATA_DIR || './data', { historyKeep: opts.historyKeep, putSnapshotMs: opts.putSnapshotMs, trashDays: opts.trashDays });
   const password = opts.password !== undefined ? opts.password : (process.env.APP_PASSWORD || '');
   const pwDigest = password ? digest(password) : null;
   const log = opts.log !== undefined ? opts.log : (msg => console.log(msg));
@@ -77,7 +78,13 @@ function createServer(opts) {
   const limiter = new FailLimiter(rate.max, rate.windowMs);
   const trustProxy = opts.trustProxy !== undefined ? !!opts.trustProxy : (process.env.TRUST_PROXY === '1' || !!(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_ENVIRONMENT_NAME));
   const passed = new Set();
+  // 관리자 복구 키: 설정했을 때만 켜진다. 편집 비밀번호를 잊었거나 누가 바꿔 잠갔을 때 1234 로 되돌린다
+  const adminKey = opts.adminKey !== undefined ? opts.adminKey : (process.env.ADMIN_KEY || '');
+  const adminDigest = adminKey ? digest(adminKey) : null;
   const ready = store.init();
+  // 휴지통 정리: 시작할 때(init) + 6시간마다
+  const purgeT = setInterval(() => { store.trashPurge().catch(e => console.error('trash purge:', e)); }, 6 * 60 * 60 * 1000);
+  if (purgeT.unref) purgeT.unref();
   const mcp = createMcp({ store, checkEdit: (req, id, given) => editCheck(req, id, given ? [given] : editKeysOf(req)) });
 
   // /api 와 /mcp 가 같이 쓴다. X-App-Key(프런트), Authorization: Bearer(MCP 클라이언트), ?key= 중 하나
@@ -158,6 +165,19 @@ function createServer(opts) {
       return sendJson(res, 200, { ok: true, hasPassword: !!pwDigest, showCount: await store.count() });
     }
     if (!authed(req, query)) { await settleUnreadBody(req, res); throw new HttpError(401, 'unauthorized'); }
+    // 휴지통: 목록·복구는 보기 권한만 — 편집 비밀번호를 빼앗겨 삭제당해도 원래 편집자가 되살릴 수 있게 (복구는 아무것도 지우지 않는다)
+    if (parts[0] === 'trash') {
+      const [, tid, act, more] = parts;
+      if (tid === undefined) {
+        if (M !== 'GET') throw new HttpError(405, 'method_not_allowed');
+        return sendJson(res, 200, { days: store.trashDays, items: await store.trashList() });
+      }
+      if (act !== 'restore' || more !== undefined) throw new HttpError(404, 'not_found');
+      if (M !== 'POST') throw new HttpError(405, 'method_not_allowed');
+      const r = await store.trashRestore(tid);
+      if (!r) throw new HttpError(404, 'not_found');
+      return sendJson(res, 200, r);
+    }
     if (parts[0] !== 'shows') throw new HttpError(404, 'not_found');
     const [, id, sub, key, extra] = parts;
     if (extra !== undefined) throw new HttpError(404, 'not_found');
@@ -193,8 +213,9 @@ function createServer(opts) {
       if (M === 'DELETE') {
         await needShow(id);
         await needEdit(req, id);
-        if (!(await store.remove(id))) throw new HttpError(404, 'not_found');
-        return sendJson(res, 200, { ok: true });
+        const r = await store.remove(id, { ip: clientIp(req) });
+        if (!r) throw new HttpError(404, 'not_found');
+        return sendJson(res, 200, { ok: true, trashId: r.trashId, trashDays: store.trashDays });
       }
       throw new HttpError(405, 'method_not_allowed');
     }
@@ -209,6 +230,23 @@ function createServer(opts) {
       await needShow(id);
       const auth = await needEdit(req, id);
       return sendJson(res, 200, { ok: true, isDefault: !auth });
+    }
+    // 관리자 초기화: ADMIN_KEY 가 없으면 기능 자체가 없다(404). 틀리면 403 admin_forbidden, IP 당 실패 제한(편집 비밀번호와 같은 창)
+    if (sub === 'edit-password' && key === 'reset') {
+      if (!adminDigest) throw new HttpError(404, 'not_found');
+      if (M !== 'POST') throw new HttpError(405, 'method_not_allowed');
+      await needShow(id);
+      const rk = clientIp(req) + '|#admin';
+      const wait = limiter.blocked(rk);
+      if (wait) throw new HttpError(429, 'too_many_attempts', { retryAfter: wait, headers: { 'Retry-After': String(wait) } });
+      const v = req.headers['x-admin-key'];
+      const cands = v ? [String(v)] : [];
+      if (v) { try { cands.push(decodeURIComponent(String(v))); } catch (e) { /* 원문 그대로 */ } cands.push(Buffer.from(String(v), 'latin1').toString('utf8')); }
+      let ok = false;
+      for (const c of cands) if (crypto.timingSafeEqual(digest(c), adminDigest)) ok = true;
+      if (!ok) { if (v) limiter.fail(rk); throw new HttpError(403, 'admin_forbidden'); }
+      await store.setAuth(id, null);
+      return sendJson(res, 200, { ok: true, isDefault: true });
     }
     if (sub === 'edit-password' && key === undefined) {
       if (M !== 'POST') throw new HttpError(405, 'method_not_allowed');
@@ -363,6 +401,7 @@ function createServer(opts) {
   // 프록시(Railway 등)의 유휴 연결 시간보다 길게 — 서버가 먼저 닫아 재사용 중인 연결이 끊기는 경쟁을 줄인다
   server.keepAliveTimeout = 65 * 1000;
   server.headersTimeout = 66 * 1000; // keepAliveTimeout 보다 커야 한다
+  server.on('close', () => clearInterval(purgeT));
   server.ready = ready;
   server.store = store;
   return server;

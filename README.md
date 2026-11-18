@@ -25,6 +25,8 @@ npm test                               # 서버 API·MCP 테스트 (node --test)
 | `APP_PASSWORD` | (없음) | 설정하면 `/api/*`·`/mcp` 에 팀 공유 비밀번호 필요. 없으면 인증 없음(로컬 개발용) |
 | `HISTORY_KEEP` | 100 | 프로젝트마다 보관할 이전 버전 수 (웹 자동 저장은 10분에 한 번만 남김, MCP 수정·복원은 매번) |
 | `TRUST_PROXY` | (Railway 에서 자동) | `1` 이면 편집 비밀번호 실패 제한의 IP 를 `X-Forwarded-For` 마지막 값으로 판별 |
+| `TRASH_DAYS` | 30 | 삭제한 프로젝트를 휴지통(`DATA_DIR/trash/`)에 두는 일수. 지나면 서버 시작 때와 6시간마다 영구 삭제 |
+| `ADMIN_KEY` | (없음) | 설정하면 관리자 복구 키가 켜진다 — 편집 비밀번호를 `1234` 로 초기화(`POST /api/shows/:id/edit-password/reset`). 없으면 그 기능 자체가 없다(404) |
 
 `data/` 는 `.gitignore` 에 들어 있다.
 
@@ -39,6 +41,8 @@ npm test                               # 서버 API·MCP 테스트 (node --test)
 3. 서비스 → **Variables** 탭 → New Variable:
    - `DATA_DIR` = `/data`
    - `APP_PASSWORD` = 팀에 공유할 비밀번호
+   - `ADMIN_KEY` = 관리자만 아는 긴 무작위 문자열(예: `openssl rand -base64 24`). 팀에 공유하지 않는다. 편집 비밀번호를 빼앗겼을 때 되찾는 용도
+   - (선택) `TRASH_DAYS` = 휴지통 보관 일수. 기본 30
 4. 변수를 저장하면 재배포된다. 서비스 → Settings → Networking → **Generate Domain** 으로 주소를 만든다.
 5. 처음 접속하면 비밀번호 → "첫 프로젝트 만들기"(빈 프로젝트 / 샘플로 시작). 이후 기기들은 같은 주소로 들어와 프로젝트를 고른다.
 
@@ -51,7 +55,22 @@ npm test                               # 서버 API·MCP 테스트 (node --test)
   처음에는 모든 프로젝트가 **`1234`** 다(기존 프로젝트 포함). 사이트에서 "편집"을 누르면 묻고, 맞으면 이 브라우저가 프로젝트별로
   기억한다. 기본값인 동안 편집 화면에 "기본 비밀번호(1234) 사용 중" 안내가 계속 뜬다 — 데이터 메뉴 → "편집 비밀번호 변경".
 - 편집 비밀번호는 `DATA_DIR/shows/<id>/auth.json` 에 scrypt 해시로만 저장한다(평문 없음, `show` 와 분리돼 내보내기·업로드 JSON 에
-  섞이지 않음). 이 파일을 지우면 그 프로젝트는 다시 `1234` 가 된다 — 비밀번호를 잊었거나 누가 바꿔 버렸을 때 서버에서 하는 복구 방법.
+  섞이지 않음).
+- **휴지통**: 프로젝트를 지우면 바로 없어지지 않고 `DATA_DIR/trash/` 로 옮겨져 `TRASH_DAYS`(기본 30)일 동안 남는다(음원·버전 기록·
+  편집 비밀번호까지 그대로). 데이터 메뉴 또는 프로젝트 메뉴 → **휴지통**에서 되살린다. 목록과 복구는 **사이트 비밀번호만으로** 된다 —
+  편집 비밀번호를 빼앗긴 사람이 비밀번호를 바꾸고 지워도 원래 편집자가 되살릴 수 있게(복구는 아무것도 지우지 않는다). 프로젝트가
+  하나도 없으면 시작 화면에 휴지통 입구가 있다. 같은 id 가 이미 있으면 새 id 로 되살린다.
+- **관리자 복구 키**(`ADMIN_KEY`): 편집 비밀번호를 잊었거나 누가 바꿔 잠갔을 때, 서버 관리자가 그 프로젝트의 편집 비밀번호를 `1234`
+  (기본 상태)로 되돌린다. 화면은 없고 curl 로 쓴다. 내용·음원·기록은 그대로이고, 되돌린 뒤 사이트에서 새 비밀번호로 바꾼다.
+
+  ```sh
+  # <id> 는 주소의 ?show=<id> 또는 GET /api/shows 의 id. 키에 한글·기호가 있으면 URL 인코딩해서 넣는다
+  curl -X POST 'https://<사이트>/api/shows/<id>/edit-password/reset' \
+    -H 'X-App-Key: <APP_PASSWORD>' -H 'X-Admin-Key: <ADMIN_KEY>'
+  # → {"ok":true,"isDefault":true}. 틀리면 403 admin_forbidden, 같은 IP 에서 1분에 10번 틀리면 429, ADMIN_KEY 미설정이면 404
+  ```
+
+  `ADMIN_KEY` 는 팀 비밀번호와 따로, 서버 관리자만 안다. 키가 유출됐다고 의심되면 Railway 변수를 바꾸면 바로 바뀐다.
 - **버전 기록**: 저장할 때 직전 버전을 `shows/<id>/history/` 에 남긴다(최근 `HISTORY_KEEP` 개). 웹 자동 저장은 10분에 한 번만,
   MCP 수정·복원은 매번 남긴다. 편집 권한이 있으면 데이터 메뉴 → "버전 기록 · 복원"에서 골라 복원한다(MCP 의 `restore_revision` 과 같은 것).
   복원도 새 rev 로 저장되므로 복원 자체를 다시 되돌릴 수 있다. 목록(rev·시각·제목·개수)은 보기 권한으로도 읽히지만 내용과 복원은 편집 권한이 필요하다.
@@ -83,6 +102,7 @@ DATA_DIR/shows/<id>/audio/<fileKey>       음원 원본
 DATA_DIR/shows/<id>/audio/<fileKey>.json  { fileKey, name, mime, size }
 DATA_DIR/shows/<id>/history/<rev>.json    덮어쓰기 직전 버전 (최근 HISTORY_KEEP 개, 되돌리기용). 예전 위치 shows/<id>.history/ 는 시작할 때 여기로 옮긴다
 DATA_DIR/shows/<id>/auth.json             편집 비밀번호 scrypt 해시. 없으면 기본값 1234
+DATA_DIR/trash/<id>-<삭제 ms>/             휴지통: meta.json { id, title, rev, deletedAt, ip }, show.json(=<id>.json), files/(=shows/<id>/ 통째)
 ```
 
 쓰기는 임시 파일 → rename 으로 원자적이고, 한 프로세스 안에서 직렬화된다(서버 인스턴스는 하나로 둔다).
@@ -103,10 +123,13 @@ DATA_DIR/shows/<id>/auth.json             편집 비밀번호 scrypt 해시. 없
 | POST | `/api/shows` | body `{ show }` → `201 { id, rev: 1, updatedAt }` |
 | GET | `/api/shows/:id` | `{ rev, updatedAt, show }` + `ETag: "rev"`. `If-None-Match` 가 같으면 `304`. 없으면 `404` |
 | PUT | `/api/shows/:id` | **편집**. body `{ baseRev, show }` (≤5MB) → `{ rev, updatedAt }`. `baseRev` 가 현재 rev 와 다르면 `409 { error:'conflict', rev, updatedAt, show }`. 직전 레코드는 기록으로(10분에 한 번) |
-| DELETE | `/api/shows/:id` | **편집**. `{ ok: true }` — 음원·히스토리·비밀번호까지 삭제, 복구 불가 |
+| DELETE | `/api/shows/:id` | **편집**. `{ ok: true, trashId, trashDays }` — 레코드와 `shows/<id>/`(음원·기록·비밀번호)를 그대로 휴지통으로 옮긴다 |
+| GET | `/api/trash` | `{ days, items: [{ trashId, id, title, rev, deletedAt, expiresAt, daysLeft }] }` 최근 삭제 먼저. 보기 권한 (삭제 IP 는 `meta.json` 에만) |
+| POST | `/api/trash/:trashId/restore` | 보기 권한. `{ id, originalId, title }` — 같은 id 가 이미 있으면 새 `id`. 없는 항목이면 `404` |
 | POST | `/api/shows/:id/duplicate` | `201 { id, rev: 1, updatedAt }` — 제목 뒤 "(복제)", 음원 파일도 복사. 히스토리·편집 비밀번호는 복사하지 않음(복제본은 1234) |
 | POST | `/api/shows/:id/edit-check` | **편집**. 키 확인 → `{ ok: true, isDefault }` |
 | POST | `/api/shows/:id/edit-password` | body `{ current, next }` (`current` 는 `X-Edit-Key` 로 줘도 됨) → `{ ok: true, isDefault }`. `next` 4~200자, 아니면 `400 bad_password`. `next` 가 `1234` 면 기본 상태로 되돌림. rev 는 그대로 |
+| POST | `/api/shows/:id/edit-password/reset` | **관리자**. 헤더 `X-Admin-Key`(URL 인코딩 가능) → `{ ok: true, isDefault: true }`. `ADMIN_KEY` 미설정이면 `404`, 틀리면 `403 admin_forbidden`, IP 당 1분 10회 실패 시 `429` |
 | GET | `/api/shows/:id/history` | `[{ rev, updatedAt, title, sceneCount, cueCount, current, restoredFrom }]` 최신순, 맨 앞이 현재 버전(`current: true`) |
 | GET | `/api/shows/:id/history/:rev` | **편집**. `{ rev, updatedAt, show }`. 없으면 `404` |
 | POST | `/api/shows/:id/restore` | **편집**. body `{ rev, baseRev? }` → `{ rev, updatedAt, restoredFrom, warnings }` — 그 버전의 show 를 새 rev 로 저장. 이미 같은 내용이면 `{ unchanged: true, rev }`. 지워진 음원을 가리키는 트랙은 연결을 비우고 `warnings` 로 알림. `baseRev` 가 다르면 `409`, 없는 rev 면 `404 rev_not_found` |

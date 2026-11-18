@@ -114,7 +114,7 @@ test('remove: 기록 폴더도 지운다. duplicate 는 기록을 가져가지 �
     await store.update(id, s => Object.assign(s, { title: 'B' }));
     const d = await store.duplicate(id);
     assert.deepEqual((await store.revisions(d.id)).map(r => r.rev), [1]);
-    assert.equal(await store.remove(id), true);
+    assert.ok((await store.remove(id)).trashId, '삭제는 휴지통으로');
     assert.ok(!fs.existsSync(path.join(dir, 'shows', id, 'history')));
     assert.ok(!fs.existsSync(path.join(dir, 'shows', id + '.json')));
   } finally { done(); }
