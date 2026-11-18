@@ -1555,9 +1555,11 @@ const MERGE_TRIES = 3; // 다시 저장해도 또 409 면 몇 번까지 다시 �
 // 이 기기의 show 를 서버 내용(또는 병합 결과)으로 바꿀 때마다 불린다(applyRemote·openShow) — 바뀐 show 와 맞지 않는 이 기기 전용
 // 기록은 모두 여기서 비운다: DEL(삭제 되돌리기 = show 통째 스냅샷이라 남기면 병합된 서버 변경까지 되돌린다), UNDO(편집기 되돌리기).
 // keepScene: 부분 반영 때 편집 중이라 그대로 둔 씬 — 그 씬의 편집기 되돌리기만 남긴다(서버가 그 씬을 안 바꿨을 때만 부분 반영된다).
-// 끌어 옮기기 기록(MV·UNDO_SEQ)이 들어오면 여기서 함께 비울 것
+// 끌어 옮기기 기록(MV)은 씬과 상관없이 모두 비운다 — 옮긴 문단·큐의 "원래 자리"가 합쳐진 서버 순서와 맞지 않는다.
+// UNDO_SEQ 는 순서 번호일 뿐이라 그대로 둔다(남긴 씬의 스냅숏과 앞으로 쌓을 기록의 앞뒤가 유지된다)
 function localReplaced(keepScene) {
   DEL.length = 0;
+  mvClear();
   if (keepScene == null) UNDO.clear();
   else Array.from(UNDO.keys()).forEach(k => { if (k !== keepScene) UNDO.delete(k); });
 }
@@ -1570,7 +1572,7 @@ function mergeWith(d) {
   const M = window.CueMerge;
   if (!M || !Srv.base || !d || !d.show || !state.show || newerShow(d) || !idsOk(d.show)) return null;
   try {
-    const r = M.mergeShows(migrate(Srv.base), migrate(state.show), migrate(d.show), { assignLabels });
+    const r = M.mergeShows(migrate(Srv.base), migrate(state.show), migrate(d.show), { relabel }); // 병합 결과도 큐 번호 1부터 연속
     return r.ok ? r : null;
   } catch (e) { console.error('merge', e); return null; }
 }
@@ -5556,8 +5558,10 @@ function restoreLabels(show, m) {
 const MV = { undo: [], redo: [], show: null };
 const DND = { on: false, started: false, kind: null, id: null, el: null, src: null, x0: 0, y0: 0, x: 0, y: 0, pid: null, slot: null, tgt: null, raf: 0, hoverP: null, eatClick: false };
 function dndOn() { return !!state.show && state.edit && state.view === 'script' && mountedView === 'script' && !state.moveCue && !state.modal && !composing; }
-// 프로젝트를 바꾸거나 서버본·삭제 되돌리기로 show 를 갈아끼우면 이동 기록은 버린다
-function mvBox() { if (MV.show !== state.show) { MV.undo = []; MV.redo = []; MV.show = state.show; } return MV; }
+// 이동 기록 비우기: 서버 내용·병합 결과로 바꿀 때는 localReplaced() 가 부른다. 그 밖에 show 를 갈아끼우는 곳(가져오기·삭제 되돌리기·
+// 샘플 초기화 등)은 mvBox 가 show 가 바뀐 것을 보고 비운다
+function mvClear() { MV.undo = []; MV.redo = []; MV.show = state.show; }
+function mvBox() { if (MV.show !== state.show) mvClear(); return MV; }
 function dndDoc(sid) { return $(`#script .doc[data-scene="${cssq(sid)}"]`); }
 function dndPara(id) { return $(`#script .doc > p[data-id="${cssq(id)}"]`); }
 

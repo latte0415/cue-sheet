@@ -167,7 +167,7 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
 - **브라우저 쪽: 409 자동 병합 (2단계 a, 구현됨).** 브라우저는 5초마다 `If-None-Match` 로 폴링하고, 고치던 내용이 없으면 MCP 수정을
   바로 받아 온다. **그 사이 브라우저에 저장 안 된 편집이 있으면** 다음 저장이 409 가 되는데, 이때 선택 바를 바로 띄우지 않고 id 단위로
   합친다. 예전에는 "서버 버전 / 내 버전" 둘 중 하나를 골라야 해서 "내 버전" 을 고르면 MCP 수정이 사라졌다.
-  - 병합은 `lib/merge.js` 의 `mergeShows(base, local, remote, { assignLabels })` (Node 는 `require`, 브라우저는 index.html 의
+  - 병합은 `lib/merge.js` 의 `mergeShows(base, local, remote, { relabel })` (Node 는 `require`, 브라우저는 index.html 의
     `<script src="lib/merge.js">` → `window.CueMerge`, 서버가 `/lib/merge.js` 로 내준다 — 빌드 없음). 기준(`Srv.base`)은 마지막으로
     서버와 맞춘 내용 — 열 때, 저장(PUT) 성공 때(보낸 그 내용), 서버 내용을 반영할 때(폴링·"서버 버전 사용"·버전 복원·잠금 "버리기") 바뀐다.
     세 값 모두 `migrate()` 를 거쳐 넘긴다.
@@ -204,9 +204,10 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
   - **순서**: 서버 순서에서 시작해, 이 기기에서 새로 넣거나 옮긴 항목을 이 기기 목록에서 가장 가까운(서버가 옮기지 않은) 이웃 바로 뒤에,
     앞쪽 이웃이 없으면 뒤쪽 이웃 앞에, 둘 다 없으면 맨 뒤에 끼운다. 결정적이다. 같은 항목을 양쪽이 옮겼으면 서버 위치(충돌 아님).
     트랙은 항상 `no` 순. 양쪽이 같은 자리에 넣으면 이 기기 것이 앞에 온다.
-  - **큐 번호(`label`)·`isCue` 는 충돌로 치지 않는다.** label 은 한쪽만 바뀌면 그쪽, 둘 다면 서버 것. 병합 뒤 같은 번호가 둘이면(양쪽이 각자
-    맨 뒤에 큐를 달아 둘 다 Q33) 서버 번호를 남기고 이 기기 번호를 비운 뒤 `assignLabels` 로 다시 매긴다 — 그래서 이 기기에서 본 번호가
-    병합 뒤 바뀔 수 있다(예: Q33 → Q32.1). `isCue` 는 큐가 있으면 true.
+  - **큐 번호(`label`)·`isCue` 는 충돌로 치지 않는다.** 병합 뒤 `relabel`(lib/labels.js, 브라우저는 index.html 의 같은 함수)로
+    늘 1부터 연속으로 다시 맞춘다 — 양쪽이 각자 맨 뒤에 큐를 달아 둘 다 Q33 이었으면 병합 순서대로 Q33·Q34 가 된다. 그래서 이 기기나
+    서버에서 본 번호가 병합 뒤 바뀔 수 있다. `isCue` 는 큐가 있으면 true.
+  - 그 밖의 필드는 이름을 가리지 않고 3-way 로 합친다 — 코멘트 `snapshot`(v7) 같은 새 필드도 그대로 남는다.
   - show 의 `id`·`version`·`updatedAt` 은 서버 것. `revision`(판 표시)은 사람이 쓰는 값이라 한쪽만 바뀌면 그쪽, 둘 다 바뀌면 서버 것(충돌 아님).
   - 병합 뒤 **트랙 번호가 겹치면** 충돌(양쪽이 각자 새 트랙을 BGM 8 로 만든 경우). 서버 쪽으로 정하면 이 기기 트랙을 맨 뒤 번호로 옮긴다.
   - id 가 없거나 겹치는 항목이 있으면 `ok:false`.

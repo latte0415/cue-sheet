@@ -8,19 +8,20 @@ const { mergeShows, hasAllIds } = require('../lib/merge');
 const { applyOps } = require('../lib/ops');
 const { validateShow } = require('../lib/validate');
 
-// 다른 테스트와 같은 방식: index.html 의 "상수" ~ "상태" 구간(migrate·assignLabels)을 떼어 브라우저와 같은 정규화·번호 매기기를 쓴다
+// 다른 테스트와 같은 방식: index.html 의 "상수" ~ "상태" 구간(migrate·relabel)을 떼어 브라우저와 같은 정규화·번호 매기기를 쓴다
 function frontend() {
   const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const a = html.indexOf('/* ================= 상수'), b = html.indexOf('/* ================= 상태');
   assert.ok(a > 0 && b > a, 'index.html 에서 상수~상태 구간 표시를 찾지 못했습니다 (구간 주석이 바뀌었으면 이 테스트를 고치세요)');
-  return vm.runInNewContext(html.slice(a, b) + '\n;({ assignLabels, migrate })', {});
+  return vm.runInNewContext(html.slice(a, b) + '\n;({ relabel, labelsInOrder, migrate })', {});
 }
 const FE = frontend();
 const plain = o => JSON.parse(JSON.stringify(o));
 const migrate = s => plain(FE.migrate(s));
-const assignLabels = s => FE.assignLabels(s);
+const relabel = s => FE.relabel(s); // 브라우저 save 처럼 큐 번호를 1부터 연속으로
+const inOrder = s => FE.labelsInOrder(s);
 const backstage = () => migrate(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cues', 'backstage-part1.json'), 'utf8')));
-const merge = (b, l, r) => mergeShows(b, l, r, { assignLabels });
+const merge = (b, l, r) => mergeShows(b, l, r, { relabel });
 
 const scenes = s => s.parts.flatMap(p => p.scenes);
 const items = s => scenes(s).flatMap(sc => sc.items);
@@ -217,32 +218,57 @@ test('다른 부모로 옮기기는 부모 필드 — 내용 편집과 합쳐지
   assert.deepEqual(find(r.show, 'pt-2').scenes.map(s => [s.id, s.title]), [['s-3o', '로컬 엔딩']]);
 });
 
-test('큐 번호: 양쪽이 새로 매긴 같은 번호는 서버 것을 남기고 이 기기 것을 다시 매긴다 — 충돌 아님', () => {
+test('큐 번호: 병합 뒤에도 늘 1부터 연속 — 양쪽이 같은 번호를 새로 매겨도 대본 순서대로 다시 매긴다 (충돌 아님)', () => {
   const base = backstage();
-  const last = items(base).filter(i => i.label).map(i => Number(i.label)).reduce((a, b) => Math.max(a, b));
-  // 서버(MCP): 마지막 문단 i-3n 뒤 새 문단에 큐 → Q(last+1)
+  const last = items(base).filter(i => i.label).length;
+  // 서버(MCP): 마지막 씬 끝에 큐 달린 새 문단 → Q(last+1)
   const remote = remoteOps(base, [{ op: 'add', kind: 'item', parent: 's-3o', data: { id: 'i-R1', text: '(서버 퇴장)', cues: [{ dept: 'light', status: 'tbd' }] } }]);
   assert.equal(find(remote, 'i-R1').label, String(last + 1));
-  // 이 기기: 같은 자리 근처 i-3l 에 큐 (브라우저 save 처럼 assignLabels) → 역시 Q(last+1) 이 아니라 i-3n 앞이라 "31.1" 같은 번호
+  // 이 기기: i-3k 에 큐, 마지막 씬 끝에 큐 달린 새 문단 (브라우저 save 처럼 relabel) → 이 기기에서도 끝 문단이 Q(last+1)
   const local = plain(base);
   find(local, 'i-3k').cues.push(soundCue('q-L1', 1)); find(local, 'i-3k').isCue = true;
   local.parts[0].scenes.at(-1).items.push(newItem('i-L9', '로컬 끝', { cues: [soundCue('q-L9', 2)], isCue: true }));
-  assignLabels(local);
-  assert.equal(find(local, 'i-L9').label, String(last + 1), '이 기기에서도 같은 번호');
+  relabel(local);
   const r = merge(base, local, remote);
   assert.deepEqual(r.conflicts, []);
-  assert.equal(find(r.show, 'i-R1').label, String(last + 1), '서버 번호 유지');
-  assert.equal(find(r.show, 'i-3k').label, find(local, 'i-3k').label, '겹치지 않는 이 기기 번호는 그대로');
-  // 병합 순서는 [… i-3n, i-L9, i-R1] (이 기기 것이 이웃 i-3n 바로 뒤) — 다시 매기면 서버 Q(last+1) 앞이라 "(last).1"
-  assert.equal(find(r.show, 'i-L9').label, last + '.1', '겹친 이 기기 번호는 다시 매김');
-  const labels = items(r.show).map(i => i.label).filter(Boolean);
-  assert.equal(new Set(labels).size, labels.length, '번호 중복 없음');
-  // 같은 문단에 양쪽이 다른 번호를 매겼으면 서버 것
+  assert.ok(inOrder(r.show), '병합 결과 번호가 1부터 연속, 큐 없는 문단은 null');
+  // 병합 순서는 [… i-3n, i-L9, i-R1] (이 기기 것이 이웃 i-3n 바로 뒤) — 끝의 두 문단이 차례로 마지막 두 번호
+  const n = items(r.show).filter(i => i.cues.length).length;
+  assert.deepEqual([find(r.show, 'i-L9').label, find(r.show, 'i-R1').label], [String(n - 1), String(n)]);
+  assert.equal(r.sameAsRemote, false);
+  // 같은 문단에 양쪽이 다른 (옛 소수) 번호를 매겼어도 결과는 자리 순서 번호
   const b2 = plain(base), l2 = plain(base), r2 = plain(base);
   find(l2, 'i-k').cues.push(soundCue('q-x', 1)); find(l2, 'i-k').label = '7.1';
   find(r2, 'i-k').cues.push(soundCue('q-x', 1)); find(r2, 'i-k').label = '7.2';
   const m2 = merge(b2, l2, r2);
-  assert.deepEqual(m2.conflicts, []); assert.equal(find(m2.show, 'i-k').label, '7.2');
+  assert.deepEqual(m2.conflicts, []); assert.ok(inOrder(m2.show));
+  assert.equal(find(m2.show, 'i-k').label, String(items(m2.show).filter(i => i.cues.length).findIndex(i => i.id === 'i-k') + 1));
+});
+
+test('코멘트 snapshot(v7): 병합해도 버리지 않는다 — 이 기기·서버 어느 쪽에서 달린 것이든, 문단이 바뀌어도 그대로', () => {
+  const base = backstage();
+  const it = items(base).find(i => i.cues.length >= 1 && i.kind === 'line');
+  const snapOf = i => ({ kind: i.kind, speaker: i.speaker, text: i.text, cues: plain(i.cues) });
+  const cmt = (id, i) => ({ id, author: '검토', text: '원래대로', createdAt: '2026-11-18T00:00:00.000Z', resolved: false, resolvedBy: null, resolvedAt: null, snapshot: snapOf(i) });
+  // 기준에 이미 있던 snapshot 코멘트
+  find(base, it.id).comments.push(cmt('c-base', it));
+  const local = plain(base), remote = plain(base);
+  // 이 기기: 같은 문단에 snapshot 코멘트를 새로 달고 문장을 고침
+  const li = find(local, it.id); li.comments.push(cmt('c-local', li)); li.text = li.text + ' (로컬)';
+  // 서버: 다른 문단 문장을 고치고, 같은 문단에 snapshot 코멘트를 닮
+  const other = items(remote).find(i => i.id !== it.id && i.kind === 'line');
+  other.text = other.text + ' (서버)';
+  find(remote, it.id).comments.push(cmt('c-remote', find(remote, it.id)));
+  const r = merge(migrate(base), migrate(local), migrate(remote));
+  assert.deepEqual(r.conflicts, []);
+  const cs = find(r.show, it.id).comments;
+  assert.deepEqual(cs.map(c => c.id).sort(), ['c-base', 'c-local', 'c-remote']);
+  cs.forEach(c => assert.deepEqual(c.snapshot, snapOf(it), c.id + ' snapshot 그대로'));
+  assert.equal(find(r.show, it.id).text, it.text + ' (로컬)');
+  assert.equal(find(r.show, other.id).text, other.text);
+  assert.equal(r.show.version, 7);
+  assert.deepEqual(validateShow(r.show).errors, []);
+  assert.deepEqual(migrate(r.show), r.show, '사이트가 다시 읽어도 그대로');
 });
 
 test('사람·트랙·씬 출연자', () => {
@@ -386,7 +412,7 @@ test('실제 흐름: backstage-part1 — 서버는 MCP ops, 이 기기는 편집
   const cm = find(local, 's-3i').comments[0]; Object.assign(cm, { resolved: true, resolvedBy: '나', resolvedAt: '2026-11-18T03:00:00.000Z' });
   local.revision = '리허설 2';
   local.updatedAt = new Date().toISOString();
-  assignLabels(local);
+  relabel(local);
 
   const r = merge(base, local, remote);
   assert.ok(r.ok);
@@ -409,11 +435,9 @@ test('실제 흐름: backstage-part1 — 서버는 MCP ops, 이 기기는 편집
   assert.equal(find(m, 'p-daehoon').note, '로컬 메모');
   assert.equal(find(m, cm.id).resolved, true);
   assert.equal(m.revision, '리허설 2');
-  // 번호: 겹치지 않고 서버가 매긴 번호는 그대로
-  const labels = items(m).map(i => i.label).filter(Boolean);
-  assert.equal(new Set(labels).size, labels.length);
-  assert.equal(find(m, 'i-mcp1').label, find(remote, 'i-mcp1').label);
-  assert.ok(find(m, 'i-loc1').label);
+  // 번호: 병합 결과도 1부터 연속 (서버·이 기기에서 새로 단 큐 문단 모두 번호가 있다)
+  assert.ok(inOrder(m));
+  assert.ok(find(m, 'i-mcp1').label && find(m, 'i-loc1').label);
   // 검증·사이트 정규화
   const v = validateShow(m);
   assert.deepEqual(v.errors, []);
@@ -460,6 +484,7 @@ test('무작위: 양쪽에 MCP 식 편집을 섞어도 항상 병합되고, 충�
     assert.equal(new Set(got).size, got.length, `round ${round}: id 중복`);
     const labels = items(r.show).map(i => i.label).filter(Boolean);
     assert.equal(new Set(labels).size, labels.length, `round ${round}: 번호 중복`);
+    assert.ok(inOrder(r.show), `round ${round}: 번호 1부터 연속`);
     // 충돌을 서버 쪽으로 정한 결과도 사이트가 읽을 수 있어야 한다("충돌만 서버 것으로" 선택지)
     assert.deepEqual(validateShow(r.show).errors, [], `round ${round}`);
     r.conflicts.forEach(c => assert.ok(c.text && c.key, `round ${round}: 충돌 설명`));
