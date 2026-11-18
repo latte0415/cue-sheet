@@ -26,7 +26,7 @@ async function rpcBody(r) {
 async function connect(base, opts) {
   opts = opts || {};
   const client = new Client({ name: 'cue-sheet-test', version: '1.0.0' }, opts.clientOptions);
-  const headers = opts.headers || { Authorization: `Bearer ${PW}` };
+  const headers = opts.headers || { Authorization: `Bearer ${PW}`, 'X-Edit-Key': '1234' }; // 새 프로젝트의 편집 비밀번호는 1234
   await client.connect(new StreamableHTTPClientTransport(new URL(base + '/mcp'), { requestInit: { headers } }));
   return client;
 }
@@ -251,4 +251,67 @@ test('401: 길이를 모르는(chunked) 본문은 읽지 않고 바로 401 + 연
   assert.notEqual(r.headers.get('connection'), 'close');
   assert.equal(S.server.keepAliveTimeout, 65000);
   assert.ok(S.server.headersTimeout > S.server.keepAliveTimeout);
+});
+
+test('편집 비밀번호: 쓰기 도구(edit_show·restore_revision)는 그 프로젝트의 키 — X-Edit-Key 헤더 또는 editKey 인자, 읽기 도구는 사이트 비밀번호만', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuesheet-mcp-'));
+  const server = createServer({ dataDir: dir, password: PW, log: null, editRate: { max: 4, windowMs: 60000 } });
+  const E = await new Promise(res => server.listen(0, '127.0.0.1', () => res({ server, dir, base: `http://127.0.0.1:${server.address().port}` })));
+  const B = { Authorization: `Bearer ${PW}` };
+  const KEY = '무대-편집';
+  const cs = [];
+  const conn = async extra => { const c = await connect(E.base, { headers: Object.assign({}, B, extra) }); cs.push(c); return c; };
+  try {
+    const { id } = await (await fetch(E.base + '/api/shows', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, B), body: JSON.stringify({ show: backstage() }) })).json();
+    let res = await fetch(`${E.base}/api/shows/${id}/edit-password`, { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, B), body: JSON.stringify({ current: '1234', next: KEY }) });
+    assert.equal(res.status, 200);
+    const it = backstage().parts[0].scenes[0].items[0];
+    const ops = n => [{ op: 'set', id: it.id, fields: { text: `(편집 키 ${n})` } }];
+    const rev = async () => (await E.server.store.get(id)).rev;
+
+    // 키 없는 연결: 읽기는 되고, 쓰기는 isError 로 막히며 아무것도 저장되지 않는다
+    const c0 = await conn({});
+    for (const [name, args] of [['list_shows', {}], ['get_show', { showId: id }], ['search_show', { showId: id, query: '(' }], ['list_revisions', { showId: id }]]) {
+      const r = await c0.callTool({ name, arguments: args });
+      assert.ok(!r.isError, name + ': ' + text(r));
+    }
+    let r = await c0.callTool({ name: 'edit_show', arguments: { showId: id, ops: ops(0) } });
+    assert.equal(r.isError, true);
+    assert.match(text(r), /edit password required for show .* X-Edit-Key header .* editKey/);
+    assert.equal(await rev(), 1);
+    r = await c0.callTool({ name: 'edit_show', arguments: { showId: id, ops: ops(0), dryRun: true } });
+    assert.ok(!r.isError, 'dryRun 은 저장하지 않으므로 키 없이: ' + text(r));
+    r = await c0.callTool({ name: 'restore_revision', arguments: { showId: id, rev: 1 } });
+    assert.equal(r.isError, true);
+    assert.match(text(r), /edit password required/);
+    // 기본값 1234 도 이제 안 됨, editKey 인자로 맞는 키를 주면 저장
+    r = await c0.callTool({ name: 'edit_show', arguments: { showId: id, ops: ops(1), editKey: '1234' } });
+    assert.equal(r.isError, true);
+    r = await c0.callTool({ name: 'edit_show', arguments: { showId: id, ops: ops(1), editKey: KEY } });
+    assert.ok(!r.isError, text(r));
+    assert.equal(await rev(), 2);
+
+    // 헤더: UTF-8 바이트 그대로(클라이언트 설정에 한글을 그대로 쓴 경우)와 URL 인코딩 둘 다
+    const c1 = await conn({ 'X-Edit-Key': Buffer.from(KEY, 'utf8').toString('latin1') });
+    r = await c1.callTool({ name: 'edit_show', arguments: { showId: id, ops: ops(2) } });
+    assert.ok(!r.isError, text(r));
+    assert.equal(await rev(), 3);
+    const c2 = await conn({ 'X-Edit-Key': encodeURIComponent(KEY) });
+    r = await c2.callTool({ name: 'restore_revision', arguments: { showId: id, rev: 1 } });
+    assert.ok(!r.isError, text(r));
+    assert.equal(await rev(), 4);
+
+    // 틀린 키는 /api 와 같은 실패 제한(IP+프로젝트, 여기선 1분 4회): 지금까지 1회 틀림 → 3회 더 틀리면 막힌다
+    const c3 = await conn({ 'X-Edit-Key': 'wrong' });
+    for (let k = 0; k < 3; k++) assert.match(text(await c3.callTool({ name: 'edit_show', arguments: { showId: id, ops: ops(3) } })), /edit password required/);
+    r = await c2.callTool({ name: 'edit_show', arguments: { showId: id, ops: ops(3) } });
+    assert.equal(r.isError, true);
+    assert.match(text(r), /too many wrong edit passwords .* wait \d+s/, '막힌 동안은 맞는 키도');
+    res = await fetch(`${E.base}/api/shows/${id}/edit-check`, { method: 'POST', headers: Object.assign({ 'X-Edit-Key': encodeURIComponent(KEY) }, B) });
+    assert.equal(res.status, 429, '/api 와 같은 카운터');
+    assert.equal(await rev(), 4);
+  } finally {
+    for (const c of cs) await c.close().catch(() => {});
+    await stop(E);
+  }
 });

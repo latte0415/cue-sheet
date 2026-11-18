@@ -6,10 +6,12 @@ Claude Code·Codex 같은 AI 에이전트가 사이트의 큐시트를 **읽고 
 
 ## 연결하기 (개발자가 아니어도 됨)
 
-필요한 것: 사이트 주소(예: `https://cue-sheet.example.app`)와 팀 비밀번호(서버의 `APP_PASSWORD`).
+필요한 것: 사이트 주소(예: `https://cue-sheet.example.app`), 팀 비밀번호(서버의 `APP_PASSWORD` — 읽기), 그리고 고치게 하려면
+그 공연(프로젝트)의 **편집 비밀번호**(사이트의 "편집 비밀번호 변경"으로 정한 것, 처음엔 `1234`).
 
-**가장 쉬운 방법:** 사이트 메뉴 → **에이전트 연결** 을 열면 이 사이트 주소와 비밀번호가 들어간 명령·설정이 나온다. **복사** 버튼으로
-복사해 붙여 넣으면 된다. 비밀번호에 `$` `` ` `` `"` `\` `'` 같은 기호가 있어도 복사 버튼이 셸·TOML 용으로 알맞게 감싸 준다.
+**가장 쉬운 방법:** 사이트에서 그 공연을 열고 **편집 잠금을 해제한 뒤** 데이터 메뉴 → **에이전트 연결** 을 열면 사이트 주소·팀 비밀번호·
+그 공연의 편집 비밀번호(`X-Edit-Key` 헤더)가 들어간 명령·설정이 나온다. **복사** 버튼으로 복사해 붙여 넣으면 된다. 잠긴 상태에서 열면
+편집 비밀번호 줄이 빠져 에이전트는 읽기만 한다. 비밀번호에 `$` `` ` `` `"` `\` `'` 같은 기호가 있어도 복사 버튼이 셸·TOML 용으로 알맞게 감싸 준다.
 
 손으로 쓰려면 아래 `<사이트>` 와 `<비밀번호>` 를 바꿔 넣는다. 셸 명령은 헤더 전체를 **작은따옴표**로 감싼다(큰따옴표 안에서는
 `$`·`` ` `` 가 해석돼 비밀번호가 바뀌거나 명령이 실행된다). 비밀번호에 `'` 가 있으면 그 자리를 `'\''` 로 바꾼다.
@@ -19,8 +21,10 @@ Claude Code·Codex 같은 AI 에이전트가 사이트의 큐시트를 **읽고 
 터미널에서 한 줄:
 
 ```sh
-claude mcp add --transport http cue-sheet 'https://<사이트>/mcp' --header 'Authorization: Bearer <비밀번호>'
+claude mcp add --transport http cue-sheet 'https://<사이트>/mcp' --header 'Authorization: Bearer <비밀번호>' --header 'X-Edit-Key: <편집 비밀번호>'
 ```
+
+읽기만 시킬 거면 `--header 'X-Edit-Key: …'` 를 빼도 된다.
 
 - Claude Code 를 열고 `/mcp` 를 입력하면 `cue-sheet` 가 **connected** 로 보여야 한다. 실패로 나오면 주소 끝의 `/mcp`,
   비밀번호 앞의 `Bearer ` (한 칸 띄움)를 확인한다.
@@ -34,7 +38,7 @@ claude mcp add --transport http cue-sheet 'https://<사이트>/mcp' --header 'Au
 ```toml
 [mcp_servers.cue-sheet]
 url = "https://<사이트>/mcp"
-http_headers = { "Authorization" = "Bearer <비밀번호>" }
+http_headers = { "Authorization" = "Bearer <비밀번호>", "X-Edit-Key" = "<편집 비밀번호>" }
 ```
 
 TOML 의 `"…"` 안에서는 비밀번호의 `\` 를 `\\`, `"` 를 `\"` 로 쓴다.
@@ -49,7 +53,9 @@ Codex 를 다시 시작한 뒤 `/mcp` 로 `cue-sheet` 와 도구 6개가 보이�
 - "Q11 다음에 '(테이블 정리)' 지문 넣고 무대 큐 달아 줘" → `edit_show`
 - "방금 수정 취소해 줘" → `list_revisions` → `restore_revision`
 
-비밀번호는 팀 공용이라 이 설정이 있으면 누구나 수정할 수 있다. 비밀번호를 바꾸면(`APP_PASSWORD`) 위 설정도 바꿔야 한다.
+팀 비밀번호(`APP_PASSWORD`)만 있으면 읽기만 된다. 고치기(`edit_show`·`restore_revision`)는 그 공연의 편집 비밀번호가 있어야 하고,
+없거나 틀리면 아무것도 저장하지 않고 "edit password required" 로 알려 준다. 둘 중 하나를 바꾸면 위 설정도 바꿔야 한다.
+편집 비밀번호가 다른 공연을 여러 개 고치게 하려면 헤더 대신 도구 인자 `editKey` 로 줄 수 있다(대화에 비밀번호가 남는다는 점에 주의).
 음원 파일은 MCP 로 올리거나 지울 수 없다 — 웹 앱에서 한다.
 
 ## 설계
@@ -61,9 +67,9 @@ Codex 를 다시 시작한 뒤 `/mcp` 로 `cue-sheet` 와 도구 6개가 보이�
 | `list_shows` | 공연 목록 `{ id, title, rev, updatedAt, sceneCount, cueCount }` | 읽기 |
 | `get_show { showId, view?, partId?, sceneId? }` | `outline`(기본): 한 줄에 하나씩 id·큐 번호·화자 이름·잘린 본문·큐 한 줄 요약(무대 큐는 소품 동작 포함) + 사람·소품·트랙 목록. `full`: 고른 파트/씬(또는 전체)의 JSON 그대로 | 읽기 |
 | `search_show { showId, query }` | 대본·화자·큐(trigger·memo·무대/출연 내용·무대 큐 소품 이름·트랙 제목)·코멘트·씬 제목/세팅·사람·소품·공연 전 무대 소품·트랙에서 대소문자 무시 부분 일치. `Q12`/`12` 는 큐 번호. 최대 50개, id·위치·발췌 | 읽기 |
-| `edit_show { showId, ops, dryRun?, expectRev? }` | ops 를 원자적으로 적용 → 새 rev, 바뀐 내용 요약(새로 매긴 큐 번호 포함), 경고 | 쓰기 |
+| `edit_show { showId, ops, dryRun?, expectRev?, editKey? }` | ops 를 원자적으로 적용 → 새 rev, 바뀐 내용 요약(새로 매긴 큐 번호 포함), 경고. `dryRun` 은 저장하지 않으므로 편집 비밀번호 없이도 된다 | 쓰기 (편집 비밀번호) |
 | `list_revisions { showId }` | 저장 기록, 최신 먼저(맨 앞이 현재) | 읽기 |
-| `restore_revision { showId, rev }` | 그 버전을 새 버전으로 저장(복원도 되돌릴 수 있음). 이미 같은 내용이면 아무것도 안 함 | 쓰기 |
+| `restore_revision { showId, rev, editKey? }` | 그 버전을 새 버전으로 저장(복원도 되돌릴 수 있음). 이미 같은 내용이면 아무것도 안 함 | 쓰기 (편집 비밀번호) |
 
 결과는 모두 사람이 읽는 텍스트와 `structuredContent`(JSON)를 함께 준다. 실패(없는 id, 틀린 값, 충돌 …)는 프로토콜 오류가
 아니라 `isError: true` 결과로, **무엇을 어떻게 고치면 되는지** 문장으로 돌려준다(예: `"조예준" is a name, use id "p-yejun"`).
@@ -146,7 +152,9 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
 
 ### 기록 (되돌리기)
 
-- 쓰기 직전 버전을 `DATA_DIR/shows/<id>.history/<rev>.json`(`{ rev, updatedAt, show }`)으로 남긴다. **최근 30개**.
+- 쓰기 직전 버전을 `DATA_DIR/shows/<id>/history/<rev>.json`(`{ rev, updatedAt, show[, restoredFrom] }`)으로 남긴다. **최근 100개**
+  (env `HISTORY_KEEP`). 예전 위치 `shows/<id>.history/` 는 서버가 시작할 때 이리로 옮긴다. 웹 앱의 "버전 기록 · 복원"과
+  HTTP `GET /api/shows/:id/history`·`POST …/restore` 도 같은 기록이다.
 - MCP 수정(`update`)과 복원(`restore`)은 매번 남긴다. 브라우저 저장(PUT)은 몇 초마다 오므로 솎는다: 직전 쓰기가 PUT 이 아니었을
   때(= MCP 수정·복원 직후, 서버 재시작 후 첫 PUT) 또는 마지막으로 남긴 지 10분이 지났을 때만. 그래서 MCP 수정 직전·직후 상태는
   브라우저 편집이 이어져도 남는다.
@@ -166,7 +174,12 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
 
 ### 인증
 
-`/api` 와 같은 검사 하나(`server.js` 의 `authed`)를 쓴다: `Authorization: Bearer <APP_PASSWORD>`, `X-App-Key`(URL 인코딩 가능),
+**편집 비밀번호.** 쓰기 도구는 `/api` 의 쓰기와 같은 검사(`server.js` 의 `editCheck`, 해시는 `shows/<id>/auth.json`)를 거친다.
+키는 도구 인자 `editKey` 가 있으면 그것, 없으면 요청 헤더 `X-Edit-Key`(UTF-8 그대로 또는 URL 인코딩). 틀린 키는 `/api` 와 같은
+실패 제한(IP+프로젝트당 1분 10회, 같은 카운터)을 받는다. 도구 처리기는 `AsyncLocalStorage` 로 지금 HTTP 요청의 헤더·IP 를 본다.
+검사 함수가 없으면 쓰기를 막는다(fail-closed). 읽기 도구(`list_shows`·`get_show`·`search_show`·`list_revisions`)는 아래 사이트 인증만.
+
+**사이트 인증.** `/api` 와 같은 검사 하나(`server.js` 의 `authed`)를 쓴다: `Authorization: Bearer <APP_PASSWORD>`, `X-App-Key`(URL 인코딩 가능),
 `?key=` 중 하나. 헤더에 한글 비밀번호를 UTF-8 그대로 실어 보내는 클라이언트도 통과한다. 틀리거나 없으면
 `401 {"error":"unauthorized"}` + `WWW-Authenticate: Bearer`. 401 때 길이를 아는 작은 본문(≤64KB)만 비우고, 길이를 모르거나 큰 본문은
 읽지 않고 응답 뒤 연결을 닫는다(`/api` 도 같음). 서버의 `keepAliveTimeout` 은 65초(프록시 유휴 시간보다 길게). `APP_PASSWORD` 가 없으면 `/api` 처럼 인증 없이 열린다(로컬 개발용).

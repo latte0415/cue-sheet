@@ -13,7 +13,9 @@ function start(password) {
 }
 function stop(s) { return new Promise(r => s.server.close(() => { fs.rmSync(s.dir, { recursive: true, force: true }); r(); })); }
 const show = (title, extra) => Object.assign({ id: 'x', title, version: 5, parts: [{ id: 'pt1', name: '1부', scenes: [{ id: 's1', items: [{ id: 'i1', cues: [{ id: 'q1' }, { id: 'q2' }] }] }] }], people: [], tracks: [] }, extra);
-const J = (method, body, headers) => ({ method, headers: Object.assign({ 'Content-Type': 'application/json' }, headers), body: body === undefined ? undefined : JSON.stringify(body) });
+// 편집 비밀번호: 새 프로젝트는 기본값 1234
+const EK = { 'X-Edit-Key': '1234' };
+const J = (method, body, headers) => ({ method, headers: Object.assign({ 'Content-Type': 'application/json' }, EK, headers), body: body === undefined ? undefined : JSON.stringify(body) });
 
 let S;
 before(async () => { S = await start(''); });
@@ -74,7 +76,7 @@ test('shows: 404 → POST → GET → ETag 304 → PUT → 409 → 덮어쓰기'
   assert.equal(r.status, 400); assert.equal((await r.json()).error, 'invalid_show');
   r = await fetch(`${S.base}/api/shows/${id}`, J('PUT', { baseRev: 3, show: { parts: [] } }));
   assert.equal(r.status, 400);
-  r = await fetch(`${S.base}/api/shows/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: '{nope' });
+  r = await fetch(`${S.base}/api/shows/${id}`, { method: 'PUT', headers: { ...EK, 'Content-Type': 'application/json' }, body: '{nope' });
   assert.equal(r.status, 400); assert.equal((await r.json()).error, 'bad_json');
   r = await fetch(`${S.base}/api/shows/nothere`, J('PUT', { baseRev: 0, show: show('Z') }));
   assert.equal(r.status, 404);
@@ -102,7 +104,7 @@ test('5MB 초과 JSON → 413', async () => {
 test('목록 · 복제 · 삭제(음원 폴더까지)', async () => {
   const { id } = await (await fetch(S.base + '/api/shows', J('POST', { show: show('목록용') }))).json();
   const bytes = Buffer.from('RIFFxxxxWAVE-data-0123456789');
-  let r = await fetch(`${S.base}/api/shows/${id}/audio/f-dup`, { method: 'PUT', headers: { 'Content-Type': 'audio/wav', 'X-File-Name': encodeURIComponent('곡.wav') }, body: bytes });
+  let r = await fetch(`${S.base}/api/shows/${id}/audio/f-dup`, { method: 'PUT', headers: { ...EK, 'Content-Type': 'audio/wav', 'X-File-Name': encodeURIComponent('곡.wav') }, body: bytes });
   assert.equal(r.status, 200);
 
   const list = await (await fetch(S.base + '/api/shows')).json();
@@ -124,12 +126,12 @@ test('목록 · 복제 · 삭제(음원 폴더까지)', async () => {
   assert.deepEqual(Buffer.from(await r.arrayBuffer()), bytes);
   assert.equal((await fetch(`${S.base}/api/shows/nothere/duplicate`, { method: 'POST' })).status, 404);
 
-  r = await fetch(`${S.base}/api/shows/${id}`, { method: 'DELETE' });
+  r = await fetch(`${S.base}/api/shows/${id}`, { method: 'DELETE', headers: EK });
   assert.equal(r.status, 200);
   assert.ok(!fs.existsSync(path.join(S.dir, 'shows', id + '.json')));
   assert.ok(!fs.existsSync(path.join(S.dir, 'shows', id)), '음원 폴더도 삭제');
   assert.equal((await fetch(`${S.base}/api/shows/${id}`)).status, 404);
-  assert.equal((await fetch(`${S.base}/api/shows/${id}`, { method: 'DELETE' })).status, 404);
+  assert.equal((await fetch(`${S.base}/api/shows/${id}`, { method: 'DELETE', headers: EK })).status, 404);
   // 복제본은 남아 있다
   assert.equal((await fetch(`${S.base}/api/shows/${d.id}/audio/f-dup`)).status, 200);
 });
@@ -138,7 +140,7 @@ test('음원: PUT → GET 전체 → Range 206 → 목록 → DELETE → 전체 
   const { id } = await (await fetch(S.base + '/api/shows', J('POST', { show: show('음원') }))).json();
   const A = `${S.base}/api/shows/${id}/audio`;
   const bytes = Buffer.alloc(1000); for (let i = 0; i < bytes.length; i++) bytes[i] = i % 256;
-  let r = await fetch(A + '/f-abc_1', { method: 'PUT', headers: { 'Content-Type': 'audio/wav', 'X-File-Name': encodeURIComponent('01 오프닝.wav') }, body: bytes });
+  let r = await fetch(A + '/f-abc_1', { method: 'PUT', headers: { ...EK, 'Content-Type': 'audio/wav', 'X-File-Name': encodeURIComponent('01 오프닝.wav') }, body: bytes });
   assert.equal(r.status, 200);
   assert.deepEqual(await r.json(), { fileKey: 'f-abc_1', size: 1000, name: '01 오프닝.wav' });
 
@@ -164,21 +166,21 @@ test('음원: PUT → GET 전체 → Range 206 → 목록 → DELETE → 전체 
   r = await fetch(A + '/f-abc_1?download=1');
   assert.match(r.headers.get('content-disposition'), /^attachment;/);
 
-  r = await fetch(A + '/f-two', { method: 'PUT', headers: { 'Content-Type': 'application/octet-stream' }, body: Buffer.from('xyz') });
+  r = await fetch(A + '/f-two', { method: 'PUT', headers: { ...EK, 'Content-Type': 'application/octet-stream' }, body: Buffer.from('xyz') });
   assert.equal(r.status, 200);
-  r = await fetch(A + '/f-bad', { method: 'PUT', headers: { 'Content-Type': 'text/plain' }, body: 'x' });
+  r = await fetch(A + '/f-bad', { method: 'PUT', headers: { ...EK, 'Content-Type': 'text/plain' }, body: 'x' });
   assert.equal(r.status, 415);
 
   let list = await (await fetch(A)).json();
   assert.deepEqual(list.map(x => x.fileKey).sort(), ['f-abc_1', 'f-two']);
   assert.deepEqual(list.find(x => x.fileKey === 'f-abc_1'), { fileKey: 'f-abc_1', name: '01 오프닝.wav', size: 1000, mime: 'audio/wav' });
 
-  r = await fetch(A + '/f-two', { method: 'DELETE' });
+  r = await fetch(A + '/f-two', { method: 'DELETE', headers: EK });
   assert.equal(r.status, 200);
   assert.equal((await fetch(A + '/f-two')).status, 404);
-  assert.equal((await fetch(A + '/f-two', { method: 'DELETE' })).status, 404);
+  assert.equal((await fetch(A + '/f-two', { method: 'DELETE', headers: EK })).status, 404);
 
-  r = await fetch(A, { method: 'DELETE' });
+  r = await fetch(A, { method: 'DELETE', headers: EK });
   assert.equal(r.status, 200);
   assert.deepEqual(await (await fetch(A)).json(), []);
   assert.equal((await fetch(`${S.base}/api/shows/nothere/audio`)).status, 404);
@@ -188,18 +190,18 @@ test('fileKey 검증 → 400', async () => {
   const { id } = await (await fetch(S.base + '/api/shows', J('POST', { show: show('키') }))).json();
   const A = `${S.base}/api/shows/${id}/audio`;
   for (const k of ['a.b', 'a%20b', 'x'.repeat(65), 'ab$', '%E3%84%B1']) {
-    const r = await fetch(A + '/' + k, { method: 'PUT', headers: { 'Content-Type': 'audio/wav' }, body: 'x' });
+    const r = await fetch(A + '/' + k, { method: 'PUT', headers: { ...EK, 'Content-Type': 'audio/wav' }, body: 'x' });
     assert.equal(r.status, 400, k);
     assert.equal((await r.json()).error, 'bad_file_key');
   }
-  const r = await fetch(A + '/' + 'x'.repeat(64), { method: 'PUT', headers: { 'Content-Type': 'audio/wav' }, body: 'x' });
+  const r = await fetch(A + '/' + 'x'.repeat(64), { method: 'PUT', headers: { ...EK, 'Content-Type': 'audio/wav' }, body: 'x' });
   assert.equal(r.status, 200);
 });
 
 test('프로젝트별 음원 격리: A 의 fileKey 를 B 에서 GET → 404', async () => {
   const a = await (await fetch(S.base + '/api/shows', J('POST', { show: show('A') }))).json();
   const b = await (await fetch(S.base + '/api/shows', J('POST', { show: show('B') }))).json();
-  await fetch(`${S.base}/api/shows/${a.id}/audio/f-only-a`, { method: 'PUT', headers: { 'Content-Type': 'audio/wav' }, body: 'abc' });
+  await fetch(`${S.base}/api/shows/${a.id}/audio/f-only-a`, { method: 'PUT', headers: { ...EK, 'Content-Type': 'audio/wav' }, body: 'abc' });
   assert.equal((await fetch(`${S.base}/api/shows/${a.id}/audio/f-only-a`)).status, 200);
   assert.equal((await fetch(`${S.base}/api/shows/${b.id}/audio/f-only-a`)).status, 404);
   assert.deepEqual(await (await fetch(`${S.base}/api/shows/${b.id}/audio`)).json(), []);
@@ -210,7 +212,7 @@ test('음원 100MB 초과 → 413 (Content-Length 기준)', async () => {
   const http = require('http');
   const u = new URL(`${S.base}/api/shows/${id}/audio/f-huge`);
   const status = await new Promise((res, rej) => {
-    const req = http.request({ host: u.hostname, port: u.port, path: u.pathname, method: 'PUT', headers: { 'Content-Type': 'audio/wav', 'Content-Length': 100 * 1024 * 1024 + 1 } }, r => { r.resume(); res(r.statusCode); req.destroy(); });
+    const req = http.request({ host: u.hostname, port: u.port, path: u.pathname, method: 'PUT', headers: { ...EK, 'Content-Type': 'audio/wav', 'Content-Length': 100 * 1024 * 1024 + 1 } }, r => { r.resume(); res(r.statusCode); req.destroy(); });
     req.on('error', rej);
     // 실제로 100MB 를 보내지 않는다 — 서버는 헤더만 보고 413
     req.flushHeaders();
@@ -236,7 +238,7 @@ test('인증: APP_PASSWORD 설정 시 401/200, 헤더와 쿼리 둘 다', async 
     assert.equal(r.status, 200);
     const { id } = await (await fetch(P.base + '/api/shows?key=' + encodeURIComponent(key), J('POST', { show: show('잠김') }))).json();
     assert.ok(id);
-    await fetch(`${P.base}/api/shows/${id}/audio/f-1?key=${encodeURIComponent(key)}`, { method: 'PUT', headers: { 'Content-Type': 'audio/wav' }, body: 'abc' });
+    await fetch(`${P.base}/api/shows/${id}/audio/f-1?key=${encodeURIComponent(key)}`, { method: 'PUT', headers: { ...EK, 'Content-Type': 'audio/wav' }, body: 'abc' });
     assert.equal((await fetch(`${P.base}/api/shows/${id}/audio/f-1`)).status, 401);
     assert.equal((await fetch(`${P.base}/api/shows/${id}/audio/f-1?key=nope`)).status, 401);
     assert.equal((await fetch(`${P.base}/api/shows/${id}/audio/f-1?key=${encodeURIComponent(key)}`)).status, 200);

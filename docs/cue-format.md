@@ -8,16 +8,21 @@
 ```sh
 node scripts/upload.js cues/show.json --dry-run                 # 검증만
 node scripts/upload.js cues/show.json                           # 새 프로젝트로 → id·주소 출력
-node scripts/upload.js cues/show.json --project <id|제목>        # 그 프로젝트를 덮어쓰기 (없으면 --create 로 그 제목으로 생성)
+node scripts/upload.js cues/show.json --project <id|제목> --edit-key <편집 비밀번호>   # 그 프로젝트를 덮어쓰기 (없으면 --create 로 그 제목으로 생성)
 ```
 
 - 서버: `--url https://…` 또는 `$CUE_URL`. 기본 `http://localhost:$PORT`(3000).
 - 비밀번호(서버의 `APP_PASSWORD`): `--key …` 또는 `$CUE_KEY`.
+- 편집 비밀번호(프로젝트마다 따로, 사이트에서 바꿈): `--edit-key …` 또는 `$CUE_EDIT_KEY`. **`--project` 로 덮어쓸 때만** 필요하고
+  새로 만들 때는 필요 없다. 스크립트는 기본값(1234)을 대신 넣어 보지 않는다 — 아직 기본 비밀번호인 프로젝트도 `--edit-key 1234` 를
+  명시해야 하고, 그때 "기본 비밀번호" 경고가 나온다. 틀리면 백업·업로드 전에 멈춘다(종료 코드 2). `--dry-run` 은 키 없이도 되지만
+  키를 주면 맞는지 확인한다. 1분에 10번 넘게 틀리면 잠시 막힌다(429).
 - `--json`: 결과를 stdout 에 JSON 한 줄로 `{ ok, action, id, rev, url, title, errors, warnings }` (실패 시 `{ ok:false, error }`).
 - 종료 코드: `0` 성공 · `1` 데이터 오류(서버에 아무것도 보내지 않음) · `2` 사용법·연결·인증·서버 오류.
 - 출력된 `열기:` 주소(`/?show=<id>`)로 그 프로젝트가 바로 열린다.
 - 덮어쓰기 때: 서버의 이전 버전을 임시 폴더(`$TMPDIR/cue-sheet-backup-…json`)에 남기고, 사이트에서 올린 음원 연결
   (`tracks[].fileKey`)은 같은 `no` 트랙에서 이어받는다. 그 사이 사이트에서 저장되면(409) 다시 실행하면 된다.
+  서버도 저장할 때마다 이전 버전을 보관하므로 사이트의 "버전 기록"에서 되돌릴 수 있다.
 - 파일 최상위는 show 객체 그대로, 또는 `{ "show": {…} }` 둘 다 된다. `id` 는 빼도 된다(위치 기반으로 자동 부여).
 
 검증 결과는 `오류 <경로>: <이유> [파트 › 씬 › #문단]` 형식이다. **오류**는 사이트가 불러올 때 뜻이 바뀌거나 사라지는 값이라

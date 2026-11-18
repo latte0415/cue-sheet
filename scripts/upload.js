@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // 큐시트 JSON 을 검증한 뒤 서버에 올린다 — 의존성 없음 (Node 20 내장 fetch)
-//   node scripts/upload.js <파일.json> [--project <id|이름>] [--create] [--url <서버>] [--key <비밀번호>] [--dry-run] [--json]
+//   node scripts/upload.js <파일.json> [--project <id|이름>] [--create] [--url <서버>] [--key <비밀번호>] [--edit-key <편집 비밀번호>] [--dry-run] [--json]
 // 형식은 docs/cue-format.md. 종료 코드: 0 성공, 1 데이터 오류(업로드 안 함), 2 사용법·연결·서버 오류
 const fs = require('fs');
 const os = require('os');
@@ -15,13 +15,14 @@ const USAGE = `사용법: node scripts/upload.js <파일.json> [옵션]
   --create             --project 로 찾지 못하면 그 이름으로 새로 만든다
   --url <서버>         기본 $CUE_URL 또는 http://localhost:$PORT(3000)
   --key <비밀번호>     서버의 APP_PASSWORD. 기본 $CUE_KEY 또는 $APP_PASSWORD
+  --edit-key <비밀번호> 덮어쓸 프로젝트의 편집 비밀번호. 기본 $CUE_EDIT_KEY. --project 덮어쓰기에만 필요(새로 만들기는 불필요)
   --dry-run            검증과 대상 확인만 하고 올리지 않는다
   --json               결과를 JSON 한 줄로 stdout 에 (사람용 메시지는 stderr)`;
 
 class Fail extends Error { constructor(code, msg) { super(msg); this.exit = code; } }
 
 function parseArgs(argv) {
-  const o = { file: null, project: null, create: false, url: null, key: null, dryRun: false, json: false, help: false };
+  const o = { file: null, project: null, create: false, url: null, key: null, editKey: null, dryRun: false, json: false, help: false };
   const val = (i, name) => { if (i >= argv.length || argv[i].startsWith('--')) throw new Fail(2, `${name} 에 값이 필요합니다`); return argv[i]; };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -29,6 +30,7 @@ function parseArgs(argv) {
     else if (a === '--project') o.project = val(++i, a);
     else if (a === '--url') o.url = val(++i, a);
     else if (a === '--key') o.key = val(++i, a);
+    else if (a === '--edit-key') o.editKey = val(++i, a);
     else if (a === '--create') o.create = true;
     else if (a === '--dry-run') o.dryRun = true;
     else if (a === '--json') o.json = true;
@@ -96,13 +98,15 @@ async function main(argv) {
   // ---- 2. 서버
   const base = String(o.url || process.env.CUE_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/+$/, '');
   const key = o.key != null ? o.key : (process.env.CUE_KEY || process.env.APP_PASSWORD || '');
+  // 편집 비밀번호는 기본값(1234)을 몰래 시도하지 않는다 — 덮어쓰기는 항상 명시적으로
+  const editKey = o.editKey != null ? o.editKey : (process.env.CUE_EDIT_KEY || '');
   if (o.dryRun && !o.project) {
     result.ok = true; result.action = 'dry-run';
     log(`dry-run: ${base} 에 새 프로젝트로 올릴 예정 — 올리지 않았습니다.`);
     return done(0);
   }
-  async function api(method, p, body) {
-    const headers = { Accept: 'application/json' };
+  async function api(method, p, body, extra) {
+    const headers = Object.assign({ Accept: 'application/json' }, extra);
     if (key) headers['X-App-Key'] = encodeURIComponent(key);
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     let r;
@@ -111,19 +115,24 @@ async function main(argv) {
     let j = null;
     try { j = await r.json(); } catch (e) { /* 본문 없음 */ }
     if (r.status === 401) throw new Fail(2, key ? '비밀번호가 틀렸습니다 (--key 또는 $CUE_KEY 확인)' : '이 서버는 비밀번호가 필요합니다 — --key <APP_PASSWORD> 또는 $CUE_KEY 를 주세요');
+    if (r.status === 403 && j && j.error === 'edit_forbidden') throw new Fail(2, '편집 비밀번호가 틀렸습니다 — 덮어쓰지 않았습니다 (--edit-key 또는 $CUE_EDIT_KEY 확인)');
+    if (r.status === 429) throw new Fail(2, `편집 비밀번호를 너무 많이 틀렸습니다 — ${(j && j.retryAfter) || 60}초 뒤에 다시 시도하세요`);
     return { status: r.status, data: j };
   }
+  const editHeaders = () => ({ 'X-Edit-Key': encodeURIComponent(editKey) });
   const fail = (what, r) => new Fail(2, `${what} 실패 (HTTP ${r.status}${r.data && r.data.error ? ' ' + r.data.error : ''}${r.data && r.data.message ? ': ' + r.data.message : ''})`);
 
   let target = null; // 덮어쓸 프로젝트 id
+  let targetRow = null;
   if (o.project) {
     const r = await api('GET', '/shows');
     if (r.status !== 200 || !Array.isArray(r.data)) throw fail('프로젝트 목록 조회', r);
     const list = r.data;
     const byId = list.find(x => x.id === o.project);
     const byTitle = list.filter(x => String(x.title).trim() === o.project.trim());
-    if (byId) target = byId.id;
-    else if (byTitle.length === 1) target = byTitle[0].id;
+    if (byId) targetRow = byId;
+    else if (byTitle.length === 1) targetRow = byTitle[0];
+    if (targetRow) target = targetRow.id;
     else if (byTitle.length > 1) throw new Fail(2, `제목이 "${o.project}" 인 프로젝트가 ${byTitle.length}개입니다 — id 로 지정하세요: ${byTitle.map(x => x.id).join(', ')}`);
     else if (!o.create) {
       const names = list.slice(0, 20).map(x => `  ${x.id}  ${x.title}`).join('\n');
@@ -148,6 +157,16 @@ async function main(argv) {
     if (r.status !== 201 || !r.data) throw fail('업로드', r);
     Object.assign(result, { ok: true, action: 'create', id: r.data.id, rev: r.data.rev });
   } else {
+    // 덮어쓰기는 그 프로젝트의 편집 비밀번호가 필요하다. 미리 확인해(틀리면 여기서 멈춘다) PUT 에도 싣는다
+    const defHint = targetRow.editDefault ? ' (이 프로젝트는 아직 기본 비밀번호 1234 — 사이트에서 바꾸세요)' : '';
+    if (!editKey) {
+      if (!o.dryRun) throw new Fail(2, `프로젝트 ${target} 를 덮어쓰려면 편집 비밀번호가 필요합니다 — --edit-key <비밀번호> 또는 $CUE_EDIT_KEY${defHint}`);
+      log(`경고 실제로 덮어쓰려면 편집 비밀번호(--edit-key 또는 $CUE_EDIT_KEY)가 필요합니다${defHint}`);
+    } else {
+      const ck = await api('POST', `/shows/${encodeURIComponent(target)}/edit-check`, undefined, editHeaders());
+      if (ck.status !== 200) throw fail('편집 비밀번호 확인', ck);
+      if (ck.data && ck.data.isDefault) log('경고 이 프로젝트는 아직 기본 편집 비밀번호(1234)입니다 — 사이트에서 바꾸세요');
+    }
     const cur = await api('GET', '/shows/' + encodeURIComponent(target));
     if (cur.status !== 200 || !cur.data) throw fail('기존 프로젝트 조회', cur);
     // 사이트에서 올린 음원 연결(fileKey)은 이 파일에 없으므로 같은 트랙 번호에서 이어받는다
@@ -181,7 +200,7 @@ async function main(argv) {
     const backup = path.join(os.tmpdir(), `cue-sheet-backup-${target}-rev${cur.data.rev}-${Date.now()}.json`);
     try { fs.writeFileSync(backup, JSON.stringify(cur.data.show, null, 2)); log(`이전 버전(rev ${cur.data.rev}) 백업: ${backup}`); }
     catch (e) { log(`경고 백업을 남기지 못했습니다: ${e.message}`); }
-    const r = await api('PUT', '/shows/' + encodeURIComponent(target), body);
+    const r = await api('PUT', '/shows/' + encodeURIComponent(target), body, editHeaders());
     if (r.status === 409) throw new Fail(2, `그 사이 사이트에서 누군가 저장했습니다 (rev ${r.data && r.data.rev}) — 다시 실행하면 그 버전 위에 덮어씁니다`);
     if (r.status !== 200 || !r.data) throw fail('업로드', r);
     Object.assign(result, { ok: true, action: 'update', id: target, rev: r.data.rev });

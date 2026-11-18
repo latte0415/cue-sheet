@@ -3,13 +3,16 @@
 //   /healthz     Railway 헬스체크 (text)
 //   /api/*       프로젝트(공연)별 큐시트 JSON + 음원 파일. README 의 API 표 참고
 //   /mcp         원격 MCP 서버 (에이전트용 읽기·부분 수정). docs/mcp.md — 이 경로만 npm 의존성(MCP SDK)을 쓴다
-// 환경변수: PORT, DATA_DIR(기본 ./data), APP_PASSWORD(설정 시 /api·/mcp 에 X-App-Key, Authorization: Bearer 또는 ?key= 필요)
+// 환경변수: PORT, DATA_DIR(기본 ./data), APP_PASSWORD(설정 시 /api·/mcp 에 X-App-Key, Authorization: Bearer 또는 ?key= 필요),
+//          HISTORY_KEEP(프로젝트별 보관할 이전 버전 수, 기본 100), TRUST_PROXY(1 이면 X-Forwarded-For 로 IP 판별. Railway 에서는 자동)
+// 권한 두 단계: APP_PASSWORD = 보기(읽기·새 프로젝트), 프로젝트별 편집 비밀번호(X-Edit-Key) = 그 프로젝트를 바꾸는 모든 쓰기 (/mcp 쓰기 도구 포함)
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { Store, ID_RE, KEY_RE, invalidShow } = require('./lib/store');
 const { createMcp } = require('./lib/mcp');
+const { hashKey, verifyKey, badNewKey, FailLimiter } = require('./lib/editkey');
 
 const INDEX = path.join(__dirname, 'index.html');
 const JSON_LIMIT = 5 * 1024 * 1024;
@@ -65,12 +68,17 @@ function parseRange(h, size) {
 
 function createServer(opts) {
   opts = opts || {};
-  const store = new Store(opts.dataDir || process.env.DATA_DIR || './data');
+  const store = new Store(opts.dataDir || process.env.DATA_DIR || './data', { historyKeep: opts.historyKeep, putSnapshotMs: opts.putSnapshotMs });
   const password = opts.password !== undefined ? opts.password : (process.env.APP_PASSWORD || '');
   const pwDigest = password ? digest(password) : null;
   const log = opts.log !== undefined ? opts.log : (msg => console.log(msg));
+  // 편집 비밀번호 실패 제한: IP+프로젝트마다 1분에 10회 (4자리 비밀번호 무차별 대입 완화)
+  const rate = Object.assign({ max: 10, windowMs: 60 * 1000 }, opts.editRate);
+  const limiter = new FailLimiter(rate.max, rate.windowMs);
+  const trustProxy = opts.trustProxy !== undefined ? !!opts.trustProxy : (process.env.TRUST_PROXY === '1' || !!(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_ENVIRONMENT_NAME));
+  const passed = new Set();
   const ready = store.init();
-  const mcp = createMcp({ store });
+  const mcp = createMcp({ store, checkEdit: (req, id, given) => editCheck(req, id, given ? [given] : editKeysOf(req)) });
 
   // /api 와 /mcp 가 같이 쓴다. X-App-Key(프런트), Authorization: Bearer(MCP 클라이언트), ?key= 중 하나
   function authed(req, query) {
@@ -97,6 +105,48 @@ function createServer(opts) {
     const rec = await store.get(id);
     if (!rec) throw new HttpError(404, 'not_found');
     return rec;
+  }
+  // 프록시 뒤면 X-Forwarded-For 의 마지막 값(가장 가까운 프록시가 본 주소). 클라이언트가 앞에 끼워 넣은 값은 무시된다
+  function clientIp(req) {
+    const xff = trustProxy && req.headers['x-forwarded-for'];
+    if (xff) { const last = String(xff).split(',').map(x => x.trim()).filter(Boolean).pop(); if (last) return last; }
+    return req.socket.remoteAddress || '';
+  }
+  // X-Edit-Key 의 후보들. 프런트·업로드 CLI 는 URL 인코딩해서, MCP 클라이언트 설정은 UTF-8 그대로 보낼 수 있다 (authed 와 같은 해석)
+  function editKeysOf(req) {
+    const v = req.headers['x-edit-key'];
+    if (!v) return [];
+    const out = [String(v)];
+    try { out.push(decodeURIComponent(String(v))); } catch (e) { /* 원문 그대로 */ }
+    out.push(Buffer.from(String(v), 'latin1').toString('utf8'));
+    return out.filter((x, i) => x && out.indexOf(x) === i);
+  }
+  // 그 프로젝트의 편집 비밀번호 확인 — /api 와 /mcp 쓰기 도구가 같이 쓴다. 실패 제한도 같은 카운터(IP+프로젝트).
+  // 통과 { auth }, 실패 { status: 403 } (키 없음·틀림), { status: 429, retryAfter } (너무 많이 틀림)
+  async function editCheck(req, id, candidates) {
+    const rk = clientIp(req) + '|' + id;
+    const wait = limiter.blocked(rk);
+    if (wait) return { status: 429, retryAfter: wait };
+    if (!candidates.length) return { status: 403 };
+    const auth = await store.getAuth(id);
+    for (const given of candidates) {
+      // 자동 저장마다 scrypt 를 돌리지 않게, 통과한 (프로젝트, 해시, 입력값의 sha256) 조합을 메모리에 기억한다. 비밀번호가 바뀌면 해시가 달라져 무효
+      const memo = auth ? id + '|' + auth.hash + '|' + digest(given).toString('hex') : null;
+      if (memo && passed.has(memo)) return { auth };
+      if (await verifyKey(auth, given)) {
+        if (memo) { if (passed.size > 1000) passed.clear(); passed.add(memo); }
+        return { auth };
+      }
+    }
+    limiter.fail(rk);
+    return { status: 403 };
+  }
+  // 없거나 틀리면 403 edit_forbidden, 너무 많이 틀리면 429
+  async function needEdit(req, id, given) {
+    const r = await editCheck(req, id, given === undefined ? editKeysOf(req) : (given ? [given] : []));
+    if (r.status === 429) throw new HttpError(429, 'too_many_attempts', { retryAfter: r.retryAfter, headers: { 'Retry-After': String(r.retryAfter) } });
+    if (r.status) throw new HttpError(403, 'edit_forbidden');
+    return r.auth;
   }
   function needKey(k) { if (!KEY_RE.test(k)) throw new HttpError(400, 'bad_file_key'); return k; }
   function checkShow(show) { const why = invalidShow(show); if (why) throw new HttpError(400, 'invalid_show', { message: why }); }
@@ -131,6 +181,8 @@ function createServer(opts) {
         return sendJson(res, 200, rec, { ETag: tag });
       }
       if (M === 'PUT') {
+        await needShow(id);
+        await needEdit(req, id);
         const body = await readJson(req, JSON_LIMIT);
         checkShow(body && body.show);
         const r = await store.put(id, body.baseRev, body.show);
@@ -139,6 +191,8 @@ function createServer(opts) {
         return sendJson(res, 200, r, { ETag: `"${r.rev}"` });
       }
       if (M === 'DELETE') {
+        await needShow(id);
+        await needEdit(req, id);
         if (!(await store.remove(id))) throw new HttpError(404, 'not_found');
         return sendJson(res, 200, { ok: true });
       }
@@ -150,15 +204,55 @@ function createServer(opts) {
       if (!r) throw new HttpError(404, 'not_found');
       return sendJson(res, 201, r);
     }
+    if (sub === 'edit-check' && key === undefined) {
+      if (M !== 'POST') throw new HttpError(405, 'method_not_allowed');
+      await needShow(id);
+      const auth = await needEdit(req, id);
+      return sendJson(res, 200, { ok: true, isDefault: !auth });
+    }
+    if (sub === 'edit-password' && key === undefined) {
+      if (M !== 'POST') throw new HttpError(405, 'method_not_allowed');
+      await needShow(id);
+      const body = await readJson(req, 64 * 1024);
+      await needEdit(req, id, body && typeof body.current === 'string' ? body.current : undefined);
+      const why = badNewKey(body && body.next);
+      if (why) throw new HttpError(400, 'bad_password', { message: why });
+      // 기본 비밀번호로 되돌리면 해시를 지워 "기본 상태"로 둔다 (목록의 editDefault 와 경고가 다시 켜진다)
+      const isDefault = await verifyKey(null, body.next);
+      await store.setAuth(id, isDefault ? null : await hashKey(body.next));
+      return sendJson(res, 200, { ok: true, isDefault });
+    }
+    // 기록(store.revisions·restore, MCP 의 list_revisions·restore_revision 과 같은 것). 목록(메타)은 보기 권한, 내용·복원은 편집 권한
+    if (sub === 'history') {
+      if (M !== 'GET') throw new HttpError(405, 'method_not_allowed');
+      await needShow(id);
+      if (key === undefined) return sendJson(res, 200, await store.revisions(id));
+      await needEdit(req, id);
+      const rec = /^\d{1,12}$/.test(key) ? await store.getRevision(id, Number(key)) : null;
+      if (!rec) throw new HttpError(404, 'not_found');
+      return sendJson(res, 200, rec);
+    }
+    if (sub === 'restore' && key === undefined) {
+      if (M !== 'POST') throw new HttpError(405, 'method_not_allowed');
+      await needShow(id);
+      await needEdit(req, id);
+      const body = await readJson(req, 64 * 1024);
+      const r = await store.restore(id, Number(body && body.rev), body && body.baseRev);
+      if (!r) throw new HttpError(404, 'not_found');
+      if (r.missing) throw new HttpError(404, 'rev_not_found');
+      if (r.conflict) return sendJson(res, 409, { error: 'conflict', rev: r.conflict.rev, updatedAt: r.conflict.updatedAt, show: r.conflict.show }, { ETag: `"${r.conflict.rev}"` });
+      return sendJson(res, 200, r, { ETag: `"${r.rev}"` });
+    }
     if (sub !== 'audio') throw new HttpError(404, 'not_found');
     await needShow(id);
 
     if (key === undefined) {
       if (M === 'GET') return sendJson(res, 200, await store.audioList(id));
-      if (M === 'DELETE') { await store.audioClear(id); return sendJson(res, 200, { ok: true }); }
+      if (M === 'DELETE') { await needEdit(req, id); await store.audioClear(id); return sendJson(res, 200, { ok: true }); }
       throw new HttpError(405, 'method_not_allowed');
     }
     needKey(key);
+    if (M === 'PUT' || M === 'DELETE') await needEdit(req, id);
     if (M === 'PUT') {
       const ct = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
       if (!/^audio\/[\w.+-]+$/.test(ct) && ct !== 'application/octet-stream') throw new HttpError(415, 'unsupported_type');
@@ -228,7 +322,12 @@ function createServer(opts) {
         await api(req, res, parts, u.searchParams);
       } catch (e) {
         if (res.headersSent) { res.destroy(); return; }
-        if (e instanceof HttpError) return sendJson(res, e.status, Object.assign({ error: e.code }, e.extra));
+        // 본문을 읽기 전에 거절했으면(403·429 등) 작은 본문은 비우고 큰 본문은 응답 뒤 연결을 닫는다
+        await settleUnreadBody(req, res);
+        if (e instanceof HttpError) {
+          const { headers, ...extra } = e.extra || {};
+          return sendJson(res, e.status, Object.assign({ error: e.code }, extra), headers);
+        }
         console.error(e);
         sendJson(res, 500, { error: 'server_error' });
       }

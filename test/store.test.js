@@ -52,7 +52,7 @@ test('기록: update 마다 이전 버전, revisions 최신 먼저, restore 는 
     const { id } = await store.create(show('v1'));
     await store.update(id, s => Object.assign(s, { title: 'v2' }));
     await store.update(id, s => Object.assign(s, { title: 'v3' }));
-    assert.ok(fs.existsSync(path.join(dir, 'shows', id + '.history', '1.json')));
+    assert.ok(fs.existsSync(path.join(dir, 'shows', id, 'history', '1.json')));
     let revs = await store.revisions(id);
     assert.deepEqual(revs.map(r => [r.rev, r.title, r.current]), [[3, 'v3', true], [2, 'v2', false], [1, 'v1', false]]);
     assert.equal(revs[0].sceneCount, 0);
@@ -82,7 +82,7 @@ test(`기록은 최근 ${HISTORY_KEEP}개만`, async () => {
   try {
     const { id } = await store.create(Object.assign(show('A'), { revision: '' }));
     for (let k = 0; k < HISTORY_KEEP + 5; k++) await store.update(id, s => { s.revision = String(k); return s; });
-    const files = fs.readdirSync(path.join(dir, 'shows', id + '.history'));
+    const files = fs.readdirSync(path.join(dir, 'shows', id, 'history'));
     assert.equal(files.length, HISTORY_KEEP);
     const revs = await store.revisions(id);
     assert.equal(revs.length, HISTORY_KEEP + 1);
@@ -115,7 +115,7 @@ test('remove: 기록 폴더도 지운다. duplicate 는 기록을 가져가지 �
     const d = await store.duplicate(id);
     assert.deepEqual((await store.revisions(d.id)).map(r => r.rev), [1]);
     assert.equal(await store.remove(id), true);
-    assert.ok(!fs.existsSync(path.join(dir, 'shows', id + '.history')));
+    assert.ok(!fs.existsSync(path.join(dir, 'shows', id, 'history')));
     assert.ok(!fs.existsSync(path.join(dir, 'shows', id + '.json')));
   } finally { done(); }
 });

@@ -23,6 +23,8 @@ npm test                               # 서버 API·MCP 테스트 (node --test)
 | `PORT` | 3000 | Railway 가 자동으로 넣는다 |
 | `DATA_DIR` | `./data` | 프로젝트 JSON·음원 저장 위치. Railway 에서는 볼륨 경로 `/data` |
 | `APP_PASSWORD` | (없음) | 설정하면 `/api/*`·`/mcp` 에 팀 공유 비밀번호 필요. 없으면 인증 없음(로컬 개발용) |
+| `HISTORY_KEEP` | 100 | 프로젝트마다 보관할 이전 버전 수 (웹 자동 저장은 10분에 한 번만 남김, MCP 수정·복원은 매번) |
+| `TRUST_PROXY` | (Railway 에서 자동) | `1` 이면 편집 비밀번호 실패 제한의 IP 를 `X-Forwarded-For` 마지막 값으로 판별 |
 
 `data/` 는 `.gitignore` 에 들어 있다.
 
@@ -42,9 +44,22 @@ npm test                               # 서버 API·MCP 테스트 (node --test)
 
 비밀번호를 바꾸려면 `APP_PASSWORD` 만 바꾸면 된다. 열려 있던 기기는 다음 요청에서 401 을 받고 비밀번호를 다시 묻는다.
 
+## 권한: 보기와 편집
+
+- **사이트 비밀번호**(`APP_PASSWORD`) = 보기. 모든 프로젝트를 읽고, 음원을 재생하고, 새 프로젝트를 만들거나 복제할 수 있다.
+- **프로젝트 편집 비밀번호** = 그 프로젝트를 바꾸는 모든 쓰기(저장·삭제·음원 올리기/지우기·버전 복원·비밀번호 변경, MCP 의 `edit_show`·`restore_revision`).
+  처음에는 모든 프로젝트가 **`1234`** 다(기존 프로젝트 포함). 사이트에서 "편집"을 누르면 묻고, 맞으면 이 브라우저가 프로젝트별로
+  기억한다. 기본값인 동안 편집 화면에 "기본 비밀번호(1234) 사용 중" 안내가 계속 뜬다 — 데이터 메뉴 → "편집 비밀번호 변경".
+- 편집 비밀번호는 `DATA_DIR/shows/<id>/auth.json` 에 scrypt 해시로만 저장한다(평문 없음, `show` 와 분리돼 내보내기·업로드 JSON 에
+  섞이지 않음). 이 파일을 지우면 그 프로젝트는 다시 `1234` 가 된다 — 비밀번호를 잊었거나 누가 바꿔 버렸을 때 서버에서 하는 복구 방법.
+- **버전 기록**: 저장할 때 직전 버전을 `shows/<id>/history/` 에 남긴다(최근 `HISTORY_KEEP` 개). 웹 자동 저장은 10분에 한 번만,
+  MCP 수정·복원은 매번 남긴다. 편집 권한이 있으면 데이터 메뉴 → "버전 기록 · 복원"에서 골라 복원한다(MCP 의 `restore_revision` 과 같은 것).
+  복원도 새 rev 로 저장되므로 복원 자체를 다시 되돌릴 수 있다. 목록(rev·시각·제목·개수)은 보기 권한으로도 읽히지만 내용과 복원은 편집 권한이 필요하다.
+
 ## 원문 큐시트 올리기 (에이전트용)
 
-원문을 큐시트 JSON 으로 바꾼 뒤 `node scripts/upload.js <파일.json> [--project <id|제목>] [--url <서버>] [--key <비밀번호>] [--dry-run]`.
+원문을 큐시트 JSON 으로 바꾼 뒤 `node scripts/upload.js <파일.json> [--project <id|제목> --edit-key <편집 비밀번호>] [--url <서버>] [--key <비밀번호>] [--dry-run]`.
+덮어쓰기(`--project`)에는 그 프로젝트의 편집 비밀번호가 필요하다(`$CUE_EDIT_KEY` 도 됨). 새로 만들기에는 필요 없다.
 검증에 실패하면 어느 행·필드가 틀렸는지 출력하고 올리지 않는다. 형식과 옵션은 [docs/cue-format.md](docs/cue-format.md).
 
 ## 에이전트로 고치기 (MCP)
@@ -63,10 +78,11 @@ Codex 설정, 도구 목록, 동시 편집 주의점은 [docs/mcp.md](docs/mcp.m
 ## 데이터 구조
 
 ```
-DATA_DIR/shows/<id>.json                 { rev, updatedAt, show }   ← show = 앱의 큐시트 JSON (version 5)
+DATA_DIR/shows/<id>.json                 { rev, updatedAt, show[, restoredFrom] }   ← show = 앱의 큐시트 JSON (version 5)
 DATA_DIR/shows/<id>/audio/<fileKey>       음원 원본
 DATA_DIR/shows/<id>/audio/<fileKey>.json  { fileKey, name, mime, size }
-DATA_DIR/shows/<id>.history/<rev>.json    덮어쓰기 직전 버전 (최근 30개, 되돌리기용 — docs/mcp.md)
+DATA_DIR/shows/<id>/history/<rev>.json    덮어쓰기 직전 버전 (최근 HISTORY_KEEP 개, 되돌리기용). 예전 위치 shows/<id>.history/ 는 시작할 때 여기로 옮긴다
+DATA_DIR/shows/<id>/auth.json             편집 비밀번호 scrypt 해시. 없으면 기본값 1234
 ```
 
 쓰기는 임시 파일 → rename 으로 원자적이고, 한 프로세스 안에서 직렬화된다(서버 인스턴스는 하나로 둔다).
@@ -76,21 +92,30 @@ DATA_DIR/shows/<id>.history/<rev>.json    덮어쓰기 직전 버전 (최근 30�
 모든 `/api/*` 응답은 JSON, `Cache-Control: no-store`. `APP_PASSWORD` 가 있으면 `X-App-Key` 헤더(URL 인코딩한 비밀번호),
 `Authorization: Bearer <비밀번호>` 또는 `?key=` 쿼리가 필요하고, 틀리면 `401 {"error":"unauthorized"}`. 오류는 `{ "error": "<code>" }`.
 
+**편집**이라고 적힌 요청은 그 프로젝트의 편집 비밀번호를 `X-Edit-Key` 헤더(URL 인코딩)로 보내야 한다. 없거나 틀리면
+`403 {"error":"edit_forbidden"}`. 같은 IP·프로젝트에서 1분에 10번 틀리면 그 창이 끝날 때까지 `429 {"error":"too_many_attempts", retryAfter}`
+(+ `Retry-After`) — 막힌 동안은 맞는 비밀번호도 거절한다. 사이트 비밀번호 확인(401)이 먼저, 프로젝트 존재(404)가 그다음, 편집(403)이 마지막.
+
 | 메서드 | 경로 | 응답 |
 |---|---|---|
 | GET | `/api/health` | `{ ok, hasPassword, showCount }` — 인증 없음 |
-| GET | `/api/shows` | `[{ id, title, rev, updatedAt, sceneCount, cueCount }]` (최근 수정 순) |
+| GET | `/api/shows` | `[{ id, title, rev, updatedAt, sceneCount, cueCount, editDefault }]` (최근 수정 순). `editDefault` = 아직 편집 비밀번호 1234 |
 | POST | `/api/shows` | body `{ show }` → `201 { id, rev: 1, updatedAt }` |
 | GET | `/api/shows/:id` | `{ rev, updatedAt, show }` + `ETag: "rev"`. `If-None-Match` 가 같으면 `304`. 없으면 `404` |
-| PUT | `/api/shows/:id` | body `{ baseRev, show }` (≤5MB) → `{ rev, updatedAt }`. `baseRev` 가 현재 rev 와 다르면 `409 { error:'conflict', rev, updatedAt, show }` |
-| DELETE | `/api/shows/:id` | `{ ok: true }` — 음원 폴더까지 삭제, 복구 불가 |
-| POST | `/api/shows/:id/duplicate` | `201 { id, rev: 1, updatedAt }` — 제목 뒤 "(복제)", 음원 파일도 복사 |
+| PUT | `/api/shows/:id` | **편집**. body `{ baseRev, show }` (≤5MB) → `{ rev, updatedAt }`. `baseRev` 가 현재 rev 와 다르면 `409 { error:'conflict', rev, updatedAt, show }`. 직전 레코드는 기록으로(10분에 한 번) |
+| DELETE | `/api/shows/:id` | **편집**. `{ ok: true }` — 음원·히스토리·비밀번호까지 삭제, 복구 불가 |
+| POST | `/api/shows/:id/duplicate` | `201 { id, rev: 1, updatedAt }` — 제목 뒤 "(복제)", 음원 파일도 복사. 히스토리·편집 비밀번호는 복사하지 않음(복제본은 1234) |
+| POST | `/api/shows/:id/edit-check` | **편집**. 키 확인 → `{ ok: true, isDefault }` |
+| POST | `/api/shows/:id/edit-password` | body `{ current, next }` (`current` 는 `X-Edit-Key` 로 줘도 됨) → `{ ok: true, isDefault }`. `next` 4~200자, 아니면 `400 bad_password`. `next` 가 `1234` 면 기본 상태로 되돌림. rev 는 그대로 |
+| GET | `/api/shows/:id/history` | `[{ rev, updatedAt, title, sceneCount, cueCount, current, restoredFrom }]` 최신순, 맨 앞이 현재 버전(`current: true`) |
+| GET | `/api/shows/:id/history/:rev` | **편집**. `{ rev, updatedAt, show }`. 없으면 `404` |
+| POST | `/api/shows/:id/restore` | **편집**. body `{ rev, baseRev? }` → `{ rev, updatedAt, restoredFrom, warnings }` — 그 버전의 show 를 새 rev 로 저장. 이미 같은 내용이면 `{ unchanged: true, rev }`. 지워진 음원을 가리키는 트랙은 연결을 비우고 `warnings` 로 알림. `baseRev` 가 다르면 `409`, 없는 rev 면 `404 rev_not_found` |
 | GET | `/api/shows/:id/audio` | `[{ fileKey, name, size, mime }]` |
-| DELETE | `/api/shows/:id/audio` | `{ ok: true }` — 그 프로젝트의 음원 전부 삭제 |
-| PUT | `/api/shows/:id/audio/:fileKey` | raw body(`audio/*` 또는 `application/octet-stream`, `X-File-Name` 은 URL 인코딩, ≤100MB) → `{ fileKey, size, name }` |
+| DELETE | `/api/shows/:id/audio` | **편집**. `{ ok: true }` — 그 프로젝트의 음원 전부 삭제 |
+| PUT | `/api/shows/:id/audio/:fileKey` | **편집**. raw body(`audio/*` 또는 `application/octet-stream`, `X-File-Name` 은 URL 인코딩, ≤100MB) → `{ fileKey, size, name }` |
 | GET | `/api/shows/:id/audio/:fileKey` | 파일. `Range` 지원(`206`, `Accept-Ranges: bytes`), `?download=1` 이면 attachment |
-| DELETE | `/api/shows/:id/audio/:fileKey` | `{ ok: true }` |
-| POST | `/mcp` | MCP Streamable HTTP (상태 없음, JSON-RPC). 인증은 위와 같음(보통 `Authorization: Bearer`). 도구 6개 — [docs/mcp.md](docs/mcp.md). GET·DELETE 는 `405` |
+| DELETE | `/api/shows/:id/audio/:fileKey` | **편집**. `{ ok: true }` |
+| POST | `/mcp` | MCP Streamable HTTP (상태 없음, JSON-RPC). 인증은 위와 같음(보통 `Authorization: Bearer`). 도구 6개 — [docs/mcp.md](docs/mcp.md). 쓰기 도구(`edit_show`·`restore_revision`)는 그 프로젝트의 편집 비밀번호(`X-Edit-Key` 헤더 또는 도구 인자 `editKey`). GET·DELETE 는 `405` |
 
 검증: `:id` 는 `[A-Za-z0-9_-]{1,32}`(서버가 생성), `:fileKey` 는 `[A-Za-z0-9_-]{1,64}` — 아니면 `400`.
 `show` 는 `parts` 배열과 숫자 `version` 이 있어야 하고 parts·scenes·items·cues 가 객체 배열이어야 한다(`400 invalid_show`, `message` 에 경로). 필드 단위 엄격 검증은 업로드 스크립트가 한다(`lib/validate.js`). 본문 초과는 `413 too_large`.

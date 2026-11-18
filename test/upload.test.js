@@ -16,14 +16,15 @@ function start(password) {
   const server = createServer({ dataDir: dir, password, log: null });
   return new Promise(res => server.listen(0, '127.0.0.1', () => res({ server, base: `http://127.0.0.1:${server.address().port}` })));
 }
-// 환경변수의 CUE_URL·CUE_KEY·APP_PASSWORD 가 섞이지 않게 비우고, 백업은 TMP 아래로
+// 환경변수의 CUE_URL·CUE_KEY·CUE_EDIT_KEY·APP_PASSWORD 가 섞이지 않게 비우고, 백업은 TMP 아래로
 function run(args, extraEnv) {
-  const env = Object.assign({}, process.env, { CUE_URL: '', CUE_KEY: '', APP_PASSWORD: '', TMPDIR: TMP }, extraEnv);
+  const env = Object.assign({}, process.env, { CUE_URL: '', CUE_KEY: '', CUE_EDIT_KEY: '', APP_PASSWORD: '', TMPDIR: TMP }, extraEnv);
   return new Promise(res => execFile(process.execPath, [SCRIPT, ...args], { env }, (err, stdout, stderr) => res({ code: err ? err.code : 0, stdout, stderr, out: stdout + stderr })));
 }
 let n = 0;
 function file(obj) { const f = path.join(TMP, `in-${++n}.json`); fs.writeFileSync(f, typeof obj === 'string' ? obj : JSON.stringify(obj)); return f; }
-const J = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+const EK = { 'X-Edit-Key': '1234' };
+const J = (method, body) => ({ method, headers: { 'Content-Type': 'application/json', ...EK }, body: JSON.stringify(body) });
 
 // 에이전트가 만들 법한 파일: id 없이, 사람·트랙만 id
 const cueDoc = (title, extra) => Object.assign({
@@ -114,7 +115,7 @@ test('--project 이름: 없으면 실패, --create 면 그 제목으로 생성, 
   assert.equal(j.action, 'create');
   assert.equal((await get(j.id)).show.title, '2부 리허설');
 
-  r = await run([file(cueDoc('2부 리허설')), '--url', S.base, '--project', '2부 리허설', '--json']);
+  r = await run([file(cueDoc('2부 리허설')), '--url', S.base, '--project', '2부 리허설', '--edit-key', '1234', '--json']);
   assert.equal(r.code, 0, r.out);
   const j2 = JSON.parse(r.stdout);
   assert.deepEqual([j2.action, j2.id, j2.rev], ['update', j.id, 2]);
@@ -126,10 +127,10 @@ test('--project id 덮어쓰기: 음원 연결(fileKey) 유지, 이전 버전 �
   const siteShow = cueDoc('사이트', { tracks: [{ id: 'tr-1', no: 1, title: '하우스', fileName: 'house.mp3', fileKey: 'k-house', durationSec: 95, loop: true }] });
   let res = await fetch(S.base + '/api/shows', J('POST', { show: siteShow }));
   const { id } = await res.json();
-  res = await fetch(`${S.base}/api/shows/${id}/audio/k-house`, { method: 'PUT', headers: { 'Content-Type': 'audio/mpeg', 'X-File-Name': 'house.mp3' }, body: Buffer.from('abc') });
+  res = await fetch(`${S.base}/api/shows/${id}/audio/k-house`, { method: 'PUT', headers: { ...EK, 'Content-Type': 'audio/mpeg', 'X-File-Name': 'house.mp3' }, body: Buffer.from('abc') });
   assert.equal(res.status, 200);
 
-  const r = await run([file(cueDoc('수정본')), '--url', S.base, '--project', id]);
+  const r = await run([file(cueDoc('수정본')), '--url', S.base, '--project', id], { CUE_EDIT_KEY: '1234' });
   assert.equal(r.code, 0, r.out);
   assert.match(r.stdout, /음원 연결 유지: 트랙 1/);
   const bk = /이전 버전\(rev 1\) 백업: (\S+)/.exec(r.stdout)[1];
@@ -144,6 +145,41 @@ test('--project id 덮어쓰기: 음원 연결(fileKey) 유지, 이전 버전 �
   // 없는 id 지정
   const r2 = await run([file(cueDoc('x')), '--url', S.base, '--project', 'nothere']);
   assert.equal(r2.code, 2);
+});
+
+test('--edit-key: 덮어쓰기에만 필요, 없거나 틀리면 올리지 않음, 기본값을 몰래 시도하지 않음', async () => {
+  const id = JSON.parse((await run([file(cueDoc('편집키')), '--url', S.base, '--json'])).stdout).id;
+  assert.ok(id, '새로 만들기는 편집 키 없이');
+  // 키 없음: 기본 비밀번호 상태라도 1234 를 대신 넣지 않는다
+  let r = await run([file(cueDoc('편집키 v2')), '--url', S.base, '--project', id]);
+  assert.equal(r.code, 2, r.out);
+  assert.match(r.stderr, /편집 비밀번호가 필요합니다 — --edit-key/);
+  assert.match(r.stderr, /아직 기본 비밀번호 1234/);
+  assert.equal((await get(id)).rev, 1);
+  // dry-run 은 키 없이도 되고 경고만
+  r = await run([file(cueDoc('편집키 v2')), '--url', S.base, '--project', id, '--dry-run']);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.stdout, /경고 실제로 덮어쓰려면 편집 비밀번호/);
+  // 틀린 키: 백업·PUT 전에 멈춘다
+  r = await run([file(cueDoc('편집키 v2')), '--url', S.base, '--project', id, '--edit-key', '0000']);
+  assert.equal(r.code, 2, r.out);
+  assert.match(r.stderr, /편집 비밀번호가 틀렸습니다 — 덮어쓰지 않았습니다/);
+  assert.doesNotMatch(r.out, /백업:/);
+  r = await run([file(cueDoc('편집키 v2')), '--url', S.base, '--project', id, '--dry-run', '--edit-key', '0000']);
+  assert.equal(r.code, 2, 'dry-run 도 준 키는 확인한다');
+  assert.equal((await get(id)).rev, 1);
+  // 비밀번호를 바꾼 뒤: 새 비번(한글 포함)으로 --edit-key 와 $CUE_EDIT_KEY 둘 다
+  const c = await fetch(`${S.base}/api/shows/${id}/edit-password`, J('POST', { current: '1234', next: '편집 비번' }));
+  assert.equal(c.status, 200);
+  r = await run([file(cueDoc('편집키 v2')), '--url', S.base, '--project', id, '--edit-key', '1234']);
+  assert.equal(r.code, 2, '옛 비번 거절');
+  r = await run([file(cueDoc('편집키 v2')), '--url', S.base, '--project', id, '--edit-key', '편집 비번', '--json']);
+  assert.equal(r.code, 0, r.out);
+  assert.deepEqual([JSON.parse(r.stdout).action, JSON.parse(r.stdout).rev], ['update', 2]);
+  assert.doesNotMatch(r.stderr, /기본 편집 비밀번호/);
+  r = await run([file(cueDoc('편집키 v3')), '--url', S.base, '--project', id], { CUE_EDIT_KEY: '편집 비번' });
+  assert.equal(r.code, 0, r.out);
+  assert.equal((await get(id)).show.title, '편집키 v3');
 });
 
 test('비밀번호 서버: 키 없으면 안내 후 실패, --key 나 $CUE_KEY 로 성공', async () => {
