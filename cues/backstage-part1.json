@@ -1,9 +1,9 @@
 {
   "id": "show-backstage-part1",
   "title": "[MF] 2026 가을 정기공연",
-  "version": 8,
+  "version": 9,
   "revision": "",
-  "updatedAt": "2026-11-18T07:31:39.200Z",
+  "updatedAt": "2026-11-18T07:45:05.780Z",
   "preShowSetup": "탑햇테이블 + 컵",
   "people": [
     {
@@ -182,7 +182,7 @@
                     "track": 1,
                     "action": "play",
                     "timeSec": null,
-                    "level": null
+                    "level": 50
                   }
                 },
                 {

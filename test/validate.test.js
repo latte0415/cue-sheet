@@ -227,9 +227,9 @@ test('action-echo: 정리 전 실데이터(test/fixtures/backstage-part1-v5.json
   assert.equal(its.filter(i => i.kind === 'action' && i.cues.length).length > got.length, true);
 });
 
-test('현재 실데이터(cues/backstage-part1.json, 2026-11-18 배포본 rev 84): v8, 오류·경고 없음 — action-echo 지문 22개는 큐 지점, 무대 큐 3개는 소품 지정', () => {
+test('현재 실데이터(cues/backstage-part1.json, 2026-11-18 배포본 rev 85): v9, 오류·경고 없음 — action-echo 지문 22개는 큐 지점, 무대 큐 3개는 소품 지정, 하우스 음악 PLAY 시작 볼륨 50', () => {
   const s = unwrapShow(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cues', 'backstage-part1.json'), 'utf8')));
-  assert.equal(s.version, 8, '배포본 사본은 v8 — v9(PLAY 시작 볼륨, 모양은 같다)에서도 경고 없이 읽힌다');
+  assert.equal(s.version, SHOW_VER, '배포본 사본은 현재 형식(v9) — rev 85 에서 PLAY 시작 볼륨을 넣으며 올라갔다');
   assert.ok(CONST.SHOW_VERS.includes(s.version));
   const v = validateShow(s);
   assert.deepEqual(v.errors, []);
@@ -242,6 +242,9 @@ test('현재 실데이터(cues/backstage-part1.json, 2026-11-18 배포본 rev 84
   assert.equal(stage.length, 3);
   assert.ok(stage.every(c => c.stage.props.length && c.stage.props.every(x => s.props.some(p => p.id === x.propId))));
   assert.deepEqual(s.preShowProps.map(x => x.propId).sort(), ['pr-cup', 'pr-tophat-table']);
+  // 객석 오픈 때 하우스 음악을 대화 가능할 정도(50)로 튼다 — v9 PLAY 시작 볼륨
+  const house = its.flatMap(i => i.cues).filter(c => c.dept === 'sound' && c.sound.track === 1 && c.sound.action === 'play');
+  assert.deepEqual(house.map(c => [c.trigger, c.sound.level]), [['객석 오픈', 50]]);
 });
 
 test('소품 검사 — 모르는 propId 경고, 잘못된 action 오류, clean 허용, 레지스트리 id 중복 오류', () => {
