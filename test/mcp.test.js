@@ -338,7 +338,7 @@ test('v10 출연 큐: edit_show 가 cast.people(여러 사람)과 옛 한 사람
     assert.ok(!r.isError, text(r));
     let g = await S.server.store.get(id);
     const at = s => s.parts.flatMap(p => p.scenes.flatMap(x => x.items.flatMap(i => i.cues))).find(q => q.id === cq.id);
-    assert.equal(g.show.version, 10);
+    assert.equal(g.show.version, 11);
     assert.deepEqual(at(g.show).cast, { people: [{ personId: 'p-taehyung', move: 'out' }] });
     // 여러 사람
     const people = [{ personId: 'p-yejun', move: 'in' }, { personId: 'p-taehyung', move: 'in' }, { personId: 'p-daehoon', move: 'out' }];
@@ -354,5 +354,36 @@ test('v10 출연 큐: edit_show 가 cast.people(여러 사람)과 옛 한 사람
     r = await c.callTool({ name: 'edit_show', arguments: { showId: id, ops: [{ op: 'set', id: cq.id, fields: { cast: { move: 'out' } } }] } });
     assert.equal(r.isError, true);
     assert.match(text(r), /has 3 people/);
+  } finally { await c.close(); }
+});
+
+test('v11 이름 붙인 조명: edit_show 로 조명(kind:"look")을 등록하고 조명 큐 light.looks 로 켜고 끈다 — 개요·검색은 사이트 머리글', async () => {
+  const show = backstage();
+  const lq = show.parts.flatMap(p => p.scenes.flatMap(s => s.items.flatMap(i => i.cues))).find(q => q.dept === 'light');
+  const { id } = await S.server.store.create(show);
+  const c = await connect(S.base);
+  try {
+    const tool = (await c.listTools()).tools.find(t => t.name === 'edit_show');
+    assert.match(tool.description, /light\.looks \[\{lookId, action: on\|off\}\]/);
+    assert.ok(tool.inputSchema.properties.ops.items.properties.kind.enum.includes('look'));
+    assert.match(c.getInstructions(), /lights\[\] \{id, name, note\}/);
+    let r = await c.callTool({ name: 'edit_show', arguments: { showId: id, ops: [
+      { op: 'add', kind: 'look', data: { id: 'lk-a', name: '무대 A', note: '프론트 70 + 탑 블루' } },
+      { op: 'add', kind: 'look', data: { id: 'lk-b', name: '엔딩 블루' } },
+      { op: 'set', id: lq.id, fields: { light: { looks: [{ lookId: 'lk-a', action: 'off' }, { lookId: 'lk-b', action: 'on' }] } } }
+    ] } });
+    assert.ok(!r.isError, text(r));
+    const g = await S.server.store.get(id);
+    assert.equal(g.show.version, 11);
+    assert.deepEqual(g.show.lights, [{ id: 'lk-a', name: '무대 A', note: '프론트 70 + 탑 블루' }, { id: 'lk-b', name: '엔딩 블루', note: '' }]);
+    r = await c.callTool({ name: 'get_show', arguments: { showId: id } });
+    assert.match(text(r), /^lights: lk-a=무대 A \(프론트 70 \+ 탑 블루\), lk-b=엔딩 블루$/m);
+    assert.match(text(r), new RegExp(`${lq.id} light 무대 A OFF · 엔딩 블루 ON`));
+    r = await c.callTool({ name: 'search_show', arguments: { showId: id, query: '엔딩 블루' } });
+    assert.ok(r.structuredContent.matches.some(m => m.id === lq.id && m.field === 'light.look'));
+    // 쓰는 큐가 있으면 지우기 거부
+    r = await c.callTool({ name: 'edit_show', arguments: { showId: id, ops: [{ op: 'remove', id: 'lk-a' }] } });
+    assert.equal(r.isError, true);
+    assert.match(text(r), /look lk-a \(무대 A\) is still used in 1 light cue/);
   } finally { await c.close(); }
 });

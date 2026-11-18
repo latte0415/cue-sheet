@@ -84,7 +84,7 @@ test('음향 level: play 시작 볼륨·fadeIn 도착 볼륨은 남고, stop·fa
   // v8 공연에 op 를 적용하면 v9 로 — 모양은 그대로, version 만
   const v8 = docExample(); v8.version = 8;
   r = applyOps(v8, [{ op: 'set', id: 'q-2', fields: { sound: { action: 'play', level: 50 } } }]);
-  assert.equal(r.show.version, 10);
+  assert.equal(r.show.version, 11);
   assert.equal(find(r.show, 'q-2').sound.level, 50);
   // 새 큐로 만들어도 같다
   r = applyOps(s, [{ op: 'add', kind: 'cue', parent: 'i-1', data: { dept: 'sound', sound: { track: 1, action: 'play', level: 50 } } }]);
@@ -157,7 +157,8 @@ test('add: 브라우저와 같은 id 접두어·기본값, 자식 포함, 위치
   // 번호: 늘 1부터 연속 — 맨 앞·사이에 끼운 큐 문단 때문에 뒤 번호가 밀린다 (i-1: 1→2, i-2: 2→4)
   assert.deepEqual(items(r.show).map(i => i.label), ['1', '2', '3', '4', null, '5']);
   assert.deepEqual(r.labels.map(l => [l.was, l.label]).sort(), [[null, '1'], [null, '3'], [null, '5'], ['1', '2'], ['2', '4']]);
-  assert.equal(sc.items[3].cues[2].light.channels[0].action, 'on', '채널 기본값');
+  assert.equal(sc.items[3].cues[3].light.channels[0].action, 'on', '채널 기본값');
+  assert.deepEqual(sc.items[3].cues[3].light.looks, [], 'v11: 채널만 준 조명 큐도 looks 는 빈 배열');
   const p = r.show.people[2];
   assert.match(p.id, /^p-/); assert.deepEqual([p.name, p.role, p.note], ['라태형', 'performer', '']);
   const t = r.show.tracks[1];
@@ -234,7 +235,7 @@ test('remove: 참조 중인 사람·트랙은 거부(목록 포함), force 면 �
   // 안 쓰이는 사람은 그냥 지워진다
   const r3 = applyOps(s, [{ op: 'remove', id: 'q-3' }, { op: 'set', id: 's-2', fields: { cast: [] } }, { op: 'remove', id: 'p-daehoon', kind: 'person' }]);
   assert.equal(r3.show.people.length, 1);
-  assert.equal(find(r3.show, 'i-2').cues.length, 1);
+  assert.equal(find(r3.show, 'i-2').cues.length, 2);
 });
 
 test('remove: 문단·큐·씬 — 큐를 다 지우면 isCue false, 번호도 없어지고 뒤 번호가 당겨진다', () => {
@@ -392,7 +393,7 @@ test('v6: 관계없는 op 를 적용해도 props·preShowProps·stage.props 는 
     { op: 'add', kind: 'person', data: { name: '스태프', role: 'stage' } }
   ]);
   assert.equal(JSON.stringify(s), before, '입력은 그대로');
-  assert.equal(r.show.version, 10);
+  assert.equal(r.show.version, 11);
   assert.deepEqual(r.show.props, s.props);
   assert.deepEqual(r.show.preShowProps, s.preShowProps);
   assert.deepEqual(find(r.show, 'q-4').stage, { props: [{ propId: 'pr-tophat', action: 'in', at: '테이블 위' }] });
@@ -406,10 +407,10 @@ test('v8: v5 공연은 migrate 처럼 v8 로 — 빈 props·preShowProps, 무대
   assert.equal(s.version, 5);
   const stageBefore = items(s).flatMap(i => i.cues).filter(c => c.dept === 'stage').map(c => c.stage.text);
   const r = applyOps(s, [{ op: 'set', kind: 'show', fields: { revision: 'v6 테스트' } }]);
-  assert.equal(r.show.version, 10);
+  assert.equal(r.show.version, 11);
   assert.deepEqual(r.show.props, []);
   assert.deepEqual(r.show.preShowProps, []);
-  assert.deepEqual(Object.keys(r.show).slice(Object.keys(r.show).indexOf('people')), ['people', 'props', 'preShowProps', 'tracks', 'parts'], 'migrate 와 같은 키 순서');
+  assert.deepEqual(Object.keys(r.show).slice(Object.keys(r.show).indexOf('people')), ['people', 'props', 'preShowProps', 'lights', 'tracks', 'parts'], 'migrate 와 같은 키 순서');
   const st = items(r.show).flatMap(i => i.cues).filter(c => c.dept === 'stage');
   assert.deepEqual(st.map(c => c.note), stageBefore);
   assert.ok(st.length && st.every(c => Array.isArray(c.stage.props) && !c.stage.props.length && !('text' in c.stage)));
@@ -510,7 +511,7 @@ test('v6: 사이트가 불러와도(index.html migrate) 소품 op 결과가 그�
     { op: 'add', kind: 'cue', parent: st.i.id, data: { dept: 'stage', stage: { props: [{ propId: 'pr-cup', action: 'in' }] } } },
     { op: 'set', id: lt.c.id, fields: { dept: 'stage', note: '의자', stage: { props: [{ propId: 'pr-cup', action: 'clean' }] } } }
   ]);
-  assert.equal(r.show.version, 10);
+  assert.equal(r.show.version, 11);
   const strip = x => { x = JSON.parse(JSON.stringify(x)); delete x.updatedAt; return x; };
   assert.deepEqual(strip(migrate(r.show)), strip(r.show));
 });
@@ -594,7 +595,7 @@ test('v8: v7 공연은 migrate 와 같게 올린다 — memo · text → note, �
   i2.cues[1].stage.text = '탑햇테이블에 탑햇 세팅';
   i2.comments.push({ id: 'c-s', author: 'a', text: '확인', createdAt: '2026-11-01T00:00:00.000Z', resolved: false, resolvedBy: null, resolvedAt: null, snapshot: { kind: i2.kind, speaker: i2.speaker, text: i2.text, cues: JSON.parse(JSON.stringify(i2.cues)) } });
   const r = applyOps(s, [{ op: 'set', kind: 'show', fields: { revision: 'v8' } }]);
-  assert.equal(r.show.version, 10);
+  assert.equal(r.show.version, 11);
   const [q1] = find(r.show, 'i-1').cues, [q3, q4] = find(r.show, 'i-2').cues;
   assert.deepEqual(q1.light.channels[3], { ch: 'house', action: 'off', dim: null, color: null, colorName: null, timeSec: null });
   assert.equal(q1.note, '(객석: 원래 FADE OUT 4s)');
@@ -655,7 +656,7 @@ test('v10 출연 큐: v9 공연에 op 를 적용하면 출연 큐가 people 한 
   s.version = 9;
   s.parts[0].scenes[0].items[1].cues[0].cast = { personId: 'p-daehoon', move: 'in' }; // v9 모양
   let r = applyOps(s, [{ op: 'set', id: 's-1', fields: { title: 'x' } }]);
-  assert.equal(r.show.version, 10);
+  assert.equal(r.show.version, 11);
   assert.deepEqual(find(r.show, 'q-3').cast, { people: [{ personId: 'p-daehoon', move: 'in' }] });
   assert.deepEqual(r.warnings, [], '형식만 바뀐 것은 경고가 아니다');
   // v9 의 끊긴 사람 참조(원래 오류)는 op 를 막지 않는다 — 경로가 cast.personId → cast.people[0].personId 로 바뀌어도

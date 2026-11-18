@@ -559,6 +559,13 @@ tr.cmt-hit{animation:none}
 .cast-ops{display:flex;gap:4px 14px;align-items:center;padding:4px 0}
 .cast-ops .tb{min-width:1.2em;text-align:center}
 @media (max-width:520px){.cast-row{grid-template-columns:minmax(0,1fr) auto}.cast-row>.field:first-child{grid-column:1/-1}}
+/* 이름 붙인 조명 줄(v11): 조명 · ON/OFF · 삭제, 아래에 그 조명의 설명(흐리게). 새 조명 등록은 이름 + 설명 한 줄 */
+.lk-row{display:grid;grid-template-columns:minmax(140px,1fr) auto auto;gap:4px 16px;padding:8px 0;border-bottom:1px solid var(--rule);align-items:end}
+.lk-row .lk-desc{grid-column:1/-1;margin:0;font-size:12px;color:var(--ink-3);overflow-wrap:anywhere}
+.lk-new input[data-f="lknewnote"]{flex:1.4}
+.lt-adv{flex-direction:row;flex-wrap:wrap;align-items:baseline;gap:4px 12px;border-top:1px solid var(--rule);padding-top:8px}
+.lt-adv .note{font-size:12px}
+@media (max-width:520px){.lk-row{grid-template-columns:minmax(0,1fr) auto}.lk-row>.field:first-child{grid-column:1/-1}.lk-new{flex-wrap:wrap}.lk-new input,.lk-new input[data-f="lknewnote"]{flex:1 1 100%}}
 /* 큐 모달: 머리글 미리보기(읽기 전용) · 액션 버튼 묶음 · 채널 체크 · 새 소품 등록 */
 .qprev{border-left:2px solid var(--dc,var(--rule-2));padding:4px 0 6px 10px;background:var(--tint-2)}
 .qprev.d-cast{--dc:var(--q-cast)}.qprev.d-light{--dc:var(--q-light)}.qprev.d-sound{--dc:var(--q-sound)}.qprev.d-stage{--dc:var(--q-stage)}
@@ -1050,13 +1057,23 @@ function castRows(b) {
 }
 // 이 큐에서 그 사람의 액션 (없으면 null)
 function castMove(c, pid) { if (!c || c.dept !== 'cast') return null; const r = castRows(c.cast).find(x => x.personId === pid); return r ? (MOVES[r.move] ? r.move : 'in') : null; }
+// 이름 붙인 조명 (v11): 리허설에서 정해 이름을 붙인 조명(show.lights)을 조명 큐가 켜고 끈다 — light.looks [{ lookId, action: on|off }].
+// 채널 상세(light.channels)는 그대로 "상세(채널)" 로 남는다. lib/validate.js LOOK_ACTS · lib/cuehead.js lookRows 와 같다
+const LOOK_ACTS = { on: 'ON', off: 'OFF' };
+function lookRows(b) { return b && typeof b === 'object' && Array.isArray(b.looks) ? b.looks.filter(x => x && typeof x === 'object') : []; }
+// 무대 채널(백·탑·프론트)을 모두 끄는 조명 큐 = 무대 암전 — 이름 붙인 조명도 모두 꺼진 것으로 센다 (무대 상황 · 점검의 ON/OFF 연속성)
+function stageDark(l) {
+  const chs = (l && l.channels) || [];
+  return ['back', 'top', 'front'].every(ch => chs.some(x => x && x.ch === ch && (x.action === 'off' || x.action === 'fadeOut')));
+}
 // 무대 소품 액션 (v8): 출연 액션 + CLEAN — 흘린 카드 줍기 · 꽃가루 밀대 청소처럼 치우기. 청소 대상도 소품 목록에서 고른다
 const PROP_ACTS = { in: 'IN', out: 'OUT', move: 'MOVE', clean: 'CLEAN' };
 // 객석(house) 채널은 켠다/끈다만 (v8) — 옛 값의 페이드인·애니는 on, 페이드아웃은 off 로 읽는다
 const houseOnOff = a => (a === 'off' || a === 'fadeOut' ? 'off' : 'on');
 const ROLES = { performer: '공연자', mc: 'MC', light: '조명', sound: '음향', stage: '무대', other: '기타' };
 const VIEWS = ['script', 'cuesheet', 'run', 'stage', 'people', 'props', 'tracks', 'check'];
-const VIEW_L = { script: '대본', cuesheet: '큐시트', run: '런', stage: '무대 상황', people: '사람', props: '소품', tracks: '음원', check: '점검' };
+// 소품 탭(props)은 이름 붙인 조명 목록(v11)도 담는다 — 새 탭을 늘리지 않고 "목록" 탭 하나에 (소품 · 공연 전 무대 · 조명)
+const VIEW_L = { script: '대본', cuesheet: '큐시트', run: '런', stage: '무대 상황', people: '사람', props: '소품·조명', tracks: '음원', check: '점검' };
 // v6: 소품 목록(props) · 공연 전 무대 소품(preShowProps) · 무대 큐 소품 동작(stage.props)
 // v7: 문단 코멘트의 snapshot(코멘트 당시 문단). 필드를 더하면 올린다 — 서버가 버전을 비교해 옛 화면이 모르는 필드를 떨어뜨린 채 저장하는 것을 막는다
 // v8: 큐 상세 note 하나(cast.text · stage.text · memo 를 합침), 무대 큐는 소품 필수 + 소품 액션 clean, 객석 채널은 on/off 만
@@ -1064,7 +1081,10 @@ const VIEW_L = { script: '대본', cuesheet: '큐시트', run: '런', stage: '�
 //     v8 화면은 PLAY 의 level 을 모르고 큐를 저장할 때 지운다(조용한 손실) — 올려서 서버 426 · 새로고침 바로 옛 화면 저장을 막는다
 // v10: 출연 큐 하나에 여러 사람 — cast { people: [{ personId, move }] } (사람마다 IN/OUT/MOVE, 순서 그대로).
 //     v9 까지의 { personId, move } 는 migrate 가 한 줄짜리 people 로 옮긴다. v9 화면은 people 을 모르고 저장하면 사람을 잃으므로 올린다
-const SHOW_VER = 10;
+// v11: 이름 붙인 조명 — show.lights [{ id, name, note }] + 조명 큐 light.looks [{ lookId, action: on|off }] (조명 큐의 기본).
+//     채널 상세(light.channels)는 그대로 쓰고 바꾸지 않는다(한 큐에 둘 다 있어도 된다). v10 → v11 은 lights: [] · looks: [] 만 붙는다.
+//     v10 화면은 looks·lights 를 모르고 저장하면 지우므로 올린다
+const SHOW_VER = 11;
 const FADE_DEFAULT = 3; // fadeOut 시간이 비어 있을 때 쓰는 기본 페이드(초)
 const THEMES = ['system', 'light', 'dark'];
 const THEME_L = { system: '시스템', light: '라이트', dark: '다크' };
@@ -1117,7 +1137,7 @@ function sampleShow() {
   const cm = (author, text, resolved, mins) => ({ id: id('c'), author, text, createdAt: new Date(t0 + mins * 60000).toISOString(), resolved: !!resolved, resolvedBy: null, resolvedAt: null });
   const ch = (c, action) => ({ ch: c, action, dim: null, color: null, colorName: null, timeSec: null });
   const Q = (dept, trigger, offsetSec, body, o) => { o = o || {}; const c = { id: id('q'), dept, trigger, offsetSec: offsetSec == null ? null : offsetSec, note: o.note || '', status: o.tbd ? 'tbd' : 'set' }; c[dept] = body; return c; };
-  const Lt = (trig, off, channels, o) => Q('light', trig, off, { channels, anim: '' }, o);
+  const Lt = (trig, off, channels, o) => Q('light', trig, off, { looks: [], channels, anim: '' }, o);
   const Sd = (trig, off, track, action, o) => Q('sound', trig, off, { track, action, timeSec: (o && o.time) != null ? o.time : null, level: (o && o.level) != null ? o.level : null }, o);
   const St = (trig, off, props, o) => Q('stage', trig, off, { props }, o);
   const PR = { table: 'pr-tophat-table', hat: 'pr-tophat', rope: 'pr-rope' };
@@ -1188,7 +1208,7 @@ function sampleShow() {
   const T = (no, title, loop) => ({ id: 'tr-' + no, no, title, durationSec: null, fileName: null, fileKey: null, note: '', loop: !!loop });
   const tracks = [T(1, '하우스 음악', true), T(2, '제로존 음원'), T(3, '멘탈 음원'), T(4, '카드 매니 음원')];
   const show = { id: 'show-1bu-draft', title: '1부 (초안)', version: SHOW_VER, revision: '', updatedAt: new Date(t0).toISOString(), preShowSetup: '탑햇테이블', people, props,
-    preShowProps: [{ propId: PR.table, at: '무대 중앙' }], tracks, parts };
+    preShowProps: [{ propId: PR.table, at: '무대 중앙' }], lights: [], tracks, parts };
   renumberLabels(show);
   return show;
 }
@@ -1277,6 +1297,9 @@ function migrate(raw) {
   const propRef = v => (v == null || v === '' ? null : String(v));
   const normPropActs = a => (Array.isArray(a) ? a : []).filter(x => x && typeof x === 'object' && propRef(x.propId))
     .map(x => ({ propId: propRef(x.propId), action: PROP_ACTS[x.action] ? x.action : 'in', at: String(x.at || '') }));
+  // v11: 이름 붙인 조명 줄 — 모르는 lookId 도 남겨 "(삭제된 조명)" 으로 (소품과 같다). 빈 id 줄만 버린다
+  const normLookActs = a => (Array.isArray(a) ? a : []).filter(x => x && typeof x === 'object' && propRef(x.lookId))
+    .map(x => ({ lookId: propRef(x.lookId), action: LOOK_ACTS[x.action] ? x.action : 'on' }));
   function normCue(c) {
     c = c && typeof c === 'object' ? c : {};
     const dept = DEPTS.includes(c.dept) ? c.dept : 'stage';
@@ -1284,6 +1307,7 @@ function migrate(raw) {
     if (dept === 'light') {
       const l = c.light || {}, traces = [];
       out.light = {
+        looks: normLookActs(l.looks),
         channels: (Array.isArray(l.channels) ? l.channels : []).map(x => {
           const ch = {
             ch: CH.includes(x && x.ch) ? x.ch : 'front', action: L_ACT.includes(x && x.action) ? x.action : 'on',
@@ -1367,10 +1391,14 @@ function migrate(raw) {
   // 공연 전 무대 소품: 'in' 으로 간주하므로 action 없이 { propId, at }
   const preShowProps = (Array.isArray(src.preShowProps) ? src.preShowProps : []).filter(x => x && typeof x === 'object' && propRef(x.propId))
     .map(x => ({ propId: propRef(x.propId), at: String(x.at || '') }));
+  // v11: 이름 붙인 조명 목록 (v10 까지는 없음 → 빈 목록. 채널 큐는 그대로)
+  const lights = Array.isArray(src.lights) ? src.lights.filter(p => p && typeof p === 'object').map(p => ({
+    id: String(p.id || uid('lk')), name: String(p.name || '이름 없음'), note: String(p.note || '')
+  })) : [];
   const show = {
     id: String(src.id || uid('show')), title: String(src.title || '제목 없는 공연'), version: SHOW_VER,
     revision: cut(String(src.revision || '').trim(), 40), updatedAt: isNaN(Date.parse(src.updatedAt)) ? null : new Date(src.updatedAt).toISOString(),
-    preShowSetup: String(src.preShowSetup || ''), people, props, preShowProps, tracks, parts
+    preShowSetup: String(src.preShowSetup || ''), people, props, preShowProps, lights, tracks, parts
   };
   // v3 → v4: 지금 보이는 순서대로 번호를 고정
   if (ver < 4) renumberLabels(show); else fillLabels(show);
@@ -1395,6 +1423,7 @@ function validateImport(txt) {
   if (data.tracks != null && !Array.isArray(data.tracks)) return { err: 'tracks 가 배열이 아닙니다.' };
   if (data.props != null && !Array.isArray(data.props)) return { err: 'props 가 배열이 아닙니다.' };
   if (data.preShowProps != null && !Array.isArray(data.preShowProps)) return { err: 'preShowProps 가 배열이 아닙니다.' };
+  if (data.lights != null && !Array.isArray(data.lights)) return { err: 'lights 가 배열이 아닙니다.' };
   try { return { show: migrate(data), from: data }; } catch (e) { return { err: '변환 중 오류: ' + e.message }; }
 }
 
@@ -1445,6 +1474,21 @@ function dropPerson(show, pid) {
   }));
   return rows;
 }
+// 이름 붙인 조명 지우기 (소품·조명 탭 · lib/ops.js 의 force 삭제와 같은 규칙): 목록에서 빼고, 다른 줄(조명·채널)이 남는 조명 큐에서는
+// 그 조명의 줄만 뺀다. 그 조명뿐인 큐는 그대로 둬 "(삭제된 조명)" 으로 보인다(큐가 비지 않게 — 점검이 "목록에 없는 조명" 으로 알린다).
+// show 를 직접 고치고 { rows: 뺀 줄 수, kept: 남긴 큐 수 } 를 돌려준다. 되돌리기(delRestore)는 병합이 조명 id 로 줄을 맞춰 제자리에 되살린다
+function dropLook(show, lid) {
+  let rows = 0, kept = 0;
+  show.lights = (show.lights || []).filter(p => p.id !== lid);
+  show.parts.forEach(p => p.scenes.forEach(s => s.items.forEach(it => it.cues.forEach(c => {
+    if (c.dept !== 'light' || !c.light || !Array.isArray(c.light.looks) || !c.light.looks.some(x => x.lookId === lid)) return;
+    const left = c.light.looks.filter(x => x.lookId !== lid);
+    if (!left.length && !(c.light.channels || []).length) { kept++; return; }
+    rows += c.light.looks.length - left.length;
+    c.light.looks = left;
+  }))));
+  return { rows, kept };
+}
 function delUnchanged(entry, cur) {
   const a = JSON.parse(entry.after); a.updatedAt = cur.updatedAt; // 수정 시각만 다른 것은 같은 내용
   return JSON.stringify(a) === JSON.stringify(cur);
@@ -1483,7 +1527,7 @@ const state = {
   // 7차: 내 대사만 보기(prefs) · 사람 뷰에서 펼친 사람 · 사람 목록에 없는 화자 이름(편집기를 떠날 때 모음)
   myLines: false, peopleOpen: null, unknown: [],
   // 8차: 무대 상황 뷰에서 고른 시점('pre' | 'scene:<id>' | 문단 id, 세션 메모리만) · 소품 탭에서 펼친 소품
-  stageAt: null, propOpen: null,
+  stageAt: null, propOpen: null, lookOpen: null,
   // 9차: 점검 — 역할과 상관없이 전체 보기 · 펼친 그룹({ k: true }) · 마지막으로 누른 항목 key · 목록 스크롤 · 점검에서 온 이동({ key, pos, panelWas, panel }) (모두 세션 메모리만)
   ckAll: false, ckOpen: {}, ckLast: null, ckScroll: 0, ckNav: null,
   // 큐시트 표(이 기기 prefs): 열 너비 { 열 키: px } · 접은 부서 열 — 역할과 무관
@@ -3042,10 +3086,11 @@ function buildIndex() {
       seq++;
     });
   });
-  IDX = { entries, byItem, byScene, byPart, runSeq, stopById, people: new Map(state.show.people.map(p => [p.id, p])), props: new Map((state.show.props || []).map(p => [p.id, p])), cueItems: q, stage: null };
+  IDX = { entries, byItem, byScene, byPart, runSeq, stopById, people: new Map(state.show.people.map(p => [p.id, p])), props: new Map((state.show.props || []).map(p => [p.id, p])), lights: new Map((state.show.lights || []).map(p => [p.id, p])), cueItems: q, stage: null };
 }
 function pname(id) { if (!id) return ''; const p = IDX.people.get(id); return p ? p.name : '(삭제된 사람)'; }
 function propName(id) { if (!id) return ''; const p = IDX.props.get(id); return p ? p.name : '(삭제된 소품)'; }
+function lookName(id) { if (!id) return ''; const p = IDX.lights.get(id); return p ? p.name : '(삭제된 조명)'; }
 // 진행(mc) 씬은 제목이 없으면 "진행" 대신 출연자 이름(없으면 MC)
 function mcLabel(s) { return s.cast.length ? s.cast.map(pname).join(', ') : 'MC'; }
 function sceneTitle(s) { return s.title || (s.type === 'mc' ? mcLabel(s) : '(제목 없음)'); }
@@ -3098,11 +3143,13 @@ function roleLabel() {
 //   출연  {사람} IN/OUT/MOVE                                   조예준 OUT
 //         여러 사람(v10)은 같은 액션끼리 "·", 섞이면 " · "        조예준·라태형 IN   |   조예준 IN · 라태형 OUT
 //   음향  BGM {번호} PLAY/STOP/FADE IN/FADE OUT/VOL                BGM 4 PLAY        값: 트랙 제목 · 시간 · 볼륨
-//   조명  {채널 묶음} ON/OFF/FADE IN/FADE OUT/ANIM               백·탑 FADE IN / 객석 OFF   값: 밝기 · 색 · 시간. 네 채널 모두 OFF 면 BLACKOUT
+//   조명  {이름 붙인 조명} ON/OFF (v11 기본) — 같은 액션끼리 "·"   무대 A·핀 ON   |   무대 A OFF · 엔딩 블루 ON
+//         상세(채널) {채널 묶음} ON/OFF/FADE IN/FADE OUT/ANIM     백·탑 FADE IN / 객석 OFF   값: 밝기 · 색 · 시간. 네 채널 모두 OFF 면 BLACKOUT
+//         둘 다 있으면 조명 다음에 " · " 로 채널                   무대 A ON · 객석 OFF
 //         객석은 ON/OFF 만, 늘 따로 쓴다(밝기·색·페이드는 무대 채널만)
 //   무대  {소품} IN/OUT/MOVE/CLEAN, 여럿이면 " · "              빈 탑햇 OUT · 카드 CLEAN   값: → 위치. 소품이 없으면 빨간 "소품 미지정"
 // 대상이 비면 머리글 자리에 "조명 미정"(미정 큐) / "조명 미지정"(확정 큐) 을 빨갛게(miss) — 이때 "미정" 표시는 따로 붙이지 않는다.
-// 순수 함수 — 사람 이름·트랙 제목·소품 이름은 look 으로 받는다: { person(id), track(no), prop(id) } (생략하면 화면의 CUE_LOOK).
+// 순수 함수 — 사람 이름·트랙 제목·소품 이름·조명 이름은 look 으로 받는다: { person(id), track(no), prop(id), light(id) } (생략하면 화면의 CUE_LOOK).
 // lib/cuehead.js 가 이 구간의 사본이다(MCP 개요가 같은 문구를 쓴다) — test/cuehead.test.js 가 결과를 대조한다
 function colorLabel(c) { return c.colorName || (c.color ? c.color.toUpperCase() : ''); }
 // 암전 = 네 채널 모두 off (다른 동작이 섞이면 암전이 아니다)
@@ -3158,26 +3205,36 @@ function cueParts(c, look) {
       break;
     }
     case 'light': {
-      const chs = b.channels || [], anim = String(b.anim || '').trim();
+      // v11: 이름 붙인 조명 줄이 앞 — 같은 액션끼리 "무대 A·핀 ON", 섞이면 " · " 로 "무대 A OFF · 엔딩 블루 ON" (출연 머리글과 같은 묶음).
+      // 채널 상세가 함께 있으면 그 뒤에 " · " 로 이어 붙인다 ("무대 A ON · 객석 OFF")
+      const chs = b.channels || [], anim = String(b.anim || '').trim(), lks = lookRows(b).filter(x => x.lookId);
+      const gs = [];
+      lks.forEach(x => {
+        const a = LOOK_ACTS[x.action] ? x.action : 'on', nm = (look.light && look.light(x.lookId)) || x.lookId, g = gs.find(y => y.a === a);
+        if (!g) gs.push({ a, names: [nm] }); else if (!g.names.includes(nm)) g.names.push(nm);
+      });
+      const lh = gs.map(g => g.names.join('·') + ' ' + LOOK_ACTS[g.a]).join(' · ');
+      let ch = '';
       if (!chs.length) {
-        if (anim) { head = L_ACT_L.anim; val = `"${anim}"`; } else { head = gap('조명'); miss = true; }
+        if (anim) { ch = L_ACT_L.anim; val = `"${anim}"`; }
       } else if (isBlackout(b)) {
-        head = 'BLACKOUT';
+        ch = 'BLACKOUT';
         const ts = Array.from(new Set(chs.map(x => x.timeSec)));
         if (ts.length === 1 && ts[0]) val = ts[0] + 's';
       } else {
-        const gs = lightGroups(chs);
-        head = gs.map(g => chGroupName(g) + ' ' + (L_ACT_L[g.c.action] || g.c.action)).join(' / ');
-        val = gs.map(g => {
+        const cg = lightGroups(chs);
+        ch = cg.map(g => chGroupName(g) + ' ' + (L_ACT_L[g.c.action] || g.c.action)).join(' / ');
+        val = cg.map(g => {
           const x = g.c, v = [];
           if (x.action === 'anim' && anim) v.push(`"${anim}"`);
           if (x.dim != null && x.action !== 'off') v.push(x.dim + '%');
           const cl = colorLabel(x); if (cl) v.push(cl);
           if (x.timeSec) v.push(x.timeSec + 's');
-          return v.length ? (gs.length > 1 ? chGroupName(g) + ' ' : '') + v.join(' ') : '';
+          return v.length ? (cg.length > 1 ? chGroupName(g) + ' ' : '') + v.join(' ') : '';
         }).filter(Boolean).join(' / ');
       }
       if (chs.length && anim && !chs.map(lightCh).some(x => x.action === 'anim')) val += (val ? ' · ' : '') + `ANIM "${anim}"`;
+      if (!lh && !ch) { head = gap('조명'); miss = true; } else head = [lh, ch].filter(Boolean).join(' · ');
       break;
     }
     case 'stage': {
@@ -3879,7 +3936,7 @@ function viewScript() {
 }
 /* 큐 블록: 큐가 달린 문단 위에 "큐(진하게) → 문단(보통)" 순서로. 한 큐 한 줄 = [부서] 머리글(굵게) 값(보통) 상세 ↳시점 · 메모 미정(약하게)
    편집 문서(contenteditable) 밖의 .qlayer 에 그리고, 문단은 그 높이만큼 위 여백(--qh)을 비운다 — 원문·캐럿은 건드리지 않는다 */
-const CUE_LOOK = { person: pname, prop: propName, track: no => { const t = trackByNo(no); return t ? (t.title || t.fileName || '') : ''; } };
+const CUE_LOOK = { person: pname, prop: propName, light: lookName, track: no => { const t = trackByNo(no); return t ? (t.title || t.fileName || '') : ''; } };
 // 머리글 / 꼬리(값 · 상세 · ↳ 시점 · 메모 · 미정) HTML — 패널·큐시트·무대 상황도 같은 클래스(.qt .qv .qdt .qm .qs)를 쓴다
 function cueHeadHtml(H) { return `<span class="qt${H.miss ? ' miss' : ''}">${esc(H.head)}</span>`; }
 function cueTailHtml(H, D, opt) {
@@ -4087,15 +4144,27 @@ function bgmTimeline(after) {
   });
   return at;
 }
-// 조명 상태: 큐 순서대로 채널별 on/off·dim·색을 이어 계산. 미정 큐·빈 채널은 상태를 바꾸지 않는다
-// 반환: entries 순번 → { text: 그 문단의 큐까지 반영한 상태, changed, st: 채널별 상태 사본 (바뀐 채널은 새 객체) }
+// 조명 상태: 큐 순서대로 채널별 on/off·dim·색과 이름 붙인 조명(v11)의 켜짐을 이어 계산. 미정 큐·빈 채널은 상태를 바꾸지 않는다.
+// 무대 채널을 모두 끄는 큐(무대 암전)는 켜진 이름 붙인 조명도 모두 끈다(stageDark)
+// 반환: entries 순번 → { text: 그 문단의 큐까지 반영한 상태, changed, st: 채널별 상태 사본 (바뀐 채널은 새 객체),
+//   looks: 켜진 조명 Map(lookId → { e: 켠 문단 }), dLooks: 이 문단에서 바뀐 조명 [{ lookId, action, dark }] }
 function lightTimeline() {
-  const st = {}, out = [];
+  const st = {}, lk = new Map(), out = [];
   IDX.entries.forEach(e => {
     let changed = false;
+    const dl = [];
     e.item.cues.forEach(c => {
       if (c.dept !== 'light' || c.status === 'tbd' || !c.light) return;
-      c.light.channels.forEach(x => {
+      if (stageDark(c.light) && lk.size) { lk.forEach((v, id) => dl.push({ lookId: id, action: 'off', dark: true })); lk.clear(); changed = true; }
+      lookRows(c.light).forEach(x => {
+        if (!x.lookId) return;
+        const a = x.action === 'off' ? 'off' : 'on';
+        if (a === 'off') lk.delete(x.lookId); else lk.set(x.lookId, { e });
+        const k = dl.findIndex(y => y.lookId === x.lookId); if (k >= 0) dl.splice(k, 1);
+        dl.push({ lookId: x.lookId, action: a });
+        changed = true;
+      });
+      (c.light.channels || []).forEach(x => {
         const p = st[x.ch] || {};
         const color = colorLabel(x) || p.color || '';
         const dim = x.dim != null ? x.dim : p.dim != null ? p.dim : null;
@@ -4105,7 +4174,7 @@ function lightTimeline() {
         changed = true;
       });
     });
-    out.push({ text: lightStateText(st), changed, st: Object.assign({}, st) });
+    out.push({ text: lightStateText(st, lk), changed, st: Object.assign({}, st), looks: new Map(lk), dLooks: dl });
   });
   return out;
 }
@@ -4114,8 +4183,10 @@ function lightChText(s) {
   if (s.anim) return `anim "${s.anim}"`;
   return (s.dim != null ? s.dim + '%' : 'on') + (s.color ? ' ' + s.color : '');
 }
-function lightStateText(st) {
-  return CH.filter(ch => st[ch]).map(ch => CH_L[ch] + ' ' + lightChText(st[ch])).join(' · ');
+// 켜진 이름 붙인 조명("무대 A·핀 ON") 다음에 채널 상태
+function lightStateText(st, lk) {
+  const on = lk && lk.size ? Array.from(lk.keys()).map(lookName).join('·') + ' ON' : '';
+  return [on].concat(CH.filter(ch => st[ch]).map(ch => CH_L[ch] + ' ' + lightChText(st[ch]))).filter(Boolean).join(' · ');
 }
 function itemTextHtml(it, cls) {
   if (it.kind === 'cue') return `<div class="${cls} k-cue"></div>`; // 큐 지점: 본문 칸 없이 트리거·큐만
@@ -4595,15 +4666,29 @@ function svProps(x) {
 }
 function svLight(x, lt) {
   const st = x.lord >= 0 ? lt[x.lord].st : {}, prev = x.kind === 'item' && x.lord > 0 ? lt[x.lord - 1].st : x.kind === 'item' ? {} : st;
-  const rows = CH.map(ch => {
+  // 이름 붙인 조명(v11): 지금 켜진 조명(목록 순서) + 이 시점에 꺼진 조명. 설명은 흐리게 — 소품·사람처럼 "방금 ON/OFF"
+  const S = state.show, looks = x.lord >= 0 ? lt[x.lord].looks : new Map(), dl = x.kind === 'item' && x.lord >= 0 ? lt[x.lord].dLooks : [];
+  const dmap = new Map(dl.map(d => [d.lookId, d])), pos = id => { const k = S.lights.findIndex(p => p.id === id); return k < 0 ? 1e9 : k; };
+  const desc = id => { const p = IDX.lights.get(id); return p && p.note ? `<span class="muted sm">${esc(p.note)}</span>` : ''; };
+  const lrows = [];
+  Array.from(looks.keys()).sort((a, b) => pos(a) - pos(b)).forEach(id => {
+    const d = dmap.get(id);
+    lrows.push(`<tr class="${d ? 'chg' : ''}"><th><span class="sv-n">${esc(lookName(id))}</span></th><td>${desc(id)}</td><td class="sv-m">${d ? '방금 ON' : ''}</td></tr>`);
+  });
+  dl.forEach(d => { if (!looks.has(d.lookId)) lrows.push(`<tr class="chg gone"><th><span class="sv-n">${esc(lookName(d.lookId))}</span></th><td>${desc(d.lookId)}</td><td class="sv-m">${d.dark ? '암전으로 OFF' : '방금 OFF'}</td></tr>`); });
+  const useLooks = S.lights.length > 0 || IDX.entries.some(e => e.item.cues.some(c => c.dept === 'light' && lookRows(c.light).length));
+  // 채널 표: 채널 큐를 쓰는 공연이거나 이름 붙인 조명을 쓰지 않는 공연(v10 까지와 같은 화면)일 때만
+  const useCh = !useLooks || IDX.entries.some(e => e.item.cues.some(c => c.dept === 'light' && c.light && (c.light.channels || []).length));
+  const rows = !useCh ? '' : CH.map(ch => {
     const s = st[ch], chg = s !== prev[ch];
     return `<tr class="${chg ? 'chg' : ''}"><th>${CH_L[ch]}</th><td class="${s && s.on ? '' : 'muted'}">${s ? esc(lightChText(s)) : '—'}</td><td class="sv-m">${chg ? '변경' : ''}</td></tr>`;
   }).join('');
+  const lh = !useLooks ? '' : lrows.length ? `<table class="sv-tab sv-looks"><tbody>${lrows.join('')}</tbody></table>` : `<p class="empty">켜진 조명 없음${S.lights.length ? '' : ' — 소품·조명 탭에서 조명을 등록하고 조명 큐에 ON/OFF 를 적으세요'}</p>`;
   // 미정 조명 큐는 lightTimeline 이 반영하지 않는다 — 가장 최근 조명 큐가 미정이면 실제 상태와 다를 수 있다고 알린다
   let lastQ = null;
   for (let k = x.lord; k >= 0 && !lastQ; k--) if (IDX.entries[k].item.cues.some(c => c.dept === 'light')) lastQ = IDX.entries[k];
   const tbd = lastQ && lastQ.item.cues.some(c => c.dept === 'light' && c.status === 'tbd');
-  return svSec('light', '조명', null, `<table class="sv-tab"><tbody>${rows}</tbody></table>${tbd ? `<p class="sv-ref red">${lastQ.q ? 'Q' + esc(lastQ.q) + ' ' : ''}미정 조명 큐는 반영하지 않음 — 실제 상태와 다를 수 있음</p>` : ''}`);
+  return svSec('light', '조명', useLooks ? looks.size : null, `${lh}${rows ? `<table class="sv-tab"><tbody>${rows}</tbody></table>` : ''}${tbd ? `<p class="sv-ref red">${lastQ.q ? 'Q' + esc(lastQ.q) + ' ' : ''}미정 조명 큐는 반영하지 않음 — 실제 상태와 다를 수 있음</p>` : ''}`);
 }
 function svSound(x, bgm) {
   const at = k => k >= 0 ? bgm.get(IDX.entries[k].item.id) : null;
@@ -4646,8 +4731,36 @@ function propUses(id) {
   IDX.entries.forEach(e => e.item.cues.forEach(c => { if (c.dept === 'stage' && c.stage && (c.stage.props || []).some(x => x.propId === id)) out.push({ e, c }); }));
   return out;
 }
+// 이름 붙인 조명(v11)을 쓰는 조명 큐
+function lookUses(id) {
+  const out = [];
+  IDX.entries.forEach(e => e.item.cues.forEach(c => { if (c.dept === 'light' && lookRows(c.light).some(x => x.lookId === id)) out.push({ e, c }); }));
+  return out;
+}
+// 조명 목록 (소품·조명 탭의 한 구간): 이름 · 설명 · 쓰는 큐 · 순서 · 삭제. 이름·설명은 그 자리에서 고친다(소품과 같다)
+function viewLooks() {
+  const S = state.show, ed = state.edit, L = S.lights, n = L.length;
+  let h = `<div class="sec-h" id="looks"><h2>조명</h2><span class="note">${n}개 · 리허설에서 정한 조명의 이름 — 조명 큐가 켜고(ON) 끈다(OFF). 채널·밝기·색은 설명에</span>${ed ? '<button type="button" class="btn" id="btn-look-add" data-act="look-add">+ 조명</button>' : ''}</div>`;
+  if (!n) return h + '<p class="empty">등록된 조명이 없습니다. 조명 큐 편집 창에서 이름을 적어 바로 등록할 수도 있습니다.</p>';
+  h += `<div class="table-wrap"><table class="ltable pr-table lk-table"><thead><tr><th>이름</th><th>설명</th><th class="n">큐</th>${ed ? '<th></th>' : ''}</tr></thead><tbody>`;
+  L.forEach((p, i) => {
+    const id = esc(p.id), uses = lookUses(p.id), open = state.lookOpen === p.id && uses.length;
+    h += `<tr id="look-${id}">
+      <td>${ed ? `<input type="text" id="lkn-${id}" value="${esc(p.name)}" data-act="look-field" data-k="name" data-look="${id}" aria-label="이름">` : `<span class="pp-name">${esc(p.name)}</span>`}</td>
+      <td>${ed ? `<input type="text" id="lkm-${id}" value="${esc(p.note)}" data-act="look-field" data-k="note" data-look="${id}" aria-label="${esc(p.name)} 설명" placeholder="예: 프론트 70 + 탑 블루">` : esc(p.note)}</td>
+      <td class="n">${uses.length ? `<button type="button" class="tb mono" id="lku-${id}" data-act="look-uses" data-look="${id}" aria-expanded="${!!open}" title="쓰는 큐 ${open ? '접기' : '펼치기'}">${uses.length} ${open ? '▴' : '▾'}</button>` : '<span class="muted">0</span>'}</td>
+      ${ed ? `<td style="white-space:nowrap"><button type="button" class="tb" id="lk-up-${id}" data-act="look-up" data-look="${id}" ${i ? '' : 'disabled'} aria-label="${esc(p.name)} 위로" title="위로">↑</button> <button type="button" class="tb" id="lk-down-${id}" data-act="look-down" data-look="${id}" ${i < n - 1 ? '' : 'disabled'} aria-label="${esc(p.name)} 아래로" title="아래로">↓</button> <button type="button" class="tb red" id="lkd-${id}" data-act="look-del" data-look="${id}">삭제</button></td>` : ''}</tr>`;
+    if (open) h += `<tr class="tr-uses"><td colspan="${ed ? 4 : 3}">${uses.map(u => `<button type="button" class="ref-link" data-act="comment-goto" data-item="${esc(u.e.item.id)}">${u.e.q ? 'Q' + esc(u.e.q) + ' · ' : ''}${esc(sceneTitle(u.e.scene))} — ${esc(cueText(u.c))}</button>`).join('')}</td></tr>`;
+  });
+  return h + '</tbody></table></div>';
+}
 function viewProps() {
   const S = state.show, ed = state.edit;
+  // 조명 역할이면 조명 목록을 위로
+  if (roleDept() === 'light') return viewLooks() + viewPropsOnly(S, ed);
+  return viewPropsOnly(S, ed) + viewLooks();
+}
+function viewPropsOnly(S, ed) {
   let h = `<div class="sec-h"><h2>소품</h2><span class="note">${S.props.length}개 · 무대 큐에 소품별 IN/OUT/MOVE/CLEAN 을 적으면 무대 상황 뷰와 점검에 반영됩니다</span>${ed ? '<button type="button" class="btn" id="btn-prop-add" data-act="prop-add">+ 소품</button>' : ''}</div>`;
   if (!S.props.length) h += '<p class="empty">등록된 소품이 없습니다.</p>';
   else {
@@ -4688,13 +4801,14 @@ const CK_SEV_L = { block: '막힘', check: '확인', info: '참고' };
 // 그룹 순서 = 화면 순서(막힘 → 확인 → 참고). short 는 맨 아래 "문제 없음: …" 줄, depts 는 이 그룹에 나올 수 있는 부서('any' = 큐 부서 그대로)
 const CK_GROUPS = [
   { k: 'track', sev: 'block', t: '트랙 목록에 없는 BGM 번호', short: '트랙 번호', note: '음향 큐가 쓰는 번호가 음원 탭에 없습니다.', depts: ['sound'] },
-  { k: 'light', sev: 'block', t: '채널이 비어 있는 확정 조명 큐', short: '조명 채널', note: '확정인데 채널·애니메이션이 없습니다.', depts: ['light'] },
+  { k: 'light', sev: 'block', t: '비어 있는 확정 조명 큐', short: '빈 조명 큐', note: '확정인데 켜고 끌 조명·채널·애니메이션이 없습니다.', depts: ['light'] },
   { k: 'cast', sev: 'block', t: '인/아웃 반복', short: '인/아웃 반복', note: '같은 사람의 IN 다음 또 IN, OUT 다음 또 OUT.', depts: ['cast'] },
   { k: 'props', sev: 'block', t: '소품 연속성', short: '소품', note: '이미 무대에 있는 소품을 또 IN, 무대에 없는 소품을 OUT·이동, 소품 목록에 없는 소품. 공연 전 무대 소품에서 시작해 무대 큐 순서대로 셉니다.', depts: ['stage'] },
   { k: 'tbd', sev: 'check', t: '미정 큐', short: '미정', note: '공연 전에 확정하거나 리허설에서 정한 내용을 적어 두세요.', depts: 'any' },
   { k: 'trig', sev: 'check', t: '트리거가 비어 있는 큐', short: '트리거', note: '언제 칠지 적혀 있지 않습니다.', depts: 'any' },
   { k: 'castlist', sev: 'check', t: '씬 출연에 없는 사람의 IN/OUT', short: '출연 명단', note: '씬 마지막 큐의 IN(다음 씬 등장)과 첫 큐의 OUT(앞 씬 퇴장)은 뺍니다.', depts: ['cast'] },
   { k: 'noprops', sev: 'check', t: '소품 미지정 무대 큐', short: '소품 미지정', note: '확정 무대 큐인데 소품이 없습니다 — 소품을 등록하고 대상으로 고르세요(v8: 무대 큐는 소품 필수). 원래 문장은 상세에 있습니다.', depts: ['stage'] },
+  { k: 'looks', sev: 'check', t: '조명 ON/OFF 연속성', short: '조명 ON/OFF', note: '켜진 조명을 또 ON, 켜지지 않은 조명을 OFF, 조명 목록에 없는 조명. 공연 시작 때는 모두 꺼져 있고, 무대 채널을 모두 끄는 큐(암전)는 켜진 조명을 모두 끕니다.', depts: ['light'] },
   { k: 'files', sev: 'check', t: '음원 파일', short: '음원 파일', note: '', depts: ['sound'] },
   { k: 'emptyq', sev: 'check', t: '빈 문단에 붙은 큐', short: '빈 문단 큐', note: '본문이 빈 대사·지문에 큐가 붙어 있습니다 — 큐 지점으로 바꾸세요(본문 없이 큐만 보이는 실행 지점). lib/validate.js empty-cued 와 같은 조건.', depts: ['common'] },
   { k: 'empty', sev: 'info', t: '문단 없는 액트 씬', short: '빈 액트', note: '코멘트·큐를 달 문단이 없습니다.', depts: ['common'], fold: true },
@@ -4717,6 +4831,8 @@ function checkCollect(x) {
     const pv = scenes[si - 1]; return !!pv && pv.cast.includes(pid) && noCues(its.slice(0, ii));
   };
   const last = new Map(), noProps = [];
+  // 이름 붙인 조명(v11): 켜진 조명 lookId → { e }. 목록 이름은 show.lights 에서 (점검 입력에 따로 받지 않는다)
+  const lkOn = new Map(), LK = new Map((S.lights || []).map(p => [p.id, p])), lkName = lid => (LK.get(lid) ? LK.get(lid).name : '(삭제된 조명)');
   x.entries.forEach(e => {
     const id = e.item.id, sid = e.scene.id;
     e.item.cues.forEach(c => {
@@ -4726,7 +4842,23 @@ function checkCollect(x) {
       const own = () => Object.assign({ dept: c.dept, person: who[0] || null, sid, item: id, text }, who.length > 1 ? { people: who.slice() } : {});
       if (c.status === 'tbd') add('tbd', own());
       if (!String(c.trigger || '').trim()) add('trig', own());
-      if (c.dept === 'light' && c.status !== 'tbd' && !(c.light && c.light.channels.length) && !(c.light && String(c.light.anim || '').trim())) add('light', own());
+      if (c.dept === 'light' && c.status !== 'tbd' && !(c.light && (lookRows(c.light).some(r => r.lookId) || (c.light.channels || []).length || String(c.light.anim || '').trim()))) add('light', own());
+      // 조명 ON/OFF 연속성: 큐 순서대로(미정 큐 포함 — 인/아웃과 같다). 무대 암전은 켜진 조명을 모두 끈다
+      if (c.dept === 'light' && c.light) {
+        if (stageDark(c.light)) lkOn.clear();
+        lookRows(c.light).forEach(r => {
+          if (!r.lookId) return;
+          const nm = lkName(r.lookId), A = r.action === 'off' ? 'OFF' : 'ON', pr = lkOn.get(r.lookId), base = { dept: 'light', person: null, sid, item: id };
+          if (!LK.has(r.lookId)) add('looks', Object.assign({}, base, { text: `${ref(e)} — ${nm} ${A} — 조명 목록에 없음` }));
+          if (A === 'OFF') {
+            if (!pr) add('looks', Object.assign({}, base, { text: `${ref(e)} — ${nm} OFF 인데 켜져 있지 않음` }));
+            lkOn.delete(r.lookId);
+          } else {
+            if (pr) add('looks', Object.assign({}, base, { text: `${ref(e)} — ${nm} ON 다음 또 ON (앞: ${ref(pr.e)})` }));
+            lkOn.set(r.lookId, { e });
+          }
+        });
+      }
       // 소품 미지정: lib/validate.js 의 stage-no-props 와 같은 조건 (확정 무대 큐, 소품 행 없음). 소품 목록이 비면 아래 propsSkip 한 줄로 흡수
       if (c.dept === 'stage' && c.status !== 'tbd' && !(c.stage && Array.isArray(c.stage.props) && c.stage.props.some(r => r && r.propId))) noProps.push(own());
       if (c.dept === 'sound' && c.sound && c.sound.track != null && !x.trackByNo(c.sound.track)) add('track', { dept: 'sound', person: null, sid, item: id, text: `${ref(e)} — BGM ${c.sound.track} 은 트랙 목록에 없음` });
@@ -5335,19 +5467,29 @@ function openItem(id, focus) {
 // 큐 편집: 부서 → 대상(사람 · 트랙 · 채널 · 소품)과 액션을 목록·버튼에서 고른다 → 값 → 상세 → 시점 → 미정.
 // 맨 위 머리글은 미리보기일 뿐 입력칸이 아니다 — 대상·액션을 바꾸면 따라 바뀐다 (cueHead 와 같은 함수)
 // 조명은 무대 채널(백·탑·프론트)만 행으로 세밀하게, 객석은 켠다/끈다만. 행 = 같은 액션·밝기·색·시간인 채널 묶음
+// v11: 조명은 이름 붙인 조명 줄(조명 + ON/OFF)이 기본. 채널 편집기는 "상세(채널)" 를 펼쳐야 보인다(adv) — 채널이 있는 큐는 펼친 채로 연다.
+// 이름 붙인 조명이 하나도 없고 채널 큐만 쓰는 공연(v10 까지의 공연)은 새 조명 큐도 채널 편집기를 펼친 채로 시작한다
 const STAGE_CH = ['back', 'top', 'front'];
 const ltRow = (chs, action) => ({ chs, action: action || 'on', dim: null, color: null, colorName: null, timeSec: null });
+function chanShow() {
+  if ((state.show.lights || []).length) return false;
+  return state.show.parts.some(p => p.scenes.some(s => s.items.some(it => it.cues.some(c => c.dept === 'light' && c.light && (c.light.channels || []).some(x => x.ch !== 'house')))));
+}
+function blankLight() {
+  return chanShow() ? { looks: [], rows: [ltRow(['front'])], house: null, anim: '', adv: true } : { looks: [{ lookId: null, action: 'on' }], rows: [], house: null, anim: '', adv: false };
+}
 function blankCue() {
   const firstPerf = state.show.people.find(p => p.role === 'performer' || p.role === 'mc') || state.show.people[0];
   return {
     id: uid('q'), dept: roleDept() || 'light', trigger: '', offsetSec: null, note: '', status: 'set',
-    light: { rows: [ltRow(['front'])], house: null, anim: '' },
+    light: blankLight(),
     sound: { track: state.show.tracks.length ? state.show.tracks[0].no : null, action: 'play', timeSec: null, level: null },
     stage: { props: [] },
     cast: { people: firstPerf ? [{ personId: firstPerf.id, move: 'in' }] : [] }
   };
 }
-// 저장된 조명 → 편집 행: 무대 채널은 같은 값끼리 한 행, 객석은 on/off 하나
+// 저장된 조명 → 편집 초안: 이름 붙인 조명 줄 그대로, 무대 채널은 같은 값끼리 한 행, 객석은 on/off 하나.
+// 채널 행이나 애니메이션이 있으면 상세(채널)를 펼친 채로. 아무것도 없는 큐(미정)는 새 큐처럼 시작한다
 function lightDraft(l) {
   const rows = []; let house = null;
   ((l && l.channels) || []).forEach(c => {
@@ -5355,7 +5497,9 @@ function lightDraft(l) {
     const r = rows.find(x => x.action === c.action && x.dim === c.dim && x.color === c.color && x.colorName === c.colorName && x.timeSec === c.timeSec);
     if (r) { if (!r.chs.includes(c.ch)) r.chs.push(c.ch); } else rows.push(Object.assign(ltRow([c.ch], c.action), { dim: c.dim, color: c.color, colorName: c.colorName, timeSec: c.timeSec }));
   });
-  return { rows, house, anim: (l && l.anim) || '' };
+  const looks = lookRows(l).filter(x => x.lookId).map(x => ({ lookId: x.lookId, action: LOOK_ACTS[x.action] ? x.action : 'on' })), anim = (l && l.anim) || '';
+  if (!looks.length && !rows.length && house == null && !anim) return blankLight();
+  return { looks, rows, house, anim, adv: rows.length > 0 || !!String(anim).trim() };
 }
 function draftChannels(L) {
   const out = [];
@@ -5367,7 +5511,8 @@ function draftChannels(L) {
 // 모달 초안 → 저장할 큐 (미리보기도 같은 값으로 그린다)
 function draftCue(d) {
   const cue = { id: d.id, dept: d.dept, trigger: d.trigger.trim(), offsetSec: d.offsetSec, note: d.note.trim(), status: d.status === 'tbd' ? 'tbd' : 'set' };
-  if (d.dept === 'light') cue.light = { channels: draftChannels(d.light), anim: d.light.anim.trim() };
+  // 조명을 고르지 않은 줄은 버린다(머리글 미리보기가 저장될 모양을 보여 준다). 같은 조명은 한 줄만 고를 수 있다
+  if (d.dept === 'light') cue.light = { looks: d.light.looks.filter(x => x.lookId).map(x => ({ lookId: x.lookId, action: LOOK_ACTS[x.action] ? x.action : 'on' })), channels: draftChannels(d.light), anim: d.light.anim.trim() };
   else if (d.dept === 'sound') {
     const x = d.sound;
     // level 은 volume(목표, 기본 100)·fadeIn(도착, 선택)·play(시작, 선택)에서만 저장 — stop·fadeOut 은 지운다
@@ -5397,7 +5542,7 @@ function openCueModal(itemId, cueId, extra) {
     if (c.dept === 'cast') draft.cast = { people: castRows(c.cast).map(x => ({ personId: x.personId, move: MOVES[x.move] ? x.move : 'in' })) };
     if (draft.note == null) draft.note = '';
   } else if (rolePerson()) { draft.dept = 'cast'; draft.cast.people = [{ personId: rolePerson(), move: 'in' }]; }
-  state.modal = Object.assign({ type: 'cue', itemId, cueId: cueId || null, draft, err: '', newProps: [], prNew: '' }, extra || {});
+  state.modal = Object.assign({ type: 'cue', itemId, cueId: cueId || null, draft, err: '', newProps: [], prNew: '', newLooks: [], lkNew: '', lkNewNote: '' }, extra || {});
   renderModal(true);
 }
 function opts(list, cur, labels) { return list.map(v => `<option value="${v}" ${v === cur ? 'selected' : ''}>${labels ? labels[v] : v}</option>`).join(''); }
@@ -5405,9 +5550,12 @@ function opts(list, cur, labels) { return list.map(v => `<option value="${v}" ${
 function segHtml(act, keys, cur, labels, extra, label) {
   return `<div class="seg" role="group" aria-label="${esc(label || '액션')}">${keys.map(k => `<button type="button" class="tb ${k === cur ? 'on' : ''}" data-act="${act}" data-v="${esc(k)}" ${extra || ''} aria-pressed="${k === cur}">${esc(labels[k])}</button>`).join('')}</div>`;
 }
-// 모달 안에서 새로 등록한 소품은 저장할 때 소품 목록에 들어간다 — 그 전에는 여기서 이름을 찾는다
+// 모달 안에서 새로 등록한 소품·조명은 저장할 때 목록에 들어간다 — 그 전에는 여기서 이름을 찾는다
 function modalLook(m) {
-  return Object.assign({}, CUE_LOOK, { prop: id => { const n = (m.newProps || []).find(x => x.id === id); return n ? n.name : propName(id); } });
+  return Object.assign({}, CUE_LOOK, {
+    prop: id => { const n = (m.newProps || []).find(x => x.id === id); return n ? n.name : propName(id); },
+    light: id => { const n = (m.newLooks || []).find(x => x.id === id); return n ? n.name : lookName(id); }
+  });
 }
 function cuePrevHtml(m) {
   const c = draftCue(m.draft), lk = modalLook(m), H = cueHead(c, lk), D = cueDetail(c, lk);
@@ -5424,8 +5572,29 @@ function cueModalBody() {
   h += `<div class="m-tabs" role="group" aria-label="부서">${DEPTS.map(x => `<button type="button" id="m-dept-${x}" data-act="m-dept" data-dept="${x}" aria-pressed="${d.dept === x}">${DEPT_L[x]}</button>`).join('')}</div>
     <div class="qprev d-${esc(d.dept)}"><div class="qprev-h"><span>머리글 미리보기 · 자동</span><span>직접 고칠 수 없음 — 대상·액션을 바꾸세요</span></div><div class="qprev-l" id="m-prev" aria-live="polite">${cuePrevHtml(m)}</div></div>`;
   if (d.dept === 'light') {
+    // 기본: 이름 붙인 조명 줄 [조명][ON/OFF] — 리허설에서 정해 이름을 붙인 조명을 켜고 끈다(v11). 한 큐에 여러 줄(A OFF · B ON).
+    // 목록에 없으면 이름(+ 설명)을 적어 바로 등록 — 조명 목록에는 큐를 저장할 때 들어간다. 고른 조명의 설명은 줄 아래에 흐리게
+    const L = d.light, LS = state.show.lights.concat(m.newLooks || []), n = L.looks.length;
+    h += '<div class="field"><span class="lbl">대상 · 조명 — 리허설에서 이름 붙인 조명을 켜고 끈다</span><div class="ch-rows" id="m-lk-rows">';
+    L.looks.forEach((x, i) => {
+      const info = LS.find(p => p.id === x.lookId), known = !x.lookId || !!info, taken = new Set(L.looks.filter((y, k) => k !== i && y.lookId).map(y => y.lookId));
+      h += `<div class="lk-row" data-i="${i}">
+        <div class="field"><label for="lk-look-${i}">조명${n > 1 ? ' ' + (i + 1) : ''}</label><select id="lk-look-${i}" data-f="lk.row" data-i="${i}"><option value="">(선택)</option>${known ? '' : `<option value="${esc(x.lookId)}" selected>(삭제된 조명)</option>`}${LS.map(p => `<option value="${esc(p.id)}" ${p.id === x.lookId ? 'selected' : ''} ${taken.has(p.id) ? 'disabled' : ''}>${esc(p.name)}${taken.has(p.id) ? ' — 이미 있음' : ''}</option>`).join('')}</select></div>
+        <div class="field"><span class="lbl">액션</span>${segHtml('m-lk-act', Object.keys(LOOK_ACTS), x.action, LOOK_ACTS, `data-i="${i}"`, `${i + 1}번째 조명 액션`)}</div>
+        <div class="cast-ops"><button type="button" class="tb red" id="lk-del-${i}" data-act="m-lk-del" data-i="${i}" aria-label="${i + 1}번째 조명 줄 삭제">삭제</button></div>
+        ${info && info.note ? `<p class="lk-desc" id="lk-desc-${i}">${esc(info.note)}</p>` : ''}
+      </div>`;
+    });
+    if (!n) h += `<p class="note pr-none">켜고 끌 조명 없음${L.rows.length || L.house || L.anim ? ' — 상세(채널)만 씁니다' : ''}</p>`;
+    const free = LS.filter(p => !L.looks.some(y => y.lookId === p.id));
+    h += `</div><div class="quick" style="padding-top:6px"><button type="button" class="tb" id="m-lk-add" data-act="m-lk-add" ${free.length ? '' : 'disabled'}>+ 조명</button>${n > 1 || (n && free.length) ? '<span class="note">한 조명을 끄며 다른 조명을 켜면 OFF · ON 두 줄</span>' : ''}</div>
+      <div class="pr-new lk-new"><label class="sr-only" for="lk-new-name">새 조명 이름</label><input type="text" id="lk-new-name" data-f="lknew" data-enter="m-lk-new" value="${esc(m.lkNew || '')}" placeholder="새 조명 이름 (예: 무대 A)"><label class="sr-only" for="lk-new-note">새 조명 설명</label><input type="text" id="lk-new-note" data-f="lknewnote" data-enter="m-lk-new" value="${esc(m.lkNewNote || '')}" placeholder="설명 (선택, 예: 프론트 70 + 탑 블루)"><button type="button" class="tb" id="m-lk-new" data-act="m-lk-new">조명 등록</button></div></div>
+      <div class="field"><span class="lbl">객석 — 켠다/끈다만</span>${segHtml('m-house', ['on', 'off', ''], L.house || '', { on: 'ON', off: 'OFF', '': '그대로' }, 'id="m-house"', '객석')}</div>
+      <div class="field lt-adv"><button type="button" class="tb" id="m-lt-adv" data-act="m-lt-adv" aria-expanded="${!!L.adv}" aria-controls="m-lt-detail">${L.adv ? '−' : '+'} 상세(채널)</button><span class="note">${L.adv ? '백·탑·프론트 채널별 밝기·색·페이드 — 이름 붙인 조명과 함께 저장됩니다' : L.rows.length || L.anim ? `채널 ${L.rows.reduce((a, r) => a + r.chs.length, 0)}개${L.anim ? ' · 애니메이션' : ''} 저장됨 — 펼쳐서 보기` : '조명을 채널별로 적을 때'}</span></div>`;
+  }
+  if (d.dept === 'light' && d.light.adv) {
     const L = d.light, used = L.rows.flatMap(r => r.chs);
-    h += '<div class="field"><span class="lbl">대상 · 무대 채널 — 같은 동작끼리 한 행</span><div class="ch-rows">';
+    h += '<div class="field" id="m-lt-detail"><span class="lbl">상세 · 무대 채널 — 같은 동작끼리 한 행</span><div class="ch-rows">';
     L.rows.forEach((r, i) => {
       h += `<div class="ch-row lt-row" data-i="${i}">
         <div class="field wide"><span class="lbl">채널</span><div class="chks">${STAGE_CH.map(ch => `<label><input type="checkbox" id="lt-ch-${i}-${ch}" data-f="lt.ch" data-i="${i}" data-v="${ch}" ${r.chs.includes(ch) ? 'checked' : ''}>${CH_L[ch]}</label>`).join('')}</div></div>
@@ -5438,8 +5607,9 @@ function cueModalBody() {
     });
     if (!L.rows.length) h += '<p class="note pr-none">무대 채널 행 없음</p>';
     h += `</div><div class="quick" style="padding-top:6px"><button type="button" class="tb" id="m-lt-add" data-act="m-lt-add" ${used.length >= STAGE_CH.length ? 'disabled' : ''}>+ 채널 행</button><button type="button" class="tb" id="m-blackout" data-act="m-blackout">암전 (네 채널 OFF 로 채움)</button></div></div>
-      <div class="field"><span class="lbl">객석 — 켠다/끈다만 (밝기·색·페이드는 무대 채널만)</span>${segHtml('m-house', ['on', 'off', ''], L.house || '', { on: 'ON', off: 'OFF', '': '그대로' }, 'id="m-house"', '객석')}</div>
       <div class="field"><label for="light-anim">애니메이션 프리셋 (ANIM 일 때)</label><input type="text" id="light-anim" data-f="light.anim" value="${esc(L.anim)}" placeholder="예: 스파클 체이스"></div>`;
+  } else if (d.dept === 'light') {
+    // 접힌 상세: 그 자리 표시만 (위 줄이 이미 말한다)
   } else if (d.dept === 'sound') {
     const TS = state.show.tracks, x = d.sound, known = x.track == null || TS.some(t => t.no === x.track);
     h += `<div class="field"><label for="snd-track">대상 · BGM 트랙</label><select id="snd-track" data-f="sound.track"><option value="">(선택)</option>${known ? '' : `<option value="${esc(x.track)}" selected>BGM ${esc(x.track)} — 트랙 목록에 없음</option>`}${TS.map(t => `<option value="${esc(t.no)}" ${t.no === x.track ? 'selected' : ''}>BGM ${esc(t.no)}${t.title ? ' · ' + esc(t.title) : ''}</option>`).join('')}</select>${TS.length ? '' : '<p class="note">등록된 트랙이 없습니다 — 음원 탭에서 먼저 추가하세요</p>'}</div>
@@ -5658,6 +5828,13 @@ function renderModal(focusFirst) {
       <div class="field"><label for="person-note">메모</label><input type="text" id="person-note" data-f="p.note" value="${esc(d.note)}"></div>
       ${m.err ? `<p class="err" role="alert">${esc(m.err)}</p>` : ''}`;
     foot = '<button type="button" class="btn" data-act="modal-close">취소</button><button type="button" class="btn strong" id="btn-person-save" data-act="person-save">추가</button>';
+  } else if (m.type === 'look') {
+    title = '조명 추가';
+    const d = m.draft;
+    body = `<div class="field"><label for="look-name">이름 — 조명팀이 부르는 이름</label><input type="text" id="look-name" data-f="lk.name" data-enter="look-save" value="${esc(d.name)}" placeholder="예: 무대 A"></div>
+      <div class="field"><label for="look-note">설명 (선택)</label><input type="text" id="look-note" data-f="lk.note" data-enter="look-save" value="${esc(d.note)}" placeholder="예: 프론트 70 + 탑 블루, 리허설 11/12 확정"></div>
+      ${m.err ? `<p class="err" role="alert">${esc(m.err)}</p>` : ''}`;
+    foot = '<button type="button" class="btn" data-act="modal-close">취소</button><button type="button" class="btn strong" id="btn-look-save" data-act="look-save">추가</button>';
   } else if (m.type === 'prop') {
     title = '소품 추가';
     const d = m.draft;
@@ -5874,6 +6051,8 @@ function modalField(t) {
   else if (f === 'pr') { const x = d.stage.props[Number(t.dataset.i)], k = t.dataset.k; if (x && (k === 'propId' || k === 'action' || k === 'at')) x[k] = v; }
   else if (f === 'pr.name') d.name = v;
   else if (f === 'pr.note') d.note = v;
+  else if (f === 'lk.name') d.name = v;
+  else if (f === 'lk.note') d.note = v;
   else if (f === 'p.name') d.name = v;
   else if (f === 'p.role') d.role = v;
   else if (f === 'p.note') d.note = v;
@@ -5901,6 +6080,15 @@ function cueField(t) {
   else if (f === 'sound.timeSec') d.sound.timeSec = num(v);
   else if (f === 'pr') { const x = d.stage.props[Number(t.dataset.i)], k = t.dataset.k; if (x && (k === 'propId' || k === 'at')) x[k] = v; }
   else if (f === 'prnew') m.prNew = v;
+  else if (f === 'lknew') m.lkNew = v;
+  else if (f === 'lknewnote') m.lkNewNote = v;
+  else if (f === 'lk.row') {
+    // 조명을 바꾸면 다른 줄의 고를 수 있는 조명과 설명 줄이 바뀌므로 다시 그린다
+    const x = d.light.looks[Number(t.dataset.i)]; if (!x) return;
+    x.lookId = v || null;
+    if (m.err) m.err = '';
+    renderModal(); const el = document.getElementById(t.id); if (el) el.focus();
+  }
   else if (f === 'cast.row') {
     // 사람을 바꾸면 다른 줄의 고를 수 있는 사람이 바뀌므로 다시 그린다
     const x = d.cast.people[Number(t.dataset.i)]; if (!x) return;
@@ -5936,6 +6124,28 @@ function cueModalAct(a, el) {
     case 'm-lt-del': d.light.rows.splice(i, 1); break;
     case 'm-blackout': d.light.rows = [ltRow(STAGE_CH.slice(), 'off')]; d.light.house = 'off'; break;
     case 'm-house': d.light.house = v || null; break;
+    case 'm-lt-adv': d.light.adv = !d.light.adv; break;
+    case 'm-lk-act': { const x = d.light.looks[i]; if (x) x.action = v; break; }
+    case 'm-lk-add': {
+      // 아직 줄에 없는 조명 중 처음. 액션은 바로 앞 줄의 반대(끄고 켜기가 흔하다) — 첫 줄이면 ON
+      const rows = d.light.looks, LS = state.show.lights.concat(m.newLooks || []), p = LS.find(x => !rows.some(y => y.lookId === x.id));
+      const last = rows[rows.length - 1];
+      rows.push({ lookId: p ? p.id : null, action: last ? (last.action === 'on' ? 'off' : 'on') : 'on' });
+      break;
+    }
+    case 'm-lk-del': d.light.looks.splice(i, 1); break;
+    case 'm-lk-new': {
+      // 새 조명을 모달 안에서 바로 등록(이름 + 설명) — 같은 이름이 이미 있으면 그것을 쓴다. 조명 목록에는 큐를 저장할 때 들어간다
+      const name = String(m.lkNew || '').trim(), note = String(m.lkNewNote || '').trim();
+      if (!name) { m.err = '등록할 조명 이름을 입력하세요.'; break; }
+      const LS = state.show.lights.concat(m.newLooks);
+      let p = LS.find(x => x.name === name);
+      if (!p) { p = { id: uid('lk'), name, note }; m.newLooks.push(p); } else if (note && !p.note && m.newLooks.includes(p)) p.note = note;
+      const rows = d.light.looks;
+      if (!rows.some(x => x.lookId === p.id)) { const empty = rows.find(x => !x.lookId); if (empty) empty.lookId = p.id; else rows.push({ lookId: p.id, action: 'on' }); }
+      m.lkNew = ''; m.lkNewNote = ''; m.err = '';
+      break;
+    }
     case 'm-snd-act': d.sound.action = v; if (v === 'volume' && d.sound.level == null) d.sound.level = 100; break;
     case 'm-cast-act': { const x = d.cast.people[i]; if (x) x.move = v; break; }
     case 'm-cast-add': {
@@ -5967,6 +6177,10 @@ function cueModalAct(a, el) {
   }
   renderModal();
   if (a === 'm-pr-new') { const f = $('#pr-new-name'); if (f) f.focus(); }
+  if (a === 'm-lk-new') { const f = $('#lk-new-name'); if (f) f.focus(); }
+  if (a === 'm-lk-add') { const f = $(`#lk-look-${d.light.looks.length - 1}`); if (f) f.focus(); }
+  if (a === 'm-lk-del') { const f = $('#m-lk-add'); if (f && !f.disabled) f.focus(); }
+  if (a === 'm-lt-adv') { const f = $('#m-lt-adv'); if (f) f.focus(); }
   // 출연 사람 줄: 다시 그린 뒤에도 키보드 위치를 잃지 않게 — 옮긴 줄의 같은 버튼 · 새 줄의 사람 칸 · 지운 뒤엔 "+ 사람"
   if (a === 'm-cast-up' || a === 'm-cast-down') { const j = a === 'm-cast-up' ? i - 1 : i + 1, f = $(`#${a === 'm-cast-up' ? 'cast-up' : 'cast-down'}-${j}`); (f && !f.disabled ? f : $(`#cast-person-${j}`) || $('#m-cast-add')).focus(); }
   if (a === 'm-cast-add') { const f = $(`#cast-person-${d.cast.people.length - 1}`); if (f) f.focus(); }
@@ -5980,7 +6194,7 @@ function saveCue() {
   let err = '';
   const tbd = d.status === 'tbd', cue = draftCue(d);
   if (!tbd) {
-    if (d.dept === 'light' && !cue.light.channels.length && !cue.light.anim) err = '무대 채널을 하나 이상 고르거나 객석 ON/OFF, 애니메이션을 정하세요 (아직 모르면 "미정").';
+    if (d.dept === 'light' && !cue.light.looks.length && !cue.light.channels.length && !cue.light.anim) err = '켜거나 끌 조명을 고르세요 — 목록에 없으면 이름을 적어 등록하고, 채널로 적으려면 상세(채널)를 펼치세요 (아직 모르면 "미정").';
     if (d.dept === 'sound' && d.sound.track == null) err = 'BGM 트랙을 고르세요.';
     if (d.dept === 'stage' && !cue.stage.props.length) err = '무대 큐는 소품이 필요합니다 — 소품 행을 추가하거나 새 소품을 등록하세요 (아직 모르면 "미정").';
     else if (d.dept === 'stage' && d.stage.props.some(x => !x.propId)) err = '소품 행에서 소품을 고르거나 그 행을 삭제하세요.';
@@ -5990,6 +6204,8 @@ function saveCue() {
   if (err) { m.err = err; renderModal(); return; }
   // 모달에서 등록한 소품 중 이 큐가 쓰는 것만 소품 목록에 넣는다
   if (d.dept === 'stage') (m.newProps || []).forEach(p => { if (cue.stage.props.some(x => x.propId === p.id) && !state.show.props.some(x => x.id === p.id)) state.show.props.push(p); });
+  // 모달에서 등록한 조명도 이 큐가 쓰는 것만 조명 목록에 넣는다
+  if (d.dept === 'light') (m.newLooks || []).forEach(p => { if (cue.light.looks.some(x => x.lookId === p.id) && !state.show.lights.some(x => x.id === p.id)) state.show.lights.push(p); });
   if (m.newPoint) {
     // 큐 지점: 큐와 함께 처음 생긴다 (큐 0개인 지점은 없다)
     const sc = IDX.byScene.get(m.newPoint.sceneId).scene, pt = newCuePoint([cue]);
@@ -6525,6 +6741,35 @@ function act(a, el) {
       commit(); delToast('삭제했습니다 — 무대 큐의 참조는 "(삭제된 소품)" 으로 표시됩니다'); break;
     }
     case 'prop-uses': state.propOpen = state.propOpen === el.dataset.prop ? null : el.dataset.prop; render(); break;
+    // ---- v11: 이름 붙인 조명 목록 (소품·조명 탭)
+    case 'look-add': state.modal = { type: 'look', draft: { name: '', note: '' }, err: '' }; renderModal(true); break;
+    case 'look-save': {
+      const m = state.modal, name = m.draft.name.trim();
+      if (!name) { m.err = '이름을 입력하세요.'; renderModal(); break; }
+      if (S.lights.some(p => p.name === name)) { m.err = `"${name}" 은(는) 이미 있습니다.`; renderModal(); break; }
+      S.lights.push({ id: uid('lk'), name, note: m.draft.note.trim() });
+      closeModal(true); commit(); toast(`${name} 추가됨`); break;
+    }
+    case 'look-del': {
+      // 쓰는 큐가 있어도 지운다(소품·사람과 같다) — 다른 줄이 있는 큐에서는 그 줄만 빠지고, 그 조명뿐인 큐는 "(삭제된 조명)" 으로 남아 점검이 알린다. Ctrl+Z 로 되돌린다
+      const id = el.dataset.look, lk = S.lights.find(p => p.id === id); if (!lk) break;
+      const n = lookUses(id).length;
+      delSnap('조명 ' + (lk.name || ''));
+      const r = dropLook(S, id);
+      if (state.lookOpen === id) state.lookOpen = null;
+      commit();
+      delToast(!n ? '조명을 삭제했습니다' : `삭제했습니다 — 쓰던 조명 큐 ${n}개${r.rows ? ` 중 ${r.rows}개에서 줄이 빠짐` : ''}${r.kept ? `${r.rows ? ', ' : ' — '}${r.kept}개는 "(삭제된 조명)" 으로 남음` : ''}`);
+      break;
+    }
+    case 'look-uses': state.lookOpen = state.lookOpen === el.dataset.look ? null : el.dataset.look; render(); break;
+    case 'look-up': case 'look-down': {
+      const L = S.lights, i = L.findIndex(p => p.id === el.dataset.look), j = a === 'look-up' ? i - 1 : i + 1;
+      if (i < 0 || !L[j]) break;
+      const t = L[i]; L[i] = L[j]; L[j] = t;
+      commit();
+      const f = document.getElementById(`lk-${a === 'look-up' ? 'up' : 'down'}-${t.id}`); if (f) (f.disabled ? document.getElementById('lkn-' + t.id) : f).focus();
+      break;
+    }
     case 'pre-prop-add': {
       if (!S.props.length) break;
       const used = S.preShowProps.map(x => x.propId), p = S.props.find(x => !used.includes(x.id)) || S.props[0];
@@ -6598,7 +6843,7 @@ function act(a, el) {
     case 'pl-open': if (state.menuOpen) { state.menuOpen = false; renderTop(); } AU.shown = true; updatePlayer(); break;
     case 'm-dept': state.modal.draft.dept = el.dataset.dept; state.modal.err = ''; renderModal(); break;
     case 'm-quick': state.modal.draft.trigger = '이전 큐 후'; state.modal.draft.offsetSec = Number(el.dataset.n); renderModal(); break;
-    case 'm-lt-act': case 'm-lt-add': case 'm-lt-del': case 'm-blackout': case 'm-house': case 'm-snd-act': case 'm-cast-act': case 'm-cast-add': case 'm-cast-del': case 'm-cast-up': case 'm-cast-down': case 'm-pr-act': case 'm-pr-new':
+    case 'm-lt-act': case 'm-lt-add': case 'm-lt-del': case 'm-blackout': case 'm-house': case 'm-lt-adv': case 'm-lk-act': case 'm-lk-add': case 'm-lk-del': case 'm-lk-new': case 'm-snd-act': case 'm-cast-act': case 'm-cast-add': case 'm-cast-del': case 'm-cast-up': case 'm-cast-down': case 'm-pr-act': case 'm-pr-new':
       cueModalAct(a, el); break;
     case 'm-save': saveCue(); break;
     case 'm-del': { const m = state.modal; const ok = deleteCue(m.itemId, m.cueId); closeModal(true); commit(); if (ok) delToast('큐를 삭제했습니다'); break; }
@@ -6764,6 +7009,12 @@ document.addEventListener('change', ev => {
   else if (a === 'setup-done') { const k = t.dataset.key; if (t.checked) SETUP_DONE.add(k); else SETUP_DONE.delete(k); const w = t.closest('.rs-setup'); if (w) w.classList.toggle('done', t.checked); }
   else if (a === 'filter-unresolved') { state.unresolvedOnly = t.checked; renderPanel(); }
   else if (a === 'author') { state.author = t.value.trim(); savePrefs(); }
+  else if (a === 'look-field') {
+    const p = state.show.lights.find(x => x.id === t.dataset.look); if (!p) return;
+    if (t.dataset.k === 'name') p.name = t.value.trim() || p.name;
+    else if (t.dataset.k === 'note') p.note = t.value.trim();
+    commit();
+  }
   else if (a === 'prop-field') {
     const p = state.show.props.find(x => x.id === t.dataset.prop); if (!p) return;
     if (t.dataset.k === 'name') p.name = t.value.trim() || p.name;

@@ -340,7 +340,6 @@ test('옛 화면 차단 (v9): PLAY 시작 볼륨이 있는 v9 저장본에 v8 �
 });
 
 test('옛 화면 차단 (v10): 여러 사람 출연 큐가 있는 v10 저장본에 v9 화면(출연 큐가 한 사람)이 저장하면 426, 사람 줄은 그대로', async () => {
-  assert.equal(SHOW_VER, 10);
   const people = [{ id: 'p-a', name: '조예준', role: 'mc', note: '' }, { id: 'p-b', name: '라태형', role: 'performer', note: '' }];
   const cq = cast => ({ id: 'q1', dept: 'cast', trigger: '', offsetSec: null, note: '', status: 'set', cast });
   const v = (title, version, cast) => show(title, { version, people, props: [], preShowProps: [], tracks: [],
@@ -349,11 +348,30 @@ test('옛 화면 차단 (v10): 여러 사람 출연 큐가 있는 v10 저장본�
   const { id } = await (await fetch(S.base + '/api/shows', J('POST', { show: v('교대', 10, two) }))).json();
   let r = await fetch(`${S.base}/api/shows/${id}`, J('PUT', { baseRev: 1, show: v('v9 화면', 9, { personId: 'p-a', move: 'out' }) }));
   assert.equal(r.status, 426);
-  assert.deepEqual(await r.json().then(x => [x.error, x.version, x.schema]), ['client_outdated', 10, 10]);
+  assert.deepEqual(await r.json().then(x => [x.error, x.version, x.schema]), ['client_outdated', 10, SHOW_VER]);
   const g = await (await fetch(`${S.base}/api/shows/${id}`)).json();
   assert.deepEqual(g.show.parts[0].scenes[0].items[0].cues[0].cast, two);
   r = await fetch(`${S.base}/api/shows/${id}`, J('PUT', { baseRev: 1, show: v('v10 화면', 10, { people: two.people.slice(0, 1) }) }));
   assert.equal(r.status, 200);
+});
+
+test('옛 화면 차단 (v11): 이름 붙인 조명이 있는 v11 저장본에 v10 화면(lights·looks 를 모름)이 저장하면 426, 조명은 그대로', async () => {
+  assert.equal(SHOW_VER, 11);
+  const lights = [{ id: 'lk-a', name: '무대 A', note: '프론트 70 + 탑 블루' }, { id: 'lk-b', name: '엔딩 블루', note: '' }];
+  const lq = light => ({ id: 'q1', dept: 'light', trigger: '', offsetSec: null, note: '', status: 'set', light });
+  const v = (title, version, light, extra) => show(title, Object.assign({ version, people: [], props: [], preShowProps: [], tracks: [],
+    parts: [{ id: 'pt1', name: '1부', scenes: [{ id: 's1', items: [{ id: 'i1', kind: 'cue', text: '', cues: [lq(light)] }] }] }] }, extra));
+  const swap = { looks: [{ lookId: 'lk-a', action: 'off' }, { lookId: 'lk-b', action: 'on' }], channels: [], anim: '' };
+  const { id } = await (await fetch(S.base + '/api/shows', J('POST', { show: v('교대', 11, swap, { lights }) }))).json();
+  let r = await fetch(`${S.base}/api/shows/${id}`, J('PUT', { baseRev: 1, show: v('v10 화면', 10, { channels: [], anim: '' }) }));
+  assert.equal(r.status, 426);
+  assert.deepEqual(await r.json().then(x => [x.error, x.version, x.schema]), ['client_outdated', 11, 11]);
+  const g = await (await fetch(`${S.base}/api/shows/${id}`)).json();
+  assert.deepEqual([g.show.lights, g.show.parts[0].scenes[0].items[0].cues[0].light], [lights, swap]);
+  r = await fetch(`${S.base}/api/shows/${id}`, J('PUT', { baseRev: 1, show: v('v11 화면', 11, swap, { lights: lights.slice(0, 2) }) }));
+  assert.equal(r.status, 200);
+  // health 의 schema 도 11 — 열어 둔 v10 화면은 새로고침을 요구받는다
+  assert.equal((await (await fetch(S.base + '/api/health')).json()).schema, 11);
 });
 
 test('옛 화면 차단: POST·복제는 기존 저장본을 덮어쓰지 않고, 복제는 version 을 그대로 둔다', async () => {

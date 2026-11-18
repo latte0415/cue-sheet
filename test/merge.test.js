@@ -327,7 +327,7 @@ test('코멘트 snapshot(v7): 병합해도 버리지 않는다 — 이 기기·�
   cs.forEach(c => assert.deepEqual(c.snapshot, snapOf(it), c.id + ' snapshot 그대로'));
   assert.equal(find(r.show, it.id).text, it.text + ' (로컬)');
   assert.equal(find(r.show, other.id).text, other.text);
-  assert.equal(r.show.version, 10);
+  assert.equal(r.show.version, 11);
   assert.deepEqual(validateShow(r.show).errors, []);
   assert.deepEqual(migrate(r.show), r.show, '사이트가 다시 읽어도 그대로');
 });

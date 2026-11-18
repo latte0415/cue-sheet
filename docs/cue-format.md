@@ -1,7 +1,7 @@
-# 큐시트 JSON 형식 (show v10)과 업로드
+# 큐시트 JSON 형식 (show v11)과 업로드
 
 원문 큐시트(대본 + 조명·음향·무대·출연 큐)를 이 JSON 으로 바꿔 `scripts/upload.js` 로 올린다.
-사이트의 "내보내기"가 만드는 JSON 과 같은 형식이다. `version` 5·6·7·8·9 파일도 그대로 읽힌다(옛 필드는 불러올 때 v10 모양으로 옮겨진다). 새로 만들 땐 10 을 쓴다. 기준 구현은 `index.html` 의 `migrate()`, 검증은 `lib/validate.js`.
+사이트의 "내보내기"가 만드는 JSON 과 같은 형식이다. `version` 5·6·7·8·9·10 파일도 그대로 읽힌다(옛 필드는 불러올 때 v11 모양으로 옮겨진다). 새로 만들 땐 11 을 쓴다. 기준 구현은 `index.html` 의 `migrate()`, 검증은 `lib/validate.js`.
 
 ## 형식 버전
 
@@ -15,6 +15,7 @@
 | 8 | 큐 상세 `note` 하나(모든 부서). `memo`·`cast.text`·`stage.text` 는 없어지고 `note` 로 합쳐진다. 무대 큐는 소품 필수(`stage.props`), 소품 액션 `clean` 추가. 객석(`house`) 채널은 `on`/`off` 만. 머리글(대상 + 액션)은 사이트가 만든다 — 아래 "큐 머리글" |
 | 9 | 음향 `play` 큐의 `sound.level` = 시작 볼륨(그 볼륨으로 바로 재생, 예: 하우스 오픈 BGM 50). 모양은 8 과 같다 — 8 → 9 는 `version` 만 바뀐다. 8 화면은 `play` 의 `level` 을 저장할 때 지우므로 올려서 옛 화면의 저장을 막는다 |
 | 10 | 출연 큐 하나에 여러 사람: `cast` = `{ people: [{ personId, move }] }`(사람마다 IN/OUT/MOVE, 순서 = 머리글 순서). 9 까지의 `{ personId, move }` 는 불러올 때 한 줄짜리 `people` 로 옮겨진다(사람이 비어 있어도 줄은 남김). 9 화면은 `people` 을 몰라 저장하면 사람을 잃으므로 올린다 |
+| 11 | 이름 붙인 조명: `lights[]` `{ id, name, note }`(리허설에서 정해 이름을 붙인 조명 — `note` 에 상세 설명) + 조명 큐 `light.looks[]` `{ lookId, action: on\|off }`. 조명 큐는 이제 이름 붙인 조명을 켜고 끄는 것이 기본이고, 채널(`light.channels`)은 "상세(채널)" 로 그대로 쓴다 — 한 큐에 둘 다 있어도 된다. 10 → 11 은 `lights: []`·`looks: []` 만 붙고 채널 큐는 바꾸지 않는다. 10 화면은 `looks` 를 몰라 저장하면 지우므로 올린다 |
 
 ## 올리기
 
@@ -45,10 +46,11 @@ node scripts/upload.js cues/show.json --project <id|제목> --edit-key <편집 �
 
 ```
 show
-├─ title, version: 10, preShowSetup, revision
+├─ title, version: 11, preShowSetup, revision
 ├─ people[]  { id, name, role, note }
 ├─ props[]   { id, name, note }                            ← 소품 목록 (v6)
 ├─ preShowProps[]  { propId, at }                          ← 공연 시작 때 무대에 있는 소품 (v6)
+├─ lights[]  { id, name, note }                            ← 이름 붙인 조명 목록 (v11)
 ├─ tracks[]  { id, no, title, durationSec, fileName, fileKey, note, loop }
 └─ parts[]   { id, name, scenes[] }                       ← 1부, 2부 …
    └─ scenes[] { id, type, title, cast[], durationSec, setup, comments[], items[] }
@@ -63,10 +65,10 @@ show
 | 필드 | 타입 | 뜻 |
 |---|---|---|
 | `title` | string | 공연(프로젝트) 제목 |
-| `version` | number | **필수**, `10` (`5`·`6`·`7`·`8`·`9` 도 읽힘) |
+| `version` | number | **필수**, `11` (`5`·`6`·`7`·`8`·`9`·`10` 도 읽힘) |
 | `preShowSetup` | string | 공연 전 무대 세팅 (런 보기 첫 화면) |
 | `revision` | string | 판 표시, 40자까지 |
-| `people` / `props` / `preShowProps` / `tracks` / `parts` | array | 아래. `parts` 는 **필수** |
+| `people` / `props` / `preShowProps` / `lights` / `tracks` / `parts` | array | 아래. `parts` 는 **필수** |
 
 ### people[] — 출연자·스태프
 
@@ -95,6 +97,19 @@ show
 |---|---|---|
 | `propId` | string | `props[].id`. 목록에 없으면 경고(지우지 않고 "삭제된 소품"으로 남는다) |
 | `at` | string | 놓인 위치 ("무대 오른쪽 테이블 위"). 빈 값 `""` 가능 |
+
+### lights[] — 이름 붙인 조명 (v11)
+
+리허설에서 정해 이름을 붙인 조명(룩) 목록. 공연 중 조명 큐는 대개 이 조명을 켜고 끄기만 한다. 조명 큐 `light.looks` 는 이름이 아니라 이 `id` 로 가리킨다.
+사이트에서는 "소품·조명" 탭의 조명 구간에서 이름·설명·순서를 고치고, 조명 큐 편집 창에서 이름을 적어 바로 등록할 수도 있다.
+
+| 필드 | 타입 | 뜻 |
+|---|---|---|
+| `id` | string | 조명을 가리키는 값 (예: `"lk-stage-a"`) |
+| `name` | string | 조명팀이 부르는 이름 ("무대 A", "엔딩 블루", "핀") — 머리글에 그대로 쓰인다 |
+| `note` | string | 상세 설명 ("프론트 70 + 탑 블루, 리허설 11/12 확정"). 채널·밝기·색·페이드는 여기에 |
+
+목록에서 지워도 조명 큐의 줄은 지우지 않는다 — 다른 줄(조명·채널)이 있는 큐에서는 그 줄만 빠지고, 그 조명뿐인 큐는 "(삭제된 조명)" 으로 남아 점검이 알린다(사이트 삭제·MCP `force` 삭제 같은 규칙, 사이트에서는 Ctrl+Z 로 되돌린다).
 
 ### tracks[] — 음원(BGM)
 
@@ -140,7 +155,7 @@ show
 
 | dept | 내용 객체 |
 |---|---|
-| `light` | `{ channels: [{ ch, action, dim, color, colorName, timeSec }], anim }` — `ch`: `back` `top` `front` `house`(객석). `action`: `on` `off` `fadeIn` `fadeOut` `anim`. `dim` 0–100(%)·null, `color` `"#rrggbb"`·null, `colorName` 색 이름·null, `timeSec` 페이드 초·null. 암전 = 네 채널 모두 `off`. 상세 미정이면 `channels: []` + `status:"tbd"`. **객석(`house`)은 켠다/끈다만**: `action` 은 `on`·`off`, `dim`·`color`·`colorName`·`timeSec` 는 `null` — 밝기·색·페이드·애니는 무대 채널(`back`·`top`·`front`)만 (v8) |
+| `light` | `{ looks: [{ lookId, action }], channels: […], anim }` (v11) — **기본은 `looks`**: 이름 붙인 조명을 켜고(`on`) 끈다(`off`). `lookId` = `lights[].id`, `action`: `on` `off`(그 밖은 오류). 한 큐에 여러 줄 — 한 조명을 끄며 다른 조명을 켜면 `off` 줄 + `on` 줄. 같은 조명 두 줄은 경고(`light-dup`), 모르는 `lookId` 는 경고("(삭제된 조명)"). 페이드·밝기 같은 상세는 그 조명의 `note` 에. 확정 큐에 `looks`·`channels`·`anim` 이 모두 비면 경고(`light-empty`). **`channels`(상세, 선택)**: `[{ ch, action, dim, color, colorName, timeSec }]` — `ch`: `back` `top` `front` `house`(객석). `action`: `on` `off` `fadeIn` `fadeOut` `anim`. `dim` 0–100(%)·null, `color` `"#rrggbb"`·null, `colorName` 색 이름·null, `timeSec` 페이드 초·null. 암전 = 네 채널 모두 `off`. 상세 미정이면 `channels: []` + `status:"tbd"`. **객석(`house`)은 켠다/끈다만**: `action` 은 `on`·`off`, `dim`·`color`·`colorName`·`timeSec` 는 `null` — 밝기·색·페이드·애니는 무대 채널(`back`·`top`·`front`)만 (v8) |
 | `sound` | `{ track, action, timeSec, level }` — `track` = `tracks[].no`. `action`: `play` `fadeIn` `fadeOut` `stop` `volume`. `timeSec` 페이드/변화 초·null, `level` 0–100·null — 액션마다 뜻이 다르다: `play` 시작 볼륨(그 볼륨으로 바로 재생, null 이면 100 — 예: 하우스 오픈 BGM 50), `fadeIn` 도착 볼륨(null 이면 100), `volume` 목표 볼륨(null 이면 100으로 채워짐). `stop`·`fadeOut` 에는 뜻이 없어 편집기·MCP 가 저장할 때 지운다(검증 경고) |
 | `stage` | `{ props: [{ propId, action, at }] }` — 소품이 들어오고 나가고 치워지는 동작. `propId` = `props[].id`, `action`: `in` `out` `move` `clean`(그 밖은 오류), `at` 위치(`""` 가능). **무대 큐는 소품이 필수**(v8) — 소품 없는 확정 큐는 경고(올라가지만 사이트에 빨간 "소품 미지정"). 글로 적던 작업 설명은 `note` 에. `clean` = 치우기(흘린 카드 줍기, 꽃가루 밀대 청소) — 치울 것도 `props` 에 등록해 고른다. 모르는 `propId` 는 경고 |
 | `cast` | `{ people: [{ personId, move }] }` (v10) — 한 큐에 한 사람 이상, 사람마다 액션. `personId` = `people[].id`, `move`: `in` `out` `move`. 줄 순서 = 머리글 순서. 여러 사람이 함께 들어오면 `in` 줄 여럿, 한 사람이 나가며 다른 사람이 들어오면 `out` 줄 + `in` 줄. 사람이 없으면 경고("출연 대상이 없습니다"), 같은 사람 두 줄은 경고(`cast-dup`). v9 까지의 `{ personId, move }` 도 읽힌다(불러올 때 한 줄로, v10 파일에 쓰면 `legacy-field` 경고). 보충 설명은 `note` 에 |
@@ -162,7 +177,7 @@ show
 |---|---|---|
 | 출연 | `{사람} IN` · `OUT` · `MOVE` — `조예준 OUT`. 여러 사람이면 같은 액션끼리 `·` 로 묶고(처음 나온 순서), 액션이 섞이면 ` · ` — `조예준·라태형 IN`, `조예준 OUT · 라태형 IN` | — |
 | 음향 | `BGM {번호} PLAY` · `STOP` · `FADE IN` · `FADE OUT` · `VOL` — `BGM 4 PLAY` | 트랙 제목 · 시간 · 볼륨 — `BGM 1 PLAY  하우스 음악 · 50%` (PLAY·FADE IN 은 100% 가 아닐 때만) |
-| 조명 | `{채널 묶음} ON` · `OFF` · `FADE IN` · `FADE OUT` · `ANIM` — `백·탑 FADE IN / 객석 OFF`. 같은 값인 채널은 한 묶음, 객석은 늘 따로 ON/OFF. 네 채널 모두 `off` 면 `BLACKOUT` | 밝기 · 색 · 시간 |
+| 조명 | 이름 붙인 조명(v11): `{조명} ON` · `OFF`, 같은 액션끼리 `·` 로 묶고 섞이면 ` · ` — `무대 A ON`, `무대 A·핀 ON`, `무대 A OFF · 엔딩 블루 ON`. 채널(상세): `{채널 묶음} ON` · `OFF` · `FADE IN` · `FADE OUT` · `ANIM` — `백·탑 FADE IN / 객석 OFF`. 같은 값인 채널은 한 묶음, 객석은 늘 따로 ON/OFF. 네 채널 모두 `off` 면 `BLACKOUT`. 둘 다 있으면 조명 다음에 ` · ` 로 채널 — `무대 A ON · 객석 OFF` | 밝기 · 색 · 시간 (채널만) |
 | 무대 | `{소품} IN` · `OUT` · `MOVE` · `CLEAN`, 여럿이면 ` · ` — `빈 탑햇 OUT · 실크쓰루 탑햇 IN`, `카드 CLEAN` | `→ 위치` |
 
 대상이 비면 머리글 자리에 빨간 `조명 미정`·`출연자 미정 IN`·`BGM 미정 PLAY`·`소품 미정`(미정 큐) / `… 미지정`(확정 큐).
@@ -207,7 +222,7 @@ show
 ```json
 {
   "title": "1부 (초안)",
-  "version": 10,
+  "version": 11,
   "preShowSetup": "탑햇테이블",
   "people": [
     { "id": "p-yejun", "name": "조예준", "role": "mc", "note": "MC 겸 공연자" },
@@ -220,6 +235,9 @@ show
   "preShowProps": [
     { "propId": "pr-table", "at": "무대 중앙" }
   ],
+  "lights": [
+    { "id": "lk-stage-a", "name": "무대 A", "note": "프론트 70 + 탑 블루, 리허설 11/12 확정" }
+  ],
   "tracks": [
     { "id": "tr-1", "no": 1, "title": "하우스 음악", "durationSec": null, "fileName": null, "fileKey": null, "note": "", "loop": true }
   ],
@@ -231,7 +249,7 @@ show
           { "id": "i-1", "kind": "action", "speaker": null, "text": "(공연 시작)", "label": null, "comments": [],
             "cues": [
               { "id": "q-1", "dept": "light", "trigger": "하우스 페이드 아웃 후", "offsetSec": null, "note": "", "status": "set",
-                "light": { "channels": [
+                "light": { "looks": [], "channels": [
                   { "ch": "back", "action": "off", "dim": null, "color": null, "colorName": null, "timeSec": null },
                   { "ch": "top", "action": "off", "dim": null, "color": null, "colorName": null, "timeSec": null },
                   { "ch": "front", "action": "off", "dim": null, "color": null, "colorName": null, "timeSec": null },
@@ -245,7 +263,9 @@ show
               { "id": "q-3", "dept": "cast", "trigger": "멘트 후", "offsetSec": null, "note": "", "status": "set",
                 "cast": { "people": [{ "personId": "p-daehoon", "move": "in" }] } },
               { "id": "q-4", "dept": "stage", "trigger": "이 대사 즈음", "offsetSec": null, "note": "시점 리허설 때 확정", "status": "tbd",
-                "stage": { "props": [{ "propId": "pr-tophat", "action": "in", "at": "테이블 위" }] } }
+                "stage": { "props": [{ "propId": "pr-tophat", "action": "in", "at": "테이블 위" }] } },
+              { "id": "q-5", "dept": "light", "trigger": "멘트 후", "offsetSec": null, "note": "", "status": "set",
+                "light": { "looks": [{ "lookId": "lk-stage-a", "action": "on" }], "channels": [], "anim": "" } }
             ] }
         ] },
       { "id": "s-2", "type": "act", "title": "멘탈", "cast": ["p-daehoon"], "durationSec": 180, "setup": "", "comments": [], "items": [] }

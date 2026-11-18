@@ -126,17 +126,25 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
   열거형(`type`, `kind`, `dept`, `role`, `ch`, `action`, `move`, `status`)은 `docs/cue-format.md` 의 값만.
   사람 참조(`speaker`, `cast`, `cast.people[].personId`)는 `people[].id` 만 — 이름을 주면 그 사람의 id 를 알려 주며 거부.
   소품 참조(`stage.props[].propId`, `preShowProps[].propId`)도 같게 `props[].id` 만. 소품 행에 propId 가 없으면 거부(브라우저 `saveCue` 와 같음).
+  조명 참조(`light.looks[].lookId`, v11)도 같게 `lights[].id` 만 — 이름을 주면 그 조명의 id 를 알려 주며 거부.
 - **show v8 필드.** 큐 상세는 `note` 하나(모든 부서). `memo`·`cast.text`·`stage.text` 는 없어졌다 — 주면 "note 를 쓰세요" 로 거부.
   무대 소품 액션은 `in`·`out`·`move`·`clean`(치우기). 객석 채널(`ch:"house"`)은 `action` `on`·`off` 만, `dim`·`color`·`colorName`·`timeSec` 을 주면 거부.
   **무대 큐는 소품 필수**: 소품 없는 확정(`status:"set"`) 무대 큐를 새로 만들거나, 무대 큐의 `dept`·`stage`·`status` 를 바꿔 그렇게 되면 거부
   (먼저 `kind:"prop"` 으로 등록하고 `stage.props` 에 넣거나 `status:"tbd"`). 다른 필드만 고친 옛 큐(소품 없는 v7 무대 큐)는 경고만.
-  머리글(`조예준 OUT`, `조예준·라태형 IN`, `BGM 4 PLAY`, `BLACKOUT`, `카드 CLEAN`)은 대상·액션에서 만들어지므로 `note` 에 다시 쓰지 않는다.
+  머리글(`조예준 OUT`, `조예준·라태형 IN`, `BGM 4 PLAY`, `무대 A OFF · 엔딩 블루 ON`, `BLACKOUT`, `카드 CLEAN`)은 대상·액션에서 만들어지므로 `note` 에 다시 쓰지 않는다.
+- **이름 붙인 조명 (show v11).** 리허설에서 정해 이름을 붙인 조명은 `lights[]` `{ id, name, note }` — 사람·소품처럼 `kind:"look"` 의
+  add/set(name·note)/remove/move 로 고친다(`move` 로 목록 순서). `note` 에 상세 설명("프론트 70 + 탑 블루, 리허설 11/12 확정").
+  조명 큐의 기본은 `light: { looks: [{ lookId, action: on|off }] }` — 한 큐에 여러 줄(`무대 A OFF` + `엔딩 블루 ON`). `light.looks` 는 통째로 바뀌고,
+  줄마다 `lookId` 필수, `action` 은 `on`·`off` 만(기본 `on`), 같은 조명 두 줄은 거부, `timeSec` 같은 다른 필드는 거부(페이드·밝기는 그 조명의 `note` 나 `channels` 에).
+  `light.channels`(채널 상세)는 그대로 받는다 — `looks` 만 보내면 채널은 그대로, 한 큐에 둘 다 있어도 된다. 조명·채널·애니메이션이 모두 비면 경고.
+  **조명 force 삭제**: 쓰는 조명 큐가 있으면 목록과 함께 거부, `force:true` 면 다른 줄(조명·채널)이 있는 큐에서는 그 줄만 빼고, 그 조명뿐인 큐는 그대로 둬
+  "(삭제된 조명)" 으로 보인다(브라우저 조명 삭제 `dropLook` 과 같다 — 경고로 알림).
 - **출연 큐 (show v10).** `cast: { people: [{ personId, move }] }` — 한 큐에 여러 사람, 사람마다 `in`·`out`·`move`(함께 등장, 한 사람 퇴장 · 다른 사람 등장).
   `cast.people` 은 `stage.props` 처럼 통째로 바뀐다. 줄마다 `personId` 필수, 같은 사람 두 줄은 거부, 빈 배열은 경고("채우거나 tbd").
   v9 까지의 한 사람 입력 `{ cast: { personId, move } }` 도 받는다 — 사람이 0·1명인 큐에서만 그 줄을 고치고(`{ cast: { move: "out" } }` 처럼 하나만 줘도 됨),
   2명 이상이면 "`cast.people` 을 통째로 보내라" 로 거부. `people` 과 `personId`/`move` 를 같이 주면 거부.
 - **얕은 합치기.** 큐의 `light`·`sound`·`stage`·`cast` 객체는 한 단계만 합친다: `{ sound: { level: 80 } }` 은 track·action·timeSec 을
-  그대로 두고 level 만 바꾼다. 배열(`light.channels`, `stage.props`, `cast.people`, `scene.cast`, show 의 `preShowProps`)은 통째로 바뀐다. 채널의 빠진 필드는 기본값
+  그대로 두고 level 만 바꾼다. 배열(`light.looks`, `light.channels`, `stage.props`, `cast.people`, `scene.cast`, show 의 `preShowProps`)은 통째로 바뀐다. 채널의 빠진 필드는 기본값
   (`ch:"front", action:"on"`, 나머지 null), 소품 행은 `action:"in"`, `at:""`. `dept` 를 바꾸면 이전 부서 내용은 버리고 새 부서 기본값에서 시작한다.
 - **큐 지점 (`kind:"cue"`).** 본문·화자 없이 큐만 있는 문단(대본 흐름 안의 실행 지점). `add` 는 `data.cues` 가 하나 이상이어야 하고 본문을 주면 거부.
   `set` 으로 `fields.kind:"cue"` 를 주면 본문을 비우고 화자를 지운다 — op 에 `"textToNote":true` 를 함께 주면 옛 본문(괄호를 벗겨)을 첫 큐의 `note` 뒤에 붙인다.
@@ -147,10 +155,10 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
   편집기처럼 저장은 하되 `validateShow` 의 `action-format` 경고가 edit_show 결과에 나온다(op 가 새로 만든 경고만). 서버가 `*` 를
   괄호로 바꾸는 등 자동 고침은 하지 않는다 — 브라우저 편집기도 받는 값이고, 뜻을 바꾸지 않게 에이전트가 고치게 둔다. 음향 `level` 은 `volume`(목표, 없으면 100)·`fadeIn`(도착)·`play`(시작 볼륨 — 그 볼륨으로 바로 재생)에서 남기고 `stop`·`fadeOut` 에서는 경고와 함께 지운다(index.html `saveCue`).
   `#rrggbb` 가 아닌 색은 `colorName` 으로 옮긴다(migrate). 큐가 바뀐 문단의 `isCue` 는 큐 유무를 따른다.
-  내용 없는 큐(채널 없는 조명, 트랙 없는 음향, 사람 없는 출연)는 저장하되 "채우거나 `status:"tbd"`" 경고. 무대는 위 "소품 필수".
-- **새 항목.** id 는 브라우저 `uid()` 와 같은 접두어(`pt-` `s-` `i-` `q-` `c-` `p-` `pr-` `tr-`)로 만든다. 같은 호출의 뒤 op 에서
+  내용 없는 큐(조명 줄·채널 없는 조명, 트랙 없는 음향, 사람 없는 출연)는 저장하되 "채우거나 `status:"tbd"`" 경고. 무대는 위 "소품 필수".
+- **새 항목.** id 는 브라우저 `uid()` 와 같은 접두어(`pt-` `s-` `i-` `q-` `c-` `p-` `pr-` `lk-` `tr-`)로 만든다. 같은 호출의 뒤 op 에서
   가리키려면 `data.id` 를 직접 줘도 된다(`[A-Za-z0-9_-]{1,64}`, 쓰지 않은 값). 기본값은 브라우저가 새로 만들 때와 같다
-  (씬 `type:"act"`, 사람 `role:"other"`, 무대 큐 `stage:{props:[]}`, 출연 큐 `cast:{people:[]}`, 큐 `note:""`, 코멘트 작성자 `"익명"`, 트랙 `no` = 지금 최댓값 + 1). `data` 에 자식을 함께 넣을 수 있다:
+  (씬 `type:"act"`, 사람 `role:"other"`, 무대 큐 `stage:{props:[]}`, 출연 큐 `cast:{people:[]}`, 조명 큐 `light:{looks:[],channels:[],anim:""}`, 큐 `note:""`, 코멘트 작성자 `"익명"`, 트랙 `no` = 지금 최댓값 + 1). `data` 에 자식을 함께 넣을 수 있다:
   part.`scenes`, scene.`items`/`comments`, item.`cues`/`comments`.
 - **트랙.** 항상 `no` 순으로 정렬된다(add 에 `after`, move 는 거부). `no` 를 바꾸면 그 번호를 쓰던 음향 큐의 `sound.track` 도
   함께 바뀐다. 겹치는 번호는 거부. 올린 음원이 있던 트랙을 지우면 파일은 서버에 남는다(경고).
@@ -159,8 +167,9 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
 - **소품 (show v6~).** `props[]` 는 사람처럼 `kind:"prop"` 의 add/set(name·note)/remove/move 로 고친다. force 삭제는 브라우저 소품
   삭제와 같이 `preShowProps` 에서는 빼고, 무대 큐의 소품 행은 그대로 둬 "(삭제된 소품)" 으로 보인다(validateShow 경고).
   `preShowProps` 는 항목 id 가 없어 `set kind:"show"` 의 배열 통째 교체만 된다.
-- **v5~v9 → v10.** 옛 공연에 op 를 적용하면 사이트가 불러올 때(migrate)처럼 `version:10` 으로 올린다(v8 → v9 는 `version` 만 바뀐다 — PLAY 시작 볼륨.
-  v9 → v10 은 출연 큐 `{ personId, move }` → `{ people: [{ personId, move }] }` 한 줄, 사람이 비어 있어도 줄은 남긴다): 빈 `props`·`preShowProps`·`stage.props` 를 붙이고,
+- **v5~v10 → v11.** 옛 공연에 op 를 적용하면 사이트가 불러올 때(migrate)처럼 `version:11` 로 올린다(v8 → v9 는 `version` 만 바뀐다 — PLAY 시작 볼륨.
+  v9 → v10 은 출연 큐 `{ personId, move }` → `{ people: [{ personId, move }] }` 한 줄, 사람이 비어 있어도 줄은 남긴다.
+  v10 → v11 은 빈 `lights` 와 조명 큐의 빈 `light.looks` 만 붙고 채널 큐는 그대로): 빈 `props`·`preShowProps`·`stage.props` 를 붙이고,
   큐(코멘트 snapshot 안의 큐 포함)의 `note` = 기존 note · `cast.text`/`stage.text` · `memo` 를 `" / "` 로 이어 붙인 것, 객석 채널은 on/off 로 접고
   지운 값은 `note` 에 `"(객석: 원래 FADE IN 40% 3s)"` 로 남긴다(`lib/ops.js` `upgradeShow`). 다른 값은 바꾸지 않는다(v4 이하는 그대로 두고 사이트의 변환에 맡긴다).
 
@@ -209,11 +218,12 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
   - 401(사이트 비밀번호)은 `api()` 가 다시 묻고 같은 요청을 다시 보내고, 403(편집 비밀번호)은 "편집 잠김" 으로 저장을 멈춘다 — 둘 다 충돌로 보지 않는다.
   - 그래도 에이전트 instructions 의 "큰 수정 전에는 사용자에게 알린다" 는 그대로 둔다(같은 문단을 동시에 고치면 여전히 묻는다).
   병합 규칙:
-  - 사람·소품·트랙·파트·씬·문단·큐·코멘트는 종류+id 로 맞춘다. **필드 단위** — 한쪽만 바꿈 → 그쪽, 같게 바꿈 → 그대로, 다르게 바꿈 → 충돌.
+  - 사람·소품·조명(`lights`, v11)·트랙·파트·씬·문단·큐·코멘트는 종류+id 로 맞춘다. **필드 단위** — 한쪽만 바꿈 → 그쪽, 같게 바꿈 → 그대로, 다르게 바꿈 → 충돌.
     큐의 부서 객체(`light`·`sound`·`stage`·`cast`)는 안쪽 필드까지 나눠 보고, 배열(`light.channels`, `stage.props`, show 의
     `preShowProps`)은 통째. **문단 본문(`text`)도 통째** — 글자 단위로 섞지 않는다. 씬 출연자(`cast`)는 id 집합으로 합친다(충돌 없음).
     출연 큐의 사람 줄(`cast.people`, v10)은 사람 id 로 맞춘다 — 양쪽에서 다른 사람을 더하면 둘 다, 한쪽이 뺀 사람은 빠지고, 같은 사람의 액션을
     다르게 바꾸거나 한쪽이 빼고 다른 쪽이 그 사람의 액션을 바꾸면 충돌(서버 것). 순서는 한쪽만 바꿨으면 그쪽.
+    조명 큐의 조명 줄(`light.looks`, v11)도 같은 방식으로 조명 id 로 맞춘다(`light.channels` 는 그대로 통째).
   - **추가**는 양쪽 모두 남는다. **삭제**: 다른 쪽이 그대로면 삭제. 다른 쪽이 그 항목이나 **그 안의 어느 것이라도**(자식 추가·수정·옮겨 넣기)
     고쳤으면 충돌 — 대본 문단·큐는 내용이 있는 것이라 조용히 지우거나 조용히 되살리지 않는다. 충돌은 지워진 것들 중 맨 위 항목 하나로
     센다(씬을 지웠으면 씬 하나). 서버 쪽으로 정하면: 서버가 지운 것은 지운 채(그 아래 이 기기 추가분도 버림), 서버가 고친 것은 그 항목 아래
