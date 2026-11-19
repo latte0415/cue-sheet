@@ -1077,7 +1077,7 @@ body.has-player .app,body.has-preview .app{padding-bottom:calc(var(--player-h, 0
             <div class="menu-h" role="presentation">공연 준비</div>
             <button type="button" role="menuitem" id="menu-sm-prepare" data-act="sm-prepare" data-help="show-day" hidden>오프라인 준비 — 음원·큐시트를 이 기기에</button>
             <button type="button" role="menuitem" id="menu-sm-off" data-act="sm-off" hidden>오프라인 준비 끄기</button>
-            <button type="button" role="menuitem" id="menu-sm-clear" data-act="sm-clear" data-confirm="정말? (이 기기에 받은 음원만 지움 — 서버 파일은 그대로)" hidden>이 기기에서 받은 음원 지우기</button>
+            <button type="button" role="menuitem" id="menu-sm-clear" data-act="sm-clear" data-confirm="이 기기의 음원을 지우시겠습니까? 서버 파일은 남습니다" hidden>이 기기에서 받은 음원 지우기</button>
             <button type="button" role="menuitem" id="menu-player" data-act="pl-open" hidden>음원 플레이어 열기</button>
             <button type="button" role="menuitem" id="menu-print" data-act="print">인쇄 — 대본·큐시트 (Ctrl+P)</button>
             <button type="button" role="menuitem" id="menu-theme" data-act="theme"></button>
@@ -1091,8 +1091,8 @@ body.has-player .app,body.has-preview .app{padding-bottom:calc(var(--player-h, 0
             <button type="button" role="menuitem" id="menu-agent" data-act="agent-open" hidden>에이전트 연결</button>
             <button type="button" role="menuitem" id="menu-trash" data-act="trash-open" hidden>휴지통 — 지운 프로젝트 되살리기</button>
             <button type="button" role="menuitem" id="menu-undo-del" data-act="undo-del">마지막 삭제 되돌리기</button>
-            <button type="button" role="menuitem" class="danger" id="menu-reset" data-act="reset" data-confirm="정말 초기화? (현재 데이터 삭제)">샘플로 초기화</button>
-            <button type="button" role="menuitem" class="danger" id="menu-audio-clear" data-act="audio-clear" data-confirm="정말 음원 파일 전부 삭제?">음원 전체 삭제</button>
+            <button type="button" role="menuitem" class="danger" id="menu-reset" data-act="reset" data-confirm="지금 데이터를 버리고 샘플로 바꾸시겠습니까?">샘플로 초기화</button>
+            <button type="button" role="menuitem" class="danger" id="menu-audio-clear" data-act="audio-clear" data-confirm="음원 파일을 전부 삭제하시겠습니까?">음원 전체 삭제</button>
           </div>
         </div>
       </div>
@@ -2134,7 +2134,7 @@ function renderSyncBar() {
   if (!c && Srv.locked && Store.mode === 'server' && Srv.showId) {
     b.hidden = false;
     b.innerHTML = `<span><b>편집 잠김</b> — 이 기기의 변경이 서버에 저장되지 않았습니다. 이 프로젝트의 편집 비밀번호가 필요합니다 (다른 기기에서 바뀌었을 수 있음)</span>
-      <button type="button" class="btn" id="lock-unlock" data-act="unlock-open">잠금 해제하고 저장</button><button type="button" class="btn" id="lock-discard" data-act="lock-discard" data-confirm="정말 버리기? (이 기기의 저장 안 된 변경이 사라짐)">내 변경 버리고 서버 버전 보기</button>`;
+      <button type="button" class="btn" id="lock-unlock" data-act="unlock-open">잠금 해제하고 저장</button><button type="button" class="btn" id="lock-discard" data-act="lock-discard" data-confirm="저장 안 된 변경을 버리시겠습니까?">내 변경 버리고 서버 버전 보기</button>`;
     return;
   }
   b.hidden = !c;
@@ -2143,7 +2143,7 @@ function renderSyncBar() {
   const cs = c.merge ? c.merge.conflicts : [], n = cs.length, MAX = 5;
   b.innerHTML = `<span><b>다른 기기에서 수정됨</b> — 서버 rev ${esc(c.rev)}${c.updatedAt ? ' (' + esc(fmtTime(c.updatedAt)) + ')' : ''}. ${n ? `자동으로 합치지 못한 곳 ${n}곳 — ` : ''}이 기기의 변경은 아직 저장되지 않았습니다</span>
     ${n ? `<ul class="sync-list">${cs.slice(0, MAX).map(x => `<li>${esc(x.text)}</li>`).join('')}${n > MAX ? `<li>외 ${n - MAX}곳</li>` : ''}</ul>` : ''}
-    <button type="button" class="btn" id="sync-load" data-act="sync-load">서버 버전 사용</button><button type="button" class="btn" id="sync-overwrite" data-act="sync-overwrite" data-confirm="정말 덮어쓰기? (서버 rev ${esc(c.rev)} 의 변경이 사라짐)">내 것으로 덮어쓰기</button>${n ? `<button type="button" class="btn" id="sync-merge" data-act="sync-merge" data-confirm="정말? (충돌 ${n}곳은 이 기기 변경 대신 서버 것)">충돌 항목만 서버 것으로, 나머지는 병합</button>` : ''}`;
+    <button type="button" class="btn" id="sync-load" data-act="sync-load">서버 버전 사용</button><button type="button" class="btn" id="sync-overwrite" data-act="sync-overwrite" data-confirm="서버 rev ${esc(c.rev)} 를 덮어쓰시겠습니까?">내 것으로 덮어쓰기</button>${n ? `<button type="button" class="btn" id="sync-merge" data-act="sync-merge" data-confirm="충돌 ${n}곳은 서버 것으로 가져오시겠습니까?">충돌 항목만 서버 것으로, 나머지는 병합</button>` : ''}`;
 }
 
 // 기본 비밀번호(1234) 안내: 편집을 켤 때 한 줄로 한 번만 — 닫거나 다른 화면으로 옮기거나 보기로 바꾸면 이 탭(세션)에서는 다시 띄우지 않는다.
@@ -2402,7 +2402,7 @@ function renderProj() {
   h += '<ol class="pj-list" id="pj-list">' + Srv.list.map(x => {
     const id = esc(x.id), isCur = x.id === cur;
     return `<li class="pj-i ${isCur ? 'cur' : ''}" data-id="${id}"><button type="button" class="pj-open" data-act="proj-open" data-id="${id}" ${isCur ? 'aria-current="true"' : ''}>${esc(isCur ? state.show.title : x.title) || '(제목 없음)'}</button>
-      <span class="pj-a"><button type="button" class="tb" data-act="proj-dup" data-id="${id}">복제</button><button type="button" class="tb red" data-act="proj-del" data-id="${id}" data-confirm="휴지통으로 이동? (${TRASH.days}일 뒤 영구 삭제)">삭제</button></span>
+      <span class="pj-a"><button type="button" class="tb" data-act="proj-dup" data-id="${id}">복제</button><button type="button" class="tb red" data-act="proj-del" data-id="${id}" data-confirm="휴지통으로 옮기시겠습니까? ${TRASH.days}일 뒤 영구 삭제됩니다">삭제</button></span>
       <span class="note">${esc(projMeta(x))}${isCur ? ' · 지금 보는 중' : ''}</span></li>`;
   }).join('') + '</ol>';
   h += `<div class="pj-new"><label class="sr-only" for="pj-new-title">새 프로젝트 제목</label><input type="text" id="pj-new-title" placeholder="새 프로젝트 제목" maxlength="80"><button type="button" class="btn" id="pj-new-blank" data-act="proj-new" data-kind="blank">새 프로젝트</button><button type="button" class="btn" id="pj-new-sample" data-act="proj-new" data-kind="sample">샘플로</button></div>`;
@@ -4666,7 +4666,7 @@ function viewRun() {
       <button type="button" class="btn" id="run-prev" data-act="run-prev" ${i === 0 ? 'disabled' : ''}>↑ 이전</button>
       <button type="button" class="btn strong" id="run-next" data-act="run-next" ${i === list.length - 1 ? 'disabled' : ''}>다음 ↓</button>
     </div>
-    <div class="run-foot"><button type="button" class="tb" id="run-first" data-act="run-first" data-confirm="처음 → 정말?" ${i === 0 ? 'disabled' : ''}>처음으로</button>${helpA('run-show')}
+    <div class="run-foot"><button type="button" class="tb" id="run-first" data-act="run-first" data-confirm="처음으로 돌아가시겠습니까?" ${i === 0 ? 'disabled' : ''}>처음으로</button>${helpA('run-show')}
       <p class="run-hint"><span class="run-keys"><kbd>↓</kbd> <kbd>→</kbd> <kbd>Space</kbd> 다음 · <kbd>↑</kbd> <kbd>←</kbd> 이전 · <kbd>P</kbd> 음향 큐(누를 때마다 다음) · <kbd>C</kbd> 카운트다운 · <kbd>Esc</kbd> 카운트다운 취소</span></p></div>
   </div>`;
   if (curScene) state.curScene = curScene;
@@ -5417,7 +5417,7 @@ function renderTop() {
     ud.textContent = last ? `마지막 삭제 되돌리기 (${last.label})` : '마지막 삭제 되돌리기';
     // 병합 모듈 없는 로컬 모드에서 삭제 뒤에 바뀐 것이 있으면 통째 되돌리기 — 그때만 한 번 더 묻는다 (undoDelete 'menu')
     const whole = state.menuOpen && last && last.after && Store.mode !== 'server' && !window.CueMerge && !delUnchanged(last, state.show);
-    if (whole) ud.dataset.confirm = '정말? (삭제 이후의 변경도 함께 되돌아감)'; else delete ud.dataset.confirm;
+    if (whole) ud.dataset.confirm = '삭제 뒤의 변경까지 함께 되돌리시겠습니까?'; else delete ud.dataset.confirm;
   }
   $('#app').classList.toggle('hide-cues', state.view === 'script' && state.hideCues && !ml);
   renderRev(); renderFirst();
@@ -6087,7 +6087,7 @@ function agentModalBody(m) {
   else {
     h += `<table class="ltable ag-tbl"><thead><tr><th>이름</th><th>발급</th><th>마지막 사용</th><th><span class="sr-only">폐기</span></th></tr></thead><tbody>${m.tokens.map(x => `<tr>
       <td>${esc(x.name)}</td><td class="n">${esc(fmtTime(x.createdAt))}</td><td class="n">${x.lastUsedAt ? esc(fmtTime(x.lastUsedAt)) : '—'}</td>
-      <td><button type="button" class="tb red" data-act="agent-revoke" data-id="${esc(x.id)}" data-confirm="정말 폐기? (연결 끊김)" aria-label="${esc(x.name)} 토큰 폐기">폐기</button></td></tr>`).join('')}</tbody></table>`;
+      <td><button type="button" class="tb red" data-act="agent-revoke" data-id="${esc(x.id)}" data-confirm="이 토큰을 폐기하시겠습니까? 연결이 끊깁니다" aria-label="${esc(x.name)} 토큰 폐기">폐기</button></td></tr>`).join('')}</tbody></table>`;
   }
   h += '</section>';
   h += `<section class="ag-blk"><div class="ag-h"><h3>사이트 비밀번호로 연결</h3><button type="button" class="tb" id="ag-admin" data-act="agent-admin" aria-expanded="${m.admin ? 'true' : 'false'}">${m.admin ? '접기' : '펼치기'}</button></div>
@@ -6231,7 +6231,7 @@ function renderModal(focusFirst) {
     title = '버전 기록';
     // 서버 목록(store.revisions)의 맨 앞이 현재 버전(current) — MCP 의 list_revisions 와 같은 기록
     const row = x => `<tr class="${x.current ? 'mine' : ''}"><td class="n">${esc(x.rev)}</td><td>${esc(fmtTime(x.updatedAt))}${x.restoredFrom ? ` <span class="muted sm">rev ${esc(x.restoredFrom)} 복원</span>` : ''}</td><td>${esc(x.title) || '(제목 없음)'}</td><td class="n">${esc(x.sceneCount)}</td><td class="n">${esc(x.cueCount)}</td>
-      <td>${x.current ? '<span class="muted sm">지금 버전</span>' : `<button type="button" class="tb" id="hist-restore-${esc(x.rev)}" data-act="history-restore" data-rev="${esc(x.rev)}" data-confirm="정말 rev ${esc(x.rev)} 로 복원?">복원</button>`}</td></tr>`;
+      <td>${x.current ? '<span class="muted sm">지금 버전</span>' : `<button type="button" class="tb" id="hist-restore-${esc(x.rev)}" data-act="history-restore" data-rev="${esc(x.rev)}" data-confirm="rev ${esc(x.rev)} 로 복원하시겠습니까?">복원</button>`}</td></tr>`;
     body = m.loading ? '<p class="note">불러오는 중…</p>' : `<div class="table-wrap"><table class="ltable" id="hist-table"><thead><tr><th class="n">rev</th><th>저장 시각</th><th>제목</th><th class="n">씬</th><th class="n">큐</th><th></th></tr></thead><tbody>
       ${m.list.map(row).join('')}</tbody></table></div>
       ${m.list.length > 1 ? '' : '<p class="note">아직 이전 버전이 없습니다. 저장할 때 직전 버전이 여기에 쌓입니다.</p>'}`;
@@ -6788,7 +6788,7 @@ function armConfirm(el) {
     return true;
   }
   el.dataset.armed = '1'; el.dataset.orig = el.innerHTML;
-  el.textContent = el.dataset.confirm || '정말?';
+  el.textContent = el.dataset.confirm || '실행하시겠습니까?';
   el.classList.add('armed');
   clearTimeout(el._t);
   el._t = setTimeout(() => { if (el.isConnected) { el.dataset.armed = ''; el.innerHTML = el.dataset.orig; el.classList.remove('armed'); } }, 3500);
