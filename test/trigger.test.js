@@ -39,7 +39,7 @@ function legacyShow() {
   ]);
 }
 
-test('v11 → v12 migrate: 묶음(트리거 글 · offsetSec) 하나 = 큐 하나, 대사 끝 · 이전 큐 후 · 신호, id 고정, 코멘트 자리', () => {
+test('v11 → v12 migrate: 묶음(트리거 글 · offsetSec) 하나 = 큐 하나, 대사·지문의 큐는 글과 상관없이 그 끝(결정 1) · 이전 큐 후 · 큐 지점은 신호, id 고정, 코멘트 자리', () => {
   const m = migrate(legacyShow());
   assert.equal(m.version, 12);
   const row = i => [i.id, i.kind, i.label, i.kind === 'cue' ? i.trigger : null, i.kind === 'cue' ? i.offsetSec : undefined, i.cues.map(c => c.id)];
@@ -49,7 +49,7 @@ test('v11 → v12 migrate: 묶음(트리거 글 · offsetSec) 하나 = 큐 하�
     ['i-1-q', 'cue', '2', { type: 'line', itemId: 'i-1', at: 'end' }, null, ['q-1']], // 빈 글 → 그 대사 끝
     ['i-1-q2', 'cue', '3', { type: 'cue', cueId: 'i-0', mode: 'after' }, 3, ['q-2']], // "이전 큐 후" → 앞 문단까지의 마지막 큐
     ['i-1-q3', 'cue', '4', { type: 'line', itemId: 'i-1', at: 'end' }, null, ['q-3']], // "대사 끝" (대사 문단)
-    ['i-1-q4', 'cue', '5', { type: 'signal', text: '암전 후' }, 7, ['q-4']],
+    ['i-1-q4', 'cue', '5', { type: 'line', itemId: 'i-1', at: 'end', migrated: true, was: '암전 후' }, 7, ['q-4']], // 대사에 붙은 큐는 글과 상관없이 그 대사 끝 — 옛 글은 표시·메모로
     ['i-2', 'action', null, null, undefined, []],
     ['i-2-q', 'cue', '6', { type: 'line', itemId: 'i-2', at: 'end' }, null, ['q-5']], // 지문의 "대사 끝" 도 그 지문 끝 (문단 종류와 상관없는 규칙)
     ['i-2-q2', 'cue', '7', { type: 'line', itemId: 'i-2', at: 'end' }, null, ['q-6']], // 지문이라도 빈 글은 그 지문 끝
@@ -59,6 +59,9 @@ test('v11 → v12 migrate: 묶음(트리거 글 · offsetSec) 하나 = 큐 하�
     ['i-4-q', 'cue', '10', { type: 'line', itemId: 'i-4', at: 'end' }, null, ['q-10']], // "이 대사 즈음"
     ['i-5', 'line', null, null, undefined, []]
   ]);
+  // 옮기기 전 글: 남길 만한 글(빈 글 · "대사 끝" 꼴 · "이전 큐 후" 가 아닌 것)만 동작 메모에, 큐 지점의 신호 글은 메모에 넣지 않는다
+  const notes = items(m).flatMap(i => i.cues).filter(c => c.note).map(c => [c.id, c.note]);
+  assert.deepEqual(notes, [['q-4', '옮기기 전 글: 암전 후']]);
   assert.deepEqual(byId(m, 'i-1').comments.map(c => c.id), ['c-1'], '코멘트는 글 문단에');
   assert.deepEqual(byId(m, 'i-3').comments.map(c => c.id), ['c-3'], '큐 지점 코멘트는 첫 큐에');
   assert.deepEqual(byId(m, 'i-3-q2').comments, []);
@@ -76,9 +79,31 @@ test('migrate: "이전 큐 후" 가 맨 앞이면 신호 · 파생 id 가 이미
   ]);
   const m = migrate(s);
   assert.deepEqual(items(m).map(i => [i.id, i.kind === 'cue' ? i.trigger.type : i.kind, i.offsetSec]), [
-    ['i-1', 'line', undefined], ['i-1-q-2', 'signal', 2], ['i-1-q2', 'line', 3], ['i-1-q3', 'line', null], ['i-1-q', 'line', undefined]
+    ['i-1', 'line', undefined], ['i-1-q-2', 'line', 2], ['i-1-q2', 'line', 3], ['i-1-q3', 'line', null], ['i-1-q', 'line', undefined]
   ]);
-  assert.equal(byId(m, 'i-1-q-2').trigger.text, '이전 큐 후');
+  // 대사에 붙은 "이전 큐 후" 인데 앞 큐가 없으면 그 대사 끝 (그 말은 남길 것이 없다 — 표시·메모 없음)
+  assert.deepEqual(byId(m, 'i-1-q-2').trigger, { type: 'line', itemId: 'i-1', at: 'end' });
+  assert.ok(!byId(m, 'i-1-q-2').cues[0].note);
+});
+
+test('실데이터(backstage-part1 v9 → v12): 대사·지문의 큐는 모두 그 끝, 큐 지점만 신호 · 연결 0 · 오류 0 · 옮기기 전 글은 표시와 메모로', () => {
+  const src = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cues', 'backstage-part1.json'), 'utf8'));
+  for (const [name, m] of [['upgradeShow', upgradeShow(plain(src))], ['migrate', migrate(plain(src))]]) {
+    const qs = items(m).filter(i => i.kind === 'cue'), by = t => qs.filter(q => q.trigger.type === t);
+    assert.deepEqual([qs.length, by('line').length, by('cue').length, by('signal').length], [35, 12, 0, 23], name);
+    const ids = new Set(items(m).map(i => i.id));
+    // 큐 지점(옛 kind:'cue')에서 온 큐만 신호 — 글 문단 바로 뒤에 만든 "<id>-q…" 큐는 모두 그 문단 끝
+    const pts = new Set(items(src).filter(i => i.kind === 'cue').map(i => i.id));
+    assert.ok(by('signal').every(q => pts.has(q.id.replace(/-q\d*$/, ''))), name);
+    assert.ok(by('line').every(q => !pts.has(q.id.replace(/-q\d*$/, ''))), name);
+    assert.ok(by('line').every(q => ids.has(q.trigger.itemId) && q.trigger.at === 'end'), name);
+    const mig = by('line').filter(q => q.trigger.migrated);
+    assert.equal(mig.length, 11, name);
+    assert.ok(mig.every(q => q.trigger.was && q.cues.every(c => String(c.note).split(' / ').includes('옮기기 전 글: ' + q.trigger.was))), name + ' — 메모에도');
+    const v = validateShow(m);
+    assert.deepEqual(v.errors, [], name);
+    assert.deepEqual(v.warnings, [], name);
+  }
 });
 
 test('index.html migrate 와 lib/ops.js upgradeShow 는 같은 큐 문단을 만든다 (작은 공연 · 문서 예시 v11 · 실데이터 v5 · v9)', () => {
@@ -88,6 +113,7 @@ test('index.html migrate 와 lib/ops.js upgradeShow 는 같은 큐 문단을 만
     const a = migrate(s), b = upgradeShow(plain(s));
     assert.equal(b.version, 12, name);
     assert.deepEqual(shape(b), shape(a), name);
+    assert.deepEqual(items(b).flatMap(i => i.cues.map(c => c.note)), items(a).flatMap(i => i.cues.map(c => c.note)), name + ' — 동작 메모(옮기기 전 글)도 같다');
   }
 });
 

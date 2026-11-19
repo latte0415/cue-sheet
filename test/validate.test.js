@@ -322,8 +322,9 @@ test('v8 migrate: memo · text → note, 소품 없는 무대 큐는 남김, 객
   const stage = cues.filter(c => c.dept === 'stage');
   assert.equal(stage.length, 3);
   assert.ok(stage.every(c => c.stage.props.length === 0 && c.note.length > 5), '소품 없는 무대 큐는 그대로, 원래 문장은 note');
-  assert.equal(cues.find(c => c.dept === 'cast' && c.note).note, '마이크 들고 들어와 라태형에게 건넴');
-  assert.equal(cues.find(c => c.dept === 'light' && c.note === '조명 상세 미정').status, 'tbd');
+  const bare = n => String(n).split(' / ').filter(x => !x.startsWith('옮기기 전 글: ')).join(' / '); // v12: 대사·지문에서 옮긴 큐의 옛 시점 글은 메모 끝에
+  assert.equal(bare(cues.find(c => c.dept === 'cast' && bare(c.note)).note), '마이크 들고 들어와 라태형에게 건넴');
+  assert.equal(cues.find(c => c.dept === 'light' && bare(c.note) === '조명 상세 미정').status, 'tbd');
   // 둘 다 있으면 text / memo
   const both = FE.migrate({ version: 7, parts: [{ scenes: [{ items: [{ cues: [
     { id: 'q1', dept: 'cast', memo: '확인 필요', cast: { personId: null, move: 'in', text: '마이크 들고' } },

@@ -279,7 +279,7 @@ test('move: 순서 바꾸기, 다른 부모로, 큐를 다른 문단으로', () 
   // 동작을 다른 큐로 → 비은 큐는 사라지고 번호는 1부터 연속 (소수 없음). 대사(글 문단)로는 옮길 수 없다(v12)
   const up = require('../lib/ops').upgradeShow(JSON.parse(JSON.stringify(s)));
   const qs = items(up).filter(i => i.kind === 'cue');
-  const src = qs.find(i => i.cues.length === 1), dst = qs.find(i => i !== src && i.trigger.type === 'signal');
+  const src = qs.find(i => i.cues.length === 1), dst = qs.find(i => i !== src); // v12: 대사·지문에서 옮긴 큐는 모두 대사 끝이라 신호가 없을 수 있다
   r = applyOps(s, [{ op: 'move', id: src.cues[0].id, parent: dst.id }]);
   assert.equal(find(r.show, dst.id).cues.length, dst.cues.length + 1);
   assert.equal(find(r.show, src.id), null);
@@ -426,7 +426,8 @@ test('v8: v5 공연은 migrate 처럼 v8 로 — 빈 props·preShowProps, 무대
   assert.deepEqual(r.show.preShowProps, []);
   assert.deepEqual(Object.keys(r.show).slice(Object.keys(r.show).indexOf('people')), ['people', 'props', 'preShowProps', 'lights', 'tracks', 'parts'], 'migrate 와 같은 키 순서');
   const st = items(r.show).flatMap(i => i.cues).filter(c => c.dept === 'stage');
-  assert.deepEqual(st.map(c => c.note), stageBefore);
+  const bare = n => String(n).split(' / ').filter(x => !x.startsWith('옮기기 전 글: ')).join(' / '); // v12: 대사·지문에서 옮긴 큐의 옛 시점 글은 메모 끝에
+  assert.deepEqual(st.map(c => bare(c.note)), stageBefore);
   assert.ok(st.length && st.every(c => Array.isArray(c.stage.props) && !c.stage.props.length && !('text' in c.stage)));
   assert.ok(items(r.show).flatMap(i => i.cues).every(c => !('memo' in c) && typeof c.note === 'string' && Object.keys(c).indexOf('note') === 2), 'memo 없음, note 는 migrate 와 같은 자리 (v12: 부서 큐에 trigger · offsetSec 없음)');
   assert.deepEqual(r.warnings, []);
@@ -573,7 +574,7 @@ test('큐(v12): add 는 트리거·동작과 함께, 동작이 0개가 되면 �
   assert.equal(find(r.show, 'i-1-q').kind, 'action'); assert.equal('trigger' in find(r.show, 'i-1-q'), false);
   // 개요: 큐 줄에 트리거 (사이트와 같은 글)
   const { outline } = require('../lib/view');
-  assert.match(outline(up, {}), /i-1-q Q1 cue ← signal: 하우스 페이드 아웃 후/);
+  assert.match(outline(up, {}), /i-1-q Q1 cue ← line: 지문 “\(공연 시작\)” 끝에 \(i-1\) \[migrated, was "하우스 페이드 아웃 후"\]/); // v12: 지문에 붙어 있던 큐는 그 끝, 옛 글은 표시로
   assert.match(outline(up, {}), /i-2-q Q3 cue ← line: 조예준 “소개합니다 박대훈” 끝에 \(i-2\)/);
 });
 
@@ -607,7 +608,7 @@ test('v8: v7 공연은 migrate 와 같게 올린다 — memo · text → note, �
   assert.equal(r.show.version, 12);
   const q1 = find(r.show, 'q-1'), q3 = find(r.show, 'q-3'), q4 = find(r.show, 'q-4');
   assert.deepEqual(q1.light.channels[3], { ch: 'house', action: 'off', dim: null, color: null, colorName: null, timeSec: null });
-  assert.equal(q1.note, '(객석: 원래 FADE OUT 4s)');
+  assert.equal(q1.note, '(객석: 원래 FADE OUT 4s) / 옮기기 전 글: 하우스 페이드 아웃 후'); // v12: 지문에 붙어 있던 큐 — 옛 시점 글은 메모 끝에
   assert.equal(q3.note, '천천히');
   assert.deepEqual(q3.cast, { people: [{ personId: 'p-daehoon', move: 'in' }] });
   assert.equal(q4.note, '탑햇테이블에 탑햇 세팅 / 시점 리허설 때 확정');

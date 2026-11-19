@@ -137,9 +137,10 @@ test('실제 공연 데이터(backstage-part1): 씬 경계 IN 3건이 빠지고 
   const all = FE.checkFilter(r, 'all');
   // 2026-11-18 배포본(rev 84) 기준: 미정은 조명 2(암전 7초 뒤 조명 On ×2) + 음향 1(하우스 음악 VOLUME "확인 필요").
   // 객석 조명 4개는 현장에서 확정(set)으로 바뀌어 빠졌다
-  assert.deepEqual(keys(all), { tbd: 3, files: 7, tsug: 14, empty: 4, cmt: 1 }); // v12: 옮긴 신호 중 앞 큐·대사를 가리키는 14개는 연결 제안(참고)
+  assert.deepEqual(keys(all), { tbd: 3, files: 7, tmig: 11, tsug: 12, empty: 4, cmt: 1 }); // v12: 대사·지문에서 옮겨 대사 끝으로 정한 큐 11개(옛 글이 있는 것) · 큐 지점 신호 중 앞 큐·대사를 가리키는 12개는 연결 제안(참고)
   assert.equal(all.total, 4);
-  assert.equal(all.info, 19);
+  assert.equal(all.info, 28);
+  assert.ok(r.groups.find(g => g.k === 'tmig').list.every(x => x.fixes.map(f => f.act).join() === 'ck-trig,ck-keep' && / — 옮기기 전 “[^”]+” → /.test(x.text)), '옮김: 옛 글 · 트리거 고르기 · 이대로 둠');
   // 소품 8개를 등록하고 무대 큐 3개에 소품을 지정했다 — 소품 검사가 켜지고, 소품 미지정 무대 큐는 없다
   assert.equal(r.propsSkip, false);
   assert.deepEqual(plain(r.groups.find(g => g.k === 'noprops').list), []);

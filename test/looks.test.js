@@ -181,9 +181,10 @@ test('MCP ops: 조명 큐 light.looks 통째 — 이름 대신 id, 같은 조명
     { op: 'add', kind: 'cue', parent: 'i-2', data: { dept: 'light', trigger: '박수', light: { looks: [{ lookId: 'lk-pin', action: 'off' }, { lookId: 'lk-a' }] } } },
     { op: 'set', id: 'q-4', fields: { light: { looks: [off('lk-b'), on('lk-a')] } } }
   ]);
-  // v12: 대사(i-2)에 붙이는 옛 방식은 그 대사 바로 뒤의 큐(트리거 = 신호 "박수")로
+  // v12: 대사(i-2)에 붙이는 옛 방식은 그 대사 바로 뒤의 큐로 — 트리거는 글과 상관없이 그 대사 끝(옛 글 "박수" 는 표시·메모로)
   const nc = cues(r.show).find(c => c.dept === 'light' && c.light.looks.length === 2 && c.light.looks[0].lookId === 'lk-pin');
-  assert.equal(items(r.show).find(i => i.cues.includes(nc)).trigger.text, '박수');
+  assert.deepEqual(items(r.show).find(i => i.cues.includes(nc)).trigger, { type: 'line', itemId: 'i-2', at: 'end', migrated: true, was: '박수' });
+  assert.equal(nc.note, '옮기기 전 글: 박수');
   assert.deepEqual(nc.light, { looks: [off('lk-pin'), on('lk-a')], channels: [], anim: '' }, 'action 기본은 on, 채널은 빈 배열');
   assert.deepEqual(findCue(r.show, 'q-4').light, { looks: [off('lk-b'), on('lk-a')], channels: [ch('house', 'on')], anim: '' }, 'looks 만 바꾸면 채널은 그대로');
   const bad = (light, re) => assert.throws(() => applyOps(s, [{ op: 'set', id: 'q-1', fields: { light } }]), e => e.code === 'bad_field' && re.test(e.message), JSON.stringify(light));
