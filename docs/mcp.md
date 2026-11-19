@@ -87,7 +87,7 @@ Codex 를 다시 시작한 뒤 `/mcp` 로 `cue-sheet` 와 도구 6개가 보이�
 |---|---|---|
 | `list_shows` | 공연 목록 `{ id, title, rev, updatedAt, sceneCount, cueCount }` | 읽기 |
 | `get_show { showId, view?, partId?, sceneId? }` | `outline`(기본): 한 줄에 하나씩 id·큐 번호·화자 이름·잘린 본문·큐 한 줄 요약 — 사이트와 같은 머리글(`lib/cuehead.js`, 예: `q-3 cast 박대훈 IN @ "멘트 후"`, `q-4 stage 탑햇 IN \| → 테이블 위 — 시점 리허설 때 확정 [tbd]`) + 사람·소품·트랙 목록. `full`: 고른 파트/씬(또는 전체)의 JSON 그대로 | 읽기 |
-| `search_show { showId, query }` | 대본·화자·큐(trigger·note(상세)·무대 큐 소품 이름·트랙 제목, v7 이하 원본은 memo·무대/출연 글도)·코멘트·씬 제목/세팅·사람·소품·공연 전 무대 소품·트랙에서 대소문자 무시 부분 일치. `Q12`/`12` 는 큐 번호. 최대 50개, id·위치·발췌 | 읽기 |
+| `search_show { showId, query }` | 대본·화자·큐(신호 트리거 글·note(상세)·무대 큐 소품 이름·트랙 제목, v7 이하 원본은 memo·무대/출연 글도)·코멘트·씬 제목/세팅·사람·소품·공연 전 무대 소품·트랙에서 대소문자 무시 부분 일치. `Q12`/`12` 는 큐 번호. 최대 50개, id·위치·발췌 | 읽기 |
 | `edit_show { showId, ops, dryRun?, expectRev?, editKey? }` | ops 를 원자적으로 적용 → 새 rev, 바뀐 내용 요약(새로 매긴 큐 번호 포함), 경고, 저장한 사람 `by`. `dryRun` 은 저장하지 않으므로 편집 비밀번호 없이도 된다 | 쓰기 (편집 비밀번호) |
 | `list_revisions { showId }` | 저장 기록, 최신 먼저(맨 앞이 현재). 버전마다 누가(`by`)·어떤 경로로(`via`) 저장했는지, 복원이면 `restoredFrom` | 읽기 |
 | `restore_revision { showId, rev, editKey? }` | 그 버전을 새 버전으로 저장(복원도 되돌릴 수 있음), 결과에 `by`. 이미 같은 내용이면 아무것도 안 함 | 쓰기 (편집 비밀번호) |
@@ -115,9 +115,9 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
 | op | 형식 | 규칙 |
 |---|---|---|
 | set | `{ op:"set", id, kind?, fields }` | 준 필드만 바꾼다. `kind:"show"` 면 id 없이 `title`·`preShowSetup`·`revision`·`preShowProps`(배열 통째). 모르는 필드, `id`, `label`, `isCue`, 자식 배열(`items` 등), 트랙의 `fileName`/`fileKey` 는 거부 |
-| add | `{ op:"add", kind, parent?, after?, data }` | `kind`: part·scene·item·cue·comment·person·prop·track. `parent`: scene→파트 id, item→씬 id, cue→문단 id, comment→씬 또는 문단 id (part·person·prop·track 은 없음). `after`: 형제 id / `"first"` / 생략·`null` = 맨 뒤. after 가 형제 id 면 parent 생략 가능 |
-| remove | `{ op:"remove", id, kind?, force? }` | 안에 든 것까지 지운다. 화자·출연자·출연 큐가 가리키는 사람, 무대 큐·공연 전 무대가 가리키는 소품, 음향 큐가 쓰는 트랙은 사용처 목록과 함께 거부. `force:true` 면 지운다 |
-| move | `{ op:"move", id, kind?, parent?, after? }` | 같은 단계 안에서 순서 바꾸기 또는 다른 부모로(큐를 다른 문단으로, 씬을 다른 파트로). parent 를 안 주면 지금 부모 안에서(after 가 다른 부모의 형제면 그쪽으로) |
+| add | `{ op:"add", kind, parent?, after?, data }` | `kind`: part·scene·item·cue·comment·person·prop·track. `parent`: scene→파트 id, item→씬 id, cue(큐의 동작)→큐 문단(`kind:"cue"`) id, comment→씬 또는 문단 id (part·person·prop·track 은 없음). `after`: 형제 id / `"first"` / 생략·`null` = 맨 뒤. after 가 형제 id 면 parent 생략 가능 |
+| remove | `{ op:"remove", id, kind?, force?, mode? }` | 안에 든 것까지 지운다. 대사·큐를 지울 때 그것을 트리거로 쓰던 큐는 아래 "트리거" 의 `mode`. 화자·출연자·출연 큐가 가리키는 사람, 무대 큐·공연 전 무대가 가리키는 소품, 음향 큐가 쓰는 트랙은 사용처 목록과 함께 거부. `force:true` 면 지운다 |
+| move | `{ op:"move", id, kind?, parent?, after? }` | 같은 단계 안에서 순서 바꾸기 또는 다른 부모로(동작을 다른 큐로, 씬을 다른 파트로 — 동작을 대사·지문으로 옮기는 것은 거부). parent 를 안 주면 지금 부모 안에서(after 가 다른 부모의 형제면 그쪽으로) |
 
 - `kind` 는 서로 다른 종류에 같은 id 가 있을 때만 필요하다(그때는 오류가 알려 준다).
 - **필드 형식.** 문자열 필드에 숫자를 주면 문자열로, 숫자 필드에 `"240"` 같은 숫자 문자열을 주면 숫자로 바꾼다. 그 밖은 거부.
@@ -146,9 +146,17 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
 - **얕은 합치기.** 큐의 `light`·`sound`·`stage`·`cast` 객체는 한 단계만 합친다: `{ sound: { level: 80 } }` 은 track·action·timeSec 을
   그대로 두고 level 만 바꾼다. 배열(`light.looks`, `light.channels`, `stage.props`, `cast.people`, `scene.cast`, show 의 `preShowProps`)은 통째로 바뀐다. 채널의 빠진 필드는 기본값
   (`ch:"front", action:"on"`, 나머지 null), 소품 행은 `action:"in"`, `at:""`. `dept` 를 바꾸면 이전 부서 내용은 버리고 새 부서 기본값에서 시작한다.
-- **큐만 있는 문단 (`kind:"cue"`, 예전 이름 "큐 지점").** 본문·화자 없이 큐만 있는 문단(대본 흐름 안의 실행 지점). `add` 는 `data.cues` 가 하나 이상이어야 하고 본문을 주면 거부.
-  `set` 으로 `fields.kind:"cue"` 를 주면 본문을 비우고 화자를 지운다 — op 에 `"textToNote":true` 를 함께 주면 옛 본문(괄호를 벗겨)을 첫 큐의 `note` 뒤에 붙인다.
-  op 를 다 적용한 뒤 큐가 0개인 지점은 지운다(코멘트가 있으면 빈 지문으로 남긴다) — 결과 `changes` 에 적힌다. 실데이터의 중복 지문은 `action-echo` 경고로만 알린다(자동 변환 없음).
+- **큐와 트리거 (show v12).** 대본 흐름(`items[]`)에는 대사(`line`·`action`)와 큐(`kind:"cue"`)만 있다. 큐는 본문·화자 없이
+  `trigger`(하나) · `offsetSec` · 부서 동작 `cues[]`(하나 이상)를 갖는다. 대사·지문에는 큐가 붙지 않는다(`cues: []`).
+  `trigger` = `{ type:"line", itemId, at:"end"|"start" }`(대사 끝 기본) | `{ type:"cue", cueId, mode:"after"|"with" }`("연속 큐") | `{ type:"signal", text }`.
+  새 큐: `{ op:"add", kind:"item", after:"<대사 id>", data:{ kind:"cue", trigger:{type:"line", itemId:"<대사 id>"}, offsetSec, cues:[{ dept, … }] } }`.
+  트리거를 바꾸려면 큐 문단에 `set { trigger, offsetSec }`. 대사·지문에 `trigger`·`offsetSec` 을 주거나 대사 ↔ 큐로 `kind` 를 바꾸면 거부.
+  op 를 다 적용한 뒤 끊긴 연결(없는 대사·큐를 가리킴)이나 고리(서로 기다림)를 **새로** 만들었으면 전부 취소(`invalid`). 동작이 0개가 된 큐는 지운다(코멘트가 있으면 빈 지문).
+  **옛 방식도 받는다(경고와 함께, 사이트의 옛 파일 변환 `migrate` 와 같은 규칙):** 트리거에 글(`"암전 후"`) — `"이전 큐 후"` 는 바로 앞 큐 후, `"대사 끝"`·`"이 대사 즈음"`·`"멘트 후"` 같은 글이나 빈 글은
+  바로 앞 대사 끝, 그 밖은 같은 글의 신호. 대사·지문에 `kind:"cue"` 동작을 `add` 하거나 `data.cues` 를 주면 그 문단 바로 뒤의 큐(같은 트리거 · 지연이면 그 큐에 합침)로 넣는다.
+  동작의 `trigger`·`offsetSec`(v11 필드)은 그 동작이 든 큐의 트리거로 옮긴다(그 큐의 다른 동작에도 적용).
+  **지우기 `mode`:** 대사·지문 — `"keep-cues"`(기본: 그 대사가 트리거인 큐를 남기고 트리거를 그 대사를 인용한 신호 `조예준 “…” 후` 로, `converted:"line"`) | `"with-cues"`(그 큐와 따라가는 큐까지 지움).
+  큐 — `"only"`(기본: 바로 따라가던 큐를 신호 `"<머리글> 후"`(함께였으면 `"… 때"`)로, `converted:"cue"`) | `"with-followers"`(따라가는 큐까지 지움). 씬·파트를 지우거나 마지막 동작을 지워 큐가 사라질 때도 기본처럼 신호로 바꾼다. 사이트 점검이 신호로 바뀐 큐를 확인으로 알린다.
 - **브라우저와 같은 정리.** action 문단은 화자를 지우고, 본문 첫 줄이 지문 머리(`(` `*` `—` 등, index.html `isActHead`)로
   시작하지 않으면 괄호를 씌운다(경고). `data.kind` 없이 본문 첫 줄이 `(` 로 시작하면 action.
 - **표기 규칙** (`docs/cue-format.md` "표기 규칙"). 지문은 `(…)` 괄호 한 쌍 — `*`·`—` 시작, `)` 로 안 끝남, 괄호 안 괄호는
@@ -159,7 +167,7 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
 - **새 항목.** id 는 브라우저 `uid()` 와 같은 접두어(`pt-` `s-` `i-` `q-` `c-` `p-` `pr-` `lk-` `tr-`)로 만든다. 같은 호출의 뒤 op 에서
   가리키려면 `data.id` 를 직접 줘도 된다(`[A-Za-z0-9_-]{1,64}`, 쓰지 않은 값). 기본값은 브라우저가 새로 만들 때와 같다
   (씬 `type:"act"`, 사람 `role:"other"`, 무대 큐 `stage:{props:[]}`, 출연 큐 `cast:{people:[]}`, 조명 큐 `light:{looks:[],channels:[],anim:""}`, 큐 `note:""`, 코멘트 작성자 `"익명"`, 트랙 `no` = 지금 최댓값 + 1). `data` 에 자식을 함께 넣을 수 있다:
-  part.`scenes`, scene.`items`/`comments`, item.`cues`/`comments`.
+  part.`scenes`, scene.`items`/`comments`, item.`cues`(큐 문단의 동작)/`comments`.
 - **트랙.** 항상 `no` 순으로 정렬된다(add 에 `after`, move 는 거부). `no` 를 바꾸면 그 번호를 쓰던 음향 큐의 `sound.track` 도
   함께 바뀐다. 겹치는 번호는 거부. 올린 음원이 있던 트랙을 지우면 파일은 서버에 남는다(경고).
 - **사람 force 삭제.** 브라우저의 사람 삭제와 같이 씬 출연자 목록과 여러 사람 출연 큐(v10)의 그 사람 줄에서는 빼고, 대사 화자·한 사람 출연 큐는 그대로 둬 사이트에
@@ -167,7 +175,7 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
 - **소품 (show v6~).** `props[]` 는 사람처럼 `kind:"prop"` 의 add/set(name·note)/remove/move 로 고친다. force 삭제는 브라우저 소품
   삭제와 같이 `preShowProps` 에서는 빼고, 무대 큐의 소품 행은 그대로 둬 "(삭제된 소품)" 으로 보인다(validateShow 경고).
   `preShowProps` 는 항목 id 가 없어 `set kind:"show"` 의 배열 통째 교체만 된다.
-- **v5~v10 → v11.** 옛 공연에 op 를 적용하면 사이트가 불러올 때(migrate)처럼 `version:11` 로 올린다(v8 → v9 는 `version` 만 바뀐다 — PLAY 시작 볼륨.
+- **v5~v11 → v12.** 옛 공연에 op 를 적용하면 사이트가 불러올 때(migrate)처럼 `version:12` 로 올린다. v11 → v12 는 문단에 붙은 큐를 그 문단 바로 뒤의 큐 문단으로 옮긴다(`docs/cue-format.md` "v11 → v12 변환" — `lib/ops.js` `upgradeTriggers`, 큐 번호도 다시 매긴다)(v8 → v9 는 `version` 만 바뀐다 — PLAY 시작 볼륨.
   v9 → v10 은 출연 큐 `{ personId, move }` → `{ people: [{ personId, move }] }` 한 줄, 사람이 비어 있어도 줄은 남긴다.
   v10 → v11 은 빈 `lights` 와 조명 큐의 빈 `light.looks` 만 붙고 채널 큐는 그대로): 빈 `props`·`preShowProps`·`stage.props` 를 붙이고,
   큐(코멘트 snapshot 안의 큐 포함)의 `note` = 기존 note · `cast.text`/`stage.text` · `memo` 를 `" / "` 로 이어 붙인 것, 객석 채널은 on/off 로 접고
@@ -224,6 +232,8 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
     출연 큐의 사람 줄(`cast.people`, v10)은 사람 id 로 맞춘다 — 양쪽에서 다른 사람을 더하면 둘 다, 한쪽이 뺀 사람은 빠지고, 같은 사람의 액션을
     다르게 바꾸거나 한쪽이 빼고 다른 쪽이 그 사람의 액션을 바꾸면 충돌(서버 것). 순서는 한쪽만 바꿨으면 그쪽.
     조명 큐의 조명 줄(`light.looks`, v11)도 같은 방식으로 조명 id 로 맞춘다(`light.channels` 는 그대로 통째).
+    큐 문단의 **트리거(`trigger`, v12)는 통째 값** — 한쪽만 바꾸면 그쪽 값 전체, 양쪽이 다르게 바꾸면 충돌(서버 것). 대사 쪽 트리거와 큐 쪽 트리거의 안쪽 필드를 섞지 않는다.
+    새 큐 문단은 다른 문단처럼 id 로, 그 동작(`cues[]`)은 부서 큐처럼 동작 id 로 맞춘다.
   - **추가**는 양쪽 모두 남는다. **삭제**: 다른 쪽이 그대로면 삭제. 다른 쪽이 그 항목이나 **그 안의 어느 것이라도**(자식 추가·수정·옮겨 넣기)
     고쳤으면 충돌 — 대본 문단·큐는 내용이 있는 것이라 조용히 지우거나 조용히 되살리지 않는다. 충돌은 지워진 것들 중 맨 위 항목 하나로
     센다(씬을 지웠으면 씬 하나). 서버 쪽으로 정하면: 서버가 지운 것은 지운 채(그 아래 이 기기 추가분도 버림), 서버가 고친 것은 그 항목 아래
