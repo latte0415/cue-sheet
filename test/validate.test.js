@@ -15,7 +15,9 @@ function frontend() {
 }
 const FE = frontend();
 const plain = o => JSON.parse(JSON.stringify(o));
-const docExample = () => {
+// 이 파일의 대부분은 v11 문서 예시(문단에 붙은 큐)의 고정 사본으로 본다 — 지금 문서 예시(v12)는 docExample12
+const docExample = () => JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'doc-example-v11.json'), 'utf8'));
+const docExample12 = () => {
   const md = fs.readFileSync(path.join(__dirname, '..', 'docs', 'cue-format.md'), 'utf8');
   const m = /```json\n([\s\S]*?)```/.exec(md);
   assert.ok(m, 'docs/cue-format.md 에 json 예시 블록이 없습니다');
@@ -35,7 +37,7 @@ test('상수가 index.html 과 같다', () => {
   // 프런트가 내보내는 version = 서버 스키마 SHOW_VER (MCP ops 도 이 값으로 저장)
   assert.equal(plain(FE.migrate({ version: 6, parts: [] })).version, SHOW_VER);
   assert.ok(CONST.SHOW_VERS.includes(SHOW_VER) && SHOW_VER === Math.max(...CONST.SHOW_VERS), 'SHOW_VER 는 읽을 수 있는 형식 중 가장 새 것');
-  assert.equal(plain(FE.migrate({ version: 7, parts: [] })).version, 11);
+  assert.equal(plain(FE.migrate({ version: 7, parts: [] })).version, 12);
   assert.equal(FE.ACT_RE.source, CONST.ACT_RE.source);
 });
 
@@ -50,7 +52,7 @@ test('프런트 샘플(migrate 결과)은 오류·경고 없이 통과하고 서
 });
 
 test('문서 예시는 오류·경고 없이 통과하고, 사이트가 불러와도 내용이 그대로다', () => {
-  const ex = docExample();
+  const ex = docExample12();
   const v = validateShow(ex);
   assert.deepEqual(v.errors, []);
   assert.deepEqual(v.warnings, []);
@@ -62,7 +64,7 @@ test('문서 예시는 오류·경고 없이 통과하고, 사이트가 불러�
     return s;
   };
   assert.deepEqual(strip(m), strip(ex));
-  assert.deepEqual(m.parts[0].scenes[0].items.map(i => i.label), ['1', '2']);
+  assert.deepEqual(m.parts[0].scenes[0].items.map(i => i.label), ['1', '2', null, '3', '4'], '큐에만 번호');
 });
 
 test('오류: 의미가 바뀌는 값은 경로와 함께', () => {
@@ -139,7 +141,7 @@ test('음향 level: play 시작 볼륨은 경고 없음, stop·fadeOut 의 level
   assert.deepEqual(validateShow(s).warnings, [], 'v8 도 경고 없이 읽힌다');
   const m = plain(FE.migrate(s));
   assert.equal(m.version, SHOW_VER);
-  assert.equal(m.parts[0].scenes[0].items[0].cues[1].sound.level, 50);
+  assert.equal(m.parts[0].scenes[0].items.flatMap(i => i.cues).find(c => c.id === 'q-2').sound.level, 50);
 });
 
 test('경고: 지문 표기 규칙 — 괄호 한 쌍 (…)', () => {
@@ -208,7 +210,7 @@ test('action-echo: 큐의 대상·액션·트리거만 다시 적은 지문은 "
   const v = validateShow(e);
   assert.deepEqual(v.errors, []);
   assert.deepEqual(v.warnings.map(w => [w.path, w.code]), [['parts[0].scenes[0].items[0].text', 'action-echo']]);
-  assert.match(v.warnings[0].msg, /큐를 다시 적은 지문 — .*큐만 있는 문단으로 바꾸세요 \(kind:"cue"/); // 화면 용어: 큐 지점 → 큐만 있는 문단
+  assert.match(v.warnings[0].msg, /큐를 다시 적은 지문 — .*지문을 지우고 큐로 두세요 \(kind:"cue"/);
 });
 
 // 정리 전 실데이터(v5 고정 사본)에서 걸리던 15개 — 규칙 회귀 확인용. 현재 cues/ 데이터는 아래 테스트처럼 0개
@@ -312,7 +314,7 @@ test('v8: 객석(house)에 on/off 외 액션이나 밝기·색·시간이 있으
 test('v8 migrate: memo · text → note, 소품 없는 무대 큐는 남김, 객석은 on/off 로 접고 흔적, 왕복해도 같다', () => {
   const real = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'backstage-part1-v5.json'), 'utf8'));
   const m = plain(FE.migrate(unwrapShow(real)));
-  assert.equal(m.version, 11);
+  assert.equal(m.version, 12);
   const cues = m.parts.flatMap(p => p.scenes.flatMap(s => s.items.flatMap(i => i.cues)));
   const raw = unwrapShow(real).parts.flatMap(p => p.scenes.flatMap(s => s.items.flatMap(i => i.cues)));
   assert.equal(cues.length, raw.length, '큐를 하나도 잃지 않는다');
@@ -330,7 +332,7 @@ test('v8 migrate: memo · text → note, 소품 없는 무대 큐는 남김, 객
     { id: 'q4', dept: 'light', memo: '메모', light: { channels: [{ ch: 'house', action: 'fadeOut' }, { ch: 'top', action: 'anim' }], anim: '체이스' } },
     { id: 'q5', dept: 'stage', stage: { props: [{ propId: 'pr-card', action: 'clean', at: '' }] } }
   ] }] }] }] });
-  const q = plain(both).parts[0].scenes[0].items[0].cues;
+  const q = plain(both).parts[0].scenes[0].items.flatMap(i => i.cues); // v12: 대사(빈 문단)에 붙은 큐 → 바로 뒤 큐 문단으로
   assert.equal(q[0].note, '마이크 들고 / 확인 필요');
   assert.deepEqual(q[0].cast, { people: [{ personId: null, move: 'in' }] });
   assert.equal(q[1].note, '같은 말', '같은 문장은 한 번만');
@@ -349,7 +351,7 @@ test('v8 migrate: memo · text → note, 소품 없는 무대 큐는 남김, 객
   assert.deepEqual(v.errors, []);
   assert.deepEqual(v.warnings.filter(w => w.code !== 'action-echo').map(w => w.code), ['stage-no-props', 'stage-no-props', 'stage-no-props']);
   const b2 = plain(FE.migrate(plain(both)));
-  assert.deepEqual(b2.parts[0].scenes[0].items[0].cues, q, 'note 흔적이 두 번 붙지 않는다');
+  assert.deepEqual(b2.parts[0].scenes[0].items.flatMap(i => i.cues), q, 'note 흔적이 두 번 붙지 않는다');
 });
 
 test('fillIds: 빠진 id 만 위치 기반으로, 기존 id 와 겹치지 않게', () => {
@@ -394,9 +396,9 @@ test('큐 지점(kind:"cue"): 본문·화자 없이 큐만 — 정상은 경고 
   assert.deepEqual(v.errors.map(x => x.path), ['parts[0].scenes[0].items[0].cues']);
   // 사이트는 큐 없는 지점을 빈 지문으로 (코멘트·id 보존)
   assert.equal(plain(FE.migrate(e)).parts[0].scenes[0].items[0].kind, 'action');
-  // 옛 데이터는 자동 변환하지 않는다 — 실데이터 중복 지문은 action 그대로(경고만)
+  // v12: 옛 데이터의 문단에 붙은 큐는 모두 큐 문단으로 옮겨진다 (중복 지문 자체는 그대로 — 경고만)
   const real = plain(FE.migrate(unwrapShow(JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'backstage-part1-v5.json'), 'utf8')))));
-  assert.ok(!real.parts.some(p => p.scenes.some(sc => sc.items.some(i => i.kind === 'cue'))));
+  assert.ok(real.parts.every(p => p.scenes.every(sc => sc.items.every(i => i.kind === 'cue' || !i.cues.length))));
 });
 
 test('빈 문단에 붙은 큐(empty-cued): 본문이 빈 대사·지문에 큐 → 경고(큐 지점으로), 큐 지점·큐 없는 빈 문단은 아님', () => {
@@ -406,7 +408,7 @@ test('빈 문단에 붙은 큐(empty-cued): 본문이 빈 대사·지문에 큐 
   let v = validateShow(s);
   const w = v.warnings.filter(x => x.code === 'empty-cued');
   assert.deepEqual(w.map(x => x.path), ['parts[0].scenes[0].items[1].text']);
-  assert.match(JSON.stringify(w[0]), /큐만 있는 문단으로/);
+  assert.match(JSON.stringify(w[0]), /큐로 바꾸세요/);
   assert.deepEqual(v.errors, []);
   // 큐 지점으로 바꾸면 경고 없음
   its[1].kind = 'cue'; its[1].text = '';

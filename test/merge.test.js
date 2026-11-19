@@ -46,7 +46,9 @@ const ids = sc => sc.items.map(i => i.id);
 // 서버 쪽 편집은 MCP 와 같게 applyOps 로 만들고, 브라우저가 받을 때처럼 migrate 를 거친다
 const remoteOps = (base, ops) => migrate(applyOps(base, ops).show);
 const newItem = (id, text, extra) => Object.assign({ id, kind: 'line', speaker: null, text, label: null, isCue: false, cues: [], comments: [] }, extra);
-const soundCue = (id, track) => ({ id, dept: 'sound', trigger: '', offsetSec: null, note: '', status: 'set', sound: { track, action: 'play', timeSec: null, level: null } });
+const soundCue = (id, track) => ({ id, dept: 'sound', note: '', status: 'set', sound: { track, action: 'play', timeSec: null, level: null } });
+// v12: 큐는 따로 있는 문단 (트리거 + 동작). 옛 fixture 를 migrate 하면 문단에 붙은 큐가 "<문단 id>-q" 큐 문단으로 옮겨진다
+const cueItem = (id, cues, trigger) => ({ id, kind: 'cue', speaker: null, text: '', label: null, isCue: true, trigger: trigger || { type: 'signal', text: '신호' }, offsetSec: null, cues, comments: [] });
 
 test('바뀐 게 없으면 그대로, 한쪽만 바뀌면 그쪽', () => {
   const base = backstage();
@@ -70,18 +72,18 @@ test('입력은 바꾸지 않고, 같은 입력이면 같은 결과', () => {
   assert.deepEqual(a.show, b.show);
 });
 
-test('큐 지점(kind:"cue"): 양쪽이 큐를 하나씩 다른 곳으로 옮겨 비면 병합 결과에서 지점이 사라진다', () => {
-  const base = remoteOps(backstage(), [{ op: 'set', id: 'i-7', fields: { kind: 'cue' } }]);
-  assert.equal(find(base, 'i-7').kind, 'cue');
-  assert.deepEqual(find(base, 'i-7').cues.map(c => c.id), ['q-5', 'q-6']);
-  // 이 기기: q-5 를 i-k 로 (지점에는 q-6 이 남는다)
-  const local = plain(base); const li = find(local, 'i-7'); find(local, 'i-k').cues.push(li.cues.shift()); find(local, 'i-k').isCue = true; relabel(local);
-  // 서버: q-6 을 i-l 로 (지점에는 q-5 가 남는다)
-  const remote = remoteOps(base, [{ op: 'move', id: 'q-6', parent: 'i-l' }]);
+test('큐(kind:"cue"): 양쪽이 동작을 하나씩 다른 큐로 옮겨 비면 병합 결과에서 그 큐가 사라진다', () => {
+  const base = backstage();
+  assert.equal(find(base, 'i-1h-q').kind, 'cue');
+  assert.deepEqual(find(base, 'i-1h-q').cues.map(c => c.id), ['q-1f', 'q-1g']);
+  // 이 기기: q-1f 를 i-7-q 로 (큐에는 q-1g 가 남는다)
+  const local = plain(base); const li = find(local, 'i-1h-q'); find(local, 'i-7-q').cues.push(li.cues.shift()); relabel(local);
+  // 서버: q-1g 를 i-7-q2 로 (큐에는 q-1f 가 남는다)
+  const remote = remoteOps(base, [{ op: 'move', id: 'q-1g', parent: 'i-7-q2' }]);
   const r = merge(base, local, remote);
   assert.deepEqual(r.conflicts, []);
-  assert.equal(find(r.show, 'i-7'), null, '합친 결과 큐가 0개인 지점은 없다');
-  assert.equal(parentOf(r.show, 'q-5'), 'i-k'); assert.equal(parentOf(r.show, 'q-6'), 'i-l');
+  assert.equal(find(r.show, 'i-1h-q'), null, '합친 결과 동작이 0개인 큐는 없다');
+  assert.equal(parentOf(r.show, 'q-1f'), 'i-7-q'); assert.equal(parentOf(r.show, 'q-1g'), 'i-7-q2');
   assert.ok(inOrder(r.show));
   assert.deepEqual(validateShow(r.show).errors, []);
 });
@@ -99,7 +101,8 @@ test('v8: 큐 상세(note)를 양쪽에서 다르게 고치면 충돌 — 설명
 test('서로 다른 항목·필드를 고치면 충돌 없이 합친다', () => {
   const base = backstage();
   const remote = remoteOps(base, [
-    { op: 'set', id: 'q-5', fields: { trigger: '서버 시점', sound: { timeSec: 4 } } },
+    { op: 'set', id: 'i-7-q', fields: { trigger: { type: 'signal', text: '서버 시점' } } },
+    { op: 'set', id: 'q-5', fields: { sound: { timeSec: 4 } } },
     { op: 'set', id: 's-v', fields: { title: '서버 제목' } },
     { op: 'set', id: 'i-l', fields: { speaker: 'p-daehoon' } }
   ]);
@@ -112,7 +115,7 @@ test('서로 다른 항목·필드를 고치면 충돌 없이 합친다', () => 
   assert.deepEqual(r.conflicts, []);
   const m = r.show;
   assert.equal(find(m, 'i-k').text, '로컬 본문');
-  assert.equal(find(m, 'q-5').trigger, '서버 시점');
+  assert.deepEqual(find(m, 'i-7-q').trigger, { type: 'signal', text: '서버 시점' });
   // 서버 쪽 level 100 은 ops 의 정리(volume 이면 level 없을 때 100) — 이 기기는 level 을 안 건드렸으니 서버 것
   assert.deepEqual(find(m, 'q-5').sound, { track: 2, action: 'volume', timeSec: 4, level: 100 }, '부서 객체는 안쪽 필드까지');
   assert.equal(find(m, 's-v').title, '서버 제목'); assert.equal(find(m, 's-v').setup, '로컬 세팅');
@@ -146,7 +149,7 @@ test('추가: 양쪽 다 남고, 이 기기에서 넣은 것은 이 기기 이�
   sv.items.push(newItem('i-L3', '로컬 끝'));
   const r = merge(base, local, remote);
   assert.deepEqual(r.conflicts, []);
-  assert.deepEqual(ids(find(r.show, 's-v')), ['i-k', 'i-L1', 'i-L2', 'i-l', 'i-m', 'i-R1', 'i-n', 'i-p', 'i-q', 'i-s', 'i-u', 'i-L3', 'i-R2']);
+  assert.deepEqual(ids(find(r.show, 's-v')), ['i-k', 'i-L1', 'i-L2', 'i-l', 'i-m', 'i-R1', 'i-n', 'i-p', 'i-p-q', 'i-q', 'i-s', 'i-s-q', 'i-u', 'i-u-q', 'i-L3', 'i-R2']);
 });
 
 test('삭제: 다른 쪽이 그대로면 삭제, 다른 쪽이 고쳤으면 충돌', () => {
@@ -167,9 +170,9 @@ test('삭제: 다른 쪽이 그대로면 삭제, 다른 쪽이 고쳤으면 충�
 
   // 이 기기가 지움 + 서버가 고침 → 충돌, 서버 쪽으로 정하면 서버 내용으로 되살림
   remote = remoteOps(base, [{ op: 'set', id: 'q-o', fields: { note: '서버 메모' } }]);
-  local = plain(base); find(local, 's-v').items = find(local, 's-v').items.filter(i => i.id !== 'i-p');
+  local = plain(base); find(local, 's-v').items = find(local, 's-v').items.filter(i => i.id !== 'i-p-q');
   r = merge(base, local, remote);
-  assert.equal(r.conflicts.length, 1); assert.equal(r.conflicts[0].type, 'delete-local'); assert.equal(r.conflicts[0].id, 'i-p');
+  assert.equal(r.conflicts.length, 1); assert.equal(r.conflicts[0].type, 'delete-local'); assert.equal(r.conflicts[0].id, 'i-p-q');
   assert.equal(find(r.show, 'q-o').note, '서버 메모');
   assert.deepEqual(ids(find(r.show, 's-v')), ids(find(base, 's-v')), '제자리로');
 
@@ -212,10 +215,10 @@ test('순서: 양쪽이 다른 항목을 옮기면 둘 다, 같은 항목을 옮
   sv.items.push(sv.items.splice(2, 1)[0]);
   let r = merge(base, local, remote);
   assert.deepEqual(r.conflicts, []);
-  assert.deepEqual(ids(find(r.show, 's-v')), ['i-u', 'i-k', 'i-l', 'i-n', 'i-p', 'i-q', 'i-s', 'i-m']);
+  assert.deepEqual(ids(find(r.show, 's-v')), ['i-u', 'i-k', 'i-l', 'i-n', 'i-p', 'i-p-q', 'i-q', 'i-s', 'i-s-q', 'i-u-q', 'i-m']);
   // 같은 항목(i-u)을 이 기기는 i-l 뒤로
   const local2 = plain(base), sv2 = find(local2, 's-v');
-  const u = sv2.items.pop(); sv2.items.splice(2, 0, u);
+  const u = sv2.items.splice(sv2.items.findIndex(i => i.id === 'i-u'), 1)[0]; sv2.items.splice(2, 0, u);
   r = merge(base, local2, remote);
   assert.deepEqual(r.conflicts, []);
   assert.deepEqual(ids(find(r.show, 's-v')), ids(find(remote, 's-v')));
@@ -223,20 +226,20 @@ test('순서: 양쪽이 다른 항목을 옮기면 둘 다, 같은 항목을 옮
 
 test('다른 부모로 옮기기는 부모 필드 — 내용 편집과 합쳐지고, 서로 다른 곳으로 옮기면 충돌', () => {
   const base = backstage();
-  // 이 기기: q-o 를 i-q 로 옮김 / 서버: q-o 메모 고침
+  // 이 기기: 동작 q-o 를 큐 i-s-q 로 옮김 (원래 큐 i-p-q 는 비어 사라진다) / 서버: q-o 메모 고침
   let remote = remoteOps(base, [{ op: 'set', id: 'q-o', fields: { note: '서버 메모' } }]);
   let local = plain(base);
-  const q = find(local, 'i-p').cues.pop(); find(local, 'i-p').isCue = false;
-  find(local, 'i-q').cues.push(q); find(local, 'i-q').isCue = true;
+  const q = find(local, 'i-p-q').cues.pop();
+  find(local, 'i-s-q').cues.push(q);
   let r = merge(base, local, remote);
   assert.deepEqual(r.conflicts, []);
-  assert.equal(parentOf(r.show, 'q-o'), 'i-q'); assert.equal(find(r.show, 'q-o').note, '서버 메모');
-  assert.equal(find(r.show, 'i-q').isCue, true);
-  // 서버는 i-s 로 옮김 → 충돌, 서버 위치
-  remote = remoteOps(base, [{ op: 'move', id: 'q-o', parent: 'i-s' }]);
+  assert.equal(parentOf(r.show, 'q-o'), 'i-s-q'); assert.equal(find(r.show, 'q-o').note, '서버 메모');
+  assert.equal(find(r.show, 'i-p-q'), null);
+  // 서버는 i-u-q 로 옮김 → 충돌, 서버 위치
+  remote = remoteOps(base, [{ op: 'move', id: 'q-o', parent: 'i-u-q' }]);
   r = merge(base, local, remote);
   assert.equal(r.conflicts.length, 1); assert.deepEqual(r.conflicts[0].fields, ['parent']);
-  assert.equal(parentOf(r.show, 'q-o'), 'i-s');
+  assert.equal(parentOf(r.show, 'q-o'), 'i-u-q');
   // 씬을 다른 파트로: 서버가 파트를 하나 더 만들고 씬을 옮김 + 이 기기가 씬 제목 고침
   remote = remoteOps(base, [{ op: 'add', kind: 'part', data: { id: 'pt-2', name: '2부' } }, { op: 'move', id: 's-3o', parent: 'pt-2' }]);
   local = plain(base); find(local, 's-3o').title = '로컬 엔딩';
@@ -247,35 +250,34 @@ test('다른 부모로 옮기기는 부모 필드 — 내용 편집과 합쳐지
 
 test('큐 여러 개의 부모 변경(Q 묶음 통째로 이동): 서버 편집과 합쳐지고, 서버가 그중 하나를 딴 데로 옮겼으면 그 큐만 충돌', () => {
   const base = backstage();
-  // 이 기기: i-7 의 큐 전부(q-5 음향, q-6 조명)를 본문은 두고 i-k 로 — 브라우저 relocateCueGroup + save 와 같은 결과
+  // 이 기기: 큐 i-1h-q 의 동작 전부(q-1f 조명, q-1g 음향)를 큐 i-14-q 로 — 브라우저 relocateCueGroup + save 와 같은 결과
   const groupMove = () => {
-    const l = plain(base), a = find(l, 'i-7'), b = find(l, 'i-k');
-    b.cues.push(...a.cues.splice(0)); a.isCue = false; b.isCue = true;
+    const l = plain(base), a = find(l, 'i-1h-q'), b = find(l, 'i-14-q');
+    b.cues.push(...a.cues.splice(0));
     relabel(l);
     return l;
   };
-  // 서버: q-6 상세 + 원래 문단 i-7 에 새 큐 + i-k 본문 고침
+  // 서버: q-1g 상세 + 원래 큐 i-1h-q 에 새 동작 + i-k 본문 고침
   let remote = remoteOps(base, [
-    { op: 'set', id: 'q-6', fields: { note: '서버 메모' } },
-    { op: 'add', kind: 'cue', parent: 'i-7', data: { id: 'q-R7', dept: 'stage', note: '서버 무대', status: 'tbd' } },
+    { op: 'set', id: 'q-1g', fields: { note: '서버 메모' } },
+    { op: 'add', kind: 'cue', parent: 'i-1h-q', data: { id: 'q-R7', dept: 'stage', note: '서버 무대', status: 'tbd' } },
     { op: 'set', id: 'i-k', fields: { text: '서버 본문' } },
   ]);
   let r = merge(base, groupMove(), remote);
   assert.deepEqual(r.conflicts, []);
-  assert.deepEqual(find(r.show, 'i-k').cues.map(c => c.id), ['q-5', 'q-6'], '옮긴 큐는 원래 순서대로 새 문단에');
-  assert.equal(find(r.show, 'q-6').note, '서버 메모');
+  assert.deepEqual(find(r.show, 'i-14-q').cues.map(c => c.id), ['q-13', 'q-1f', 'q-1g'], '옮긴 동작은 원래 순서대로 새 큐에');
+  assert.equal(find(r.show, 'q-1g').note, '서버 메모');
   assert.equal(find(r.show, 'i-k').text, '서버 본문');
-  assert.deepEqual(find(r.show, 'i-7').cues.map(c => c.id), ['q-R7'], '서버가 원래 문단에 단 큐는 그 자리에');
-  assert.equal(find(r.show, 'i-7').isCue, true); assert.equal(find(r.show, 'i-k').isCue, true);
+  assert.deepEqual(find(r.show, 'i-1h-q').cues.map(c => c.id), ['q-R7'], '서버가 원래 큐에 단 동작은 그 자리에');
   assert.ok(inOrder(r.show), '번호는 1부터 연속');
   assert.deepEqual(validateShow(r.show).errors, []);
-  // 서버는 q-5 하나만 i-l 로 옮김 → q-5 부모만 충돌(서버 위치), q-6 은 이 기기대로 i-k
-  remote = remoteOps(base, [{ op: 'move', id: 'q-5', parent: 'i-l' }]);
+  // 서버는 q-1f 하나만 i-19-q 로 옮김 → q-1f 부모만 충돌(서버 위치), q-1g 는 이 기기대로 i-14-q. 빈 i-1h-q 는 사라진다
+  remote = remoteOps(base, [{ op: 'move', id: 'q-1f', parent: 'i-19-q' }]);
   r = merge(base, groupMove(), remote);
   assert.equal(r.conflicts.length, 1); assert.deepEqual(r.conflicts[0].fields, ['parent']);
-  assert.equal(parentOf(r.show, 'q-5'), 'i-l');
-  assert.equal(parentOf(r.show, 'q-6'), 'i-k');
-  assert.equal(find(r.show, 'i-7').isCue, false);
+  assert.equal(parentOf(r.show, 'q-1f'), 'i-19-q');
+  assert.equal(parentOf(r.show, 'q-1g'), 'i-14-q');
+  assert.equal(find(r.show, 'i-1h-q'), null);
   assert.ok(inOrder(r.show));
 });
 
@@ -283,12 +285,12 @@ test('큐 번호: 병합 뒤에도 늘 1부터 연속 — 양쪽이 같은 번�
   const base = backstage();
   const last = items(base).filter(i => i.label).length;
   // 서버(MCP): 마지막 씬 끝에 큐 달린 새 문단 → Q(last+1)
-  const remote = remoteOps(base, [{ op: 'add', kind: 'item', parent: 's-3o', data: { id: 'i-R1', text: '(서버 퇴장)', cues: [{ dept: 'light', status: 'tbd' }] } }]);
+  const remote = remoteOps(base, [{ op: 'add', kind: 'item', parent: 's-3o', data: { id: 'i-R1', kind: 'cue', trigger: { type: 'signal', text: '서버 퇴장' }, cues: [{ dept: 'light', status: 'tbd' }] } }]);
   assert.equal(find(remote, 'i-R1').label, String(last + 1));
   // 이 기기: i-3k 에 큐, 마지막 씬 끝에 큐 달린 새 문단 (브라우저 save 처럼 relabel) → 이 기기에서도 끝 문단이 Q(last+1)
   const local = plain(base);
-  find(local, 'i-3k').cues.push(soundCue('q-L1', 1)); find(local, 'i-3k').isCue = true;
-  local.parts[0].scenes.at(-1).items.push(newItem('i-L9', '로컬 끝', { cues: [soundCue('q-L9', 2)], isCue: true }));
+  const s3o = local.parts[0].scenes.at(-1); s3o.items.splice(s3o.items.findIndex(i => i.id === 'i-3k') + 1, 0, cueItem('i-3k-q', [soundCue('q-L1', 1)], { type: 'line', itemId: 'i-3k', at: 'end' }));
+  s3o.items.push(cueItem('i-L9', [soundCue('q-L9', 2)]));
   relabel(local);
   const r = merge(base, local, remote);
   assert.deepEqual(r.conflicts, []);
@@ -308,14 +310,14 @@ test('큐 번호: 병합 뒤에도 늘 1부터 연속 — 양쪽이 같은 번�
 
 test('코멘트 snapshot(v7): 병합해도 버리지 않는다 — 이 기기·서버 어느 쪽에서 달린 것이든, 문단이 바뀌어도 그대로', () => {
   const base = backstage();
-  const it = items(base).find(i => i.cues.length >= 1 && i.kind === 'line');
-  const snapOf = i => ({ kind: i.kind, speaker: i.speaker, text: i.text, cues: plain(i.cues) });
+  const it = items(base).find(i => i.cues.length >= 1 && i.kind === 'cue');
+  const snapOf = i => ({ kind: i.kind, speaker: i.speaker, text: i.text, cues: plain(i.cues), trigger: plain(i.trigger), offsetSec: i.offsetSec });
   const cmt = (id, i) => ({ id, author: '검토', text: '원래대로', createdAt: '2026-11-18T00:00:00.000Z', resolved: false, resolvedBy: null, resolvedAt: null, snapshot: snapOf(i) });
   // 기준에 이미 있던 snapshot 코멘트
   find(base, it.id).comments.push(cmt('c-base', it));
   const local = plain(base), remote = plain(base);
   // 이 기기: 같은 문단에 snapshot 코멘트를 새로 달고 문장을 고침
-  const li = find(local, it.id); li.comments.push(cmt('c-local', li)); li.text = li.text + ' (로컬)';
+  const li = find(local, it.id); li.comments.push(cmt('c-local', li)); li.offsetSec = 3;
   // 서버: 다른 문단 문장을 고치고, 같은 문단에 snapshot 코멘트를 닮
   const other = items(remote).find(i => i.id !== it.id && i.kind === 'line');
   other.text = other.text + ' (서버)';
@@ -325,9 +327,9 @@ test('코멘트 snapshot(v7): 병합해도 버리지 않는다 — 이 기기·�
   const cs = find(r.show, it.id).comments;
   assert.deepEqual(cs.map(c => c.id).sort(), ['c-base', 'c-local', 'c-remote']);
   cs.forEach(c => assert.deepEqual(c.snapshot, snapOf(it), c.id + ' snapshot 그대로'));
-  assert.equal(find(r.show, it.id).text, it.text + ' (로컬)');
+  assert.equal(find(r.show, it.id).offsetSec, 3);
   assert.equal(find(r.show, other.id).text, other.text);
-  assert.equal(r.show.version, 11);
+  assert.equal(r.show.version, 12);
   assert.deepEqual(validateShow(r.show).errors, []);
   assert.deepEqual(migrate(r.show), r.show, '사이트가 다시 읽어도 그대로');
 });
@@ -429,15 +431,15 @@ test('show 메타: updatedAt·version 은 서버 것, revision 은 한쪽만 바
 
 test('서버가 지운 곳으로 이 기기가 옮겨 넣은 항목: 서버에 아직 있으면 서버 쪽 자리로 되돌린다', () => {
   const base = backstage();
-  // 이 기기: 큐 q-1(i-3) 을 i-k 로 옮김 / 서버: i-k 를 지움 → 충돌(i-k), 서버 쪽으로 정하면 q-1 은 서버처럼 i-3 에
-  let remote = remoteOps(base, [{ op: 'remove', id: 'i-k' }]);
+  // 이 기기: 동작 q-1(i-3-q) 을 큐 i-7-q 로 옮김 / 서버: i-7-q 를 지움 → 충돌(i-7-q), 서버 쪽으로 정하면 q-1 은 서버처럼 i-3-q 에
+  let remote = remoteOps(base, [{ op: 'remove', id: 'i-7-q' }]);
   let local = plain(base);
-  find(local, 'i-k').cues.push(find(local, 'i-3').cues.shift());
+  find(local, 'i-7-q').cues.push(find(local, 'i-3-q').cues.shift());
   let r = merge(base, local, remote);
-  assert.deepEqual(r.conflicts.map(c => [c.id, c.type]), [['i-k', 'delete-remote']]);
-  assert.equal(find(r.show, 'i-k'), null);
-  assert.equal(parentOf(r.show, 'q-1'), 'i-3');
-  assert.deepEqual(find(r.show, 'i-3').cues.map(c => c.id), find(remote, 'i-3').cues.map(c => c.id), '서버 순서 그대로');
+  assert.deepEqual(r.conflicts.map(c => [c.id, c.type]), [['i-7-q', 'delete-remote']]);
+  assert.equal(find(r.show, 'i-7-q'), null);
+  assert.equal(parentOf(r.show, 'q-1'), 'i-3-q');
+  assert.deepEqual(find(r.show, 'i-3-q').cues.map(c => c.id), find(remote, 'i-3-q').cues.map(c => c.id), '서버 순서 그대로');
   // 이 기기: 문단 i-x(s-11) 를 s-v 로 옮김 / 서버: s-v 를 지움 → i-x 는 s-11 의 서버 자리에
   remote = remoteOps(base, [{ op: 'remove', id: 's-v', force: true }]);
   local = plain(base);
@@ -478,7 +480,8 @@ test('실제 흐름: backstage-part1 — 서버는 MCP ops, 이 기기는 편집
   // 에이전트가 MCP edit_show 로 한 수정
   const ops = [
     { op: 'add', kind: 'prop', data: { id: 'pr-tbl', name: '테이블' } },
-    { op: 'add', kind: 'item', parent: 's-1k', after: 'i-1a', data: { id: 'i-mcp1', text: '(테이블 정리)', cues: [{ dept: 'stage', note: '테이블 치우기', stage: { props: [{ propId: 'pr-tbl', action: 'clean' }] } }] } },
+    { op: 'add', kind: 'item', parent: 's-1k', after: 'i-1a', data: { id: 'i-mcp1', text: '(테이블 정리)' } },
+    { op: 'add', kind: 'item', after: 'i-mcp1', data: { id: 'i-mcp1q', kind: 'cue', trigger: { type: 'line', itemId: 'i-mcp1' }, cues: [{ dept: 'stage', note: '테이블 치우기', stage: { props: [{ propId: 'pr-tbl', action: 'clean' }] } }] } },
     { op: 'set', id: 'q-1i', fields: { trigger: '퇴장 직후', note: '에이전트가 고침' } },
     { op: 'add', kind: 'cue', parent: 'i-3n', data: { id: 'q-mcp2', dept: 'sound', sound: { track: 7, action: 'fadeOut', timeSec: 5 } } },
     { op: 'set', id: 'tr-3', fields: { title: '멘탈 BGM' } },
@@ -491,9 +494,9 @@ test('실제 흐름: backstage-part1 — 서버는 MCP ops, 이 기기는 편집
   // 브라우저에서 한 편집: 본문 고침, 새 문단(+큐), 문단 순서 바꿈, 큐 지움, 사람 메모, 코멘트 해결, 판 표시
   const local = plain(base);
   find(local, 'i-k').text = find(local, 'i-k').text + ' (로컬 수정)';
-  const sv = find(local, 's-v'); sv.items.splice(sv.items.findIndex(i => i.id === 'i-q') + 1, 0, newItem('i-loc1', '(관객 박수 유도)', { kind: 'action', cues: [soundCue('q-loc1', 2)], isCue: true }));
+  const sv = find(local, 's-v'); sv.items.splice(sv.items.findIndex(i => i.id === 'i-q') + 1, 0, newItem('i-loc1', '(관객 박수 유도)', { kind: 'action' }), cueItem('i-loc1q', [soundCue('q-loc1', 2)], { type: 'line', itemId: 'i-loc1', at: 'end' }));
   const s2k = find(local, 's-2k'); const mv = s2k.items.splice(s2k.items.findIndex(i => i.id === 'i-1o'), 1)[0]; s2k.items.splice(3, 0, mv);
-  find(local, 'i-1h').cues = find(local, 'i-1h').cues.filter(c => c.id !== 'q-1g');
+  find(local, 'i-1h-q').cues = find(local, 'i-1h-q').cues.filter(c => c.id !== 'q-1g');
   find(local, 'p-daehoon').note = '로컬 메모';
   const cm = find(local, 's-3i').comments[0]; Object.assign(cm, { resolved: true, resolvedBy: '나', resolvedAt: '2026-11-18T03:00:00.000Z' });
   local.revision = '리허설 2';
@@ -508,7 +511,7 @@ test('실제 흐름: backstage-part1 — 서버는 MCP ops, 이 기기는 편집
   assert.equal(find(m, 'i-mcp1').text, '(테이블 정리)');
   assert.equal(ids(find(m, 's-1k'))[ids(find(m, 's-1k')).indexOf('i-1a') + 1], 'i-mcp1');
   assert.equal(find(m, 'q-1i').note, '에이전트가 고침');
-  assert.equal(parentOf(m, 'q-mcp2'), 'i-3n');
+  assert.deepEqual(find(m, parentOf(m, 'q-mcp2')).trigger, { type: 'line', itemId: 'i-3n', at: 'end' }, '옛 방식: 대사에 단 큐 → 그 대사 끝이 트리거인 큐');
   assert.equal(find(m, 'tr-3').title, '멘탈 BGM');
   assert.equal(find(m, 'pr-mcp').name, '카드 덱');
   assert.equal(find(m, 'i-2j'), null);
@@ -523,7 +526,7 @@ test('실제 흐름: backstage-part1 — 서버는 MCP ops, 이 기기는 편집
   assert.equal(m.revision, '리허설 2');
   // 번호: 병합 결과도 1부터 연속 (서버·이 기기에서 새로 단 큐 문단 모두 번호가 있다)
   assert.ok(inOrder(m));
-  assert.ok(find(m, 'i-mcp1').label && find(m, 'i-loc1').label);
+  assert.ok(find(m, 'i-mcp1q').label && find(m, 'i-loc1q').label);
   // 검증·사이트 정규화
   const v = validateShow(m);
   assert.deepEqual(v.errors, []);

@@ -271,7 +271,7 @@ test('새 큐 지점: 큐 하나를 틈에 — 새 지점이 그 자리에, 원�
   assert.deepEqual(plain({ ids: r.ids, pointId: r.pointId, to: r.to, from: r.from, changed: r.changed, pruned: r.pruned }),
     { ids: ['q3'], pointId: 'np', to: { sceneId: 'S1', index: 1 }, from: { itemId: 'c', index: 1 }, changed: true, pruned: null });
   assert.deepEqual(order(s, 'S1'), ['a', 'np', 'b', 'c']);
-  assert.deepEqual(plain(find(s, 'np')), { id: 'np', kind: 'cue', speaker: null, text: '', label: null, isCue: true, cues: [cue('q3')], comments: [] });
+  assert.deepEqual(plain(find(s, 'np')), { id: 'np', kind: 'cue', speaker: null, text: '', label: null, isCue: true, trigger: { type: 'signal', text: '' }, offsetSec: null, cues: [cue('q3')], comments: [] }); // v12: 트리거를 안 주면 빈 신호
   assert.deepEqual(find(s, 'c').cues.map(c => c.id), ['q2']);
   // 되돌리기: 큐를 원래 문단 원래 자리로 → 빈 새 지점은 relocateCueGroup 이 정리
   const back = FE.relocateCueGroup(s, r.pointId, r.from.itemId, r.from.index, r.ids);

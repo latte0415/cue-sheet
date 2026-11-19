@@ -1,7 +1,7 @@
-# 큐시트 JSON 형식 (show v11)과 업로드
+# 큐시트 JSON 형식 (show v12)과 업로드
 
 원문 큐시트(대본 + 조명·음향·무대·출연 큐)를 이 JSON 으로 바꿔 `scripts/upload.js` 로 올린다.
-사이트의 "내보내기"가 만드는 JSON 과 같은 형식이다. `version` 5·6·7·8·9·10 파일도 그대로 읽힌다(옛 필드는 불러올 때 v11 모양으로 옮겨진다). 새로 만들 땐 11 을 쓴다. 기준 구현은 `index.html` 의 `migrate()`, 검증은 `lib/validate.js`.
+사이트의 "내보내기"가 만드는 JSON 과 같은 형식이다. `version` 5·6·7·8·9·10·11 파일도 그대로 읽힌다(옛 필드는 불러올 때 v12 모양으로 옮겨진다). 새로 만들 땐 12 를 쓴다. 기준 구현은 `index.html` 의 `migrate()`, 검증은 `lib/validate.js`.
 
 ## 형식 버전
 
@@ -16,6 +16,7 @@
 | 9 | 음향 `play` 큐의 `sound.level` = 시작 볼륨(그 볼륨으로 바로 재생, 예: 하우스 오픈 BGM 50). 모양은 8 과 같다 — 8 → 9 는 `version` 만 바뀐다. 8 화면은 `play` 의 `level` 을 저장할 때 지우므로 올려서 옛 화면의 저장을 막는다 |
 | 10 | 출연 큐 하나에 여러 사람: `cast` = `{ people: [{ personId, move }] }`(사람마다 IN/OUT/MOVE, 순서 = 머리글 순서). 9 까지의 `{ personId, move }` 는 불러올 때 한 줄짜리 `people` 로 옮겨진다(사람이 비어 있어도 줄은 남김). 9 화면은 `people` 을 몰라 저장하면 사람을 잃으므로 올린다 |
 | 11 | 이름 붙인 조명: `lights[]` `{ id, name, note }`(리허설에서 정해 이름을 붙인 조명 — `note` 에 상세 설명) + 조명 큐 `light.looks[]` `{ lookId, action: on\|off }`. 조명 큐는 이제 이름 붙인 조명을 켜고 끄는 것이 기본이고, 채널(`light.channels`)은 "상세(채널)" 로 그대로 쓴다 — 한 큐에 둘 다 있어도 된다. 10 → 11 은 `lights: []`·`looks: []` 만 붙고 채널 큐는 바꾸지 않는다. 10 화면은 `looks` 를 몰라 저장하면 지우므로 올린다 |
+| 12 | 트리거: 대본 흐름(`items[]`)에는 **대사**(`line`·`action`)와 **큐**(`kind:"cue"`)만 있다. 큐는 그 자체로 한 항목이고 트리거 하나(`trigger` — 대사의 끝·시작 / 다른 큐 후·함께 / 신호)와 `offsetSec`, 부서 동작 `cues[]` 를 갖는다. 부서 큐(동작)에는 `trigger`·`offsetSec` 이 없고, 대사·지문에는 큐가 붙지 않는다(`cues: []`). 11 까지의 "문단에 붙은 큐" 는 불러올 때 그 문단 바로 뒤의 큐로 옮겨진다(아래 "v11 → v12 변환"). 11 화면은 이 모양을 몰라 저장하면 큐를 잃으므로 올린다 |
 
 ## 올리기
 
@@ -54,8 +55,10 @@ show
 ├─ tracks[]  { id, no, title, durationSec, fileName, fileKey, note, loop }
 └─ parts[]   { id, name, scenes[] }                       ← 1부, 2부 …
    └─ scenes[] { id, type, title, cast[], durationSec, setup, comments[], items[] }
-      └─ items[] { id, kind, speaker, text, label, isCue, cues[], comments[] }   ← 대본 한 문단
-         └─ cues[] { id, dept, trigger, offsetSec, note, status, <dept>: {…} }
+      └─ items[]                                           ← 대본 흐름: 대사와 큐가 순서대로
+         ├─ 대사  { id, kind: line|action, speaker, text, label: null, isCue: false, cues: [], comments[] }
+         └─ 큐    { id, kind: cue, speaker: null, text: "", label, isCue: true, trigger, offsetSec, cues[], comments[] }
+                    └─ cues[] { id, dept, note, status, <dept>: {…} }   ← 부서 동작 (출연·조명·음향·무대)
 ```
 
 빈 값은 `null`(숫자·참조) 또는 `""`(문자열). 표에 없는 필드는 불러올 때 버려진다(경고).
@@ -132,24 +135,47 @@ show
 | scene `durationSec` | number\|null | 예상 길이(초) |
 | scene `setup` | string | 씬 시작 전 무대 세팅 |
 
-### items[] — 대본 문단
+### items[] — 대본 흐름 (대사 · 큐)
 
 | 필드 | 타입 | 뜻 |
 |---|---|---|
-| `kind` | `line` \| `action` \| `cue` | `line` = 대사, `action` = 지문·동작, `cue` = **큐만 있는 문단**(예전 이름 "큐 지점") — 본문 없이 큐만 있는 대본 흐름 안의 실행 지점(아래). `text` 는 `""`, `speaker` 는 `null`, `cues` 는 하나 이상 |
-| `speaker` | string\|null | 대사의 화자 `people[].id`. `action` 은 `null` |
+| `kind` | `line` \| `action` \| `cue` | `line` = 대사, `action` = 지문·동작, `cue` = **큐** — 본문 없이 트리거와 부서 동작만 있는 대본 흐름 안의 실행 지점(아래). 큐는 `text` 가 `""`, `speaker` 가 `null`, `cues` 가 하나 이상 |
+| `speaker` | string\|null | 대사의 화자 `people[].id`. `action`·`cue` 는 `null` |
 | `text` | string | 대사 본문(화자 이름 빼고) 또는 지문. **지문은 항상 `(…)` 괄호 한 쌍** — `"(암전)"`, `"(액트 도중 조예준 인)"`. 표기는 아래 "표기 규칙" |
-| `label` | string\|null | 큐 번호. **보통 `null`** — 사이트가 큐 붙은 문단에 순서대로 매긴다 |
-| `isCue` | boolean | 큐 유무. 생략 가능(큐가 있으면 자동 true) |
-| `cues` | array | 이 문단 시점에 나가는 큐들 |
+| `label` | string\|null | 큐 번호. **보통 `null`** — 사이트가 큐에 순서대로 1, 2, 3 … 을 매긴다(대사는 늘 `null`) |
+| `isCue` | boolean | 큐인지. 생략 가능(큐면 자동 true) |
+| `cues` | array | 큐의 부서 동작(아래 "cues[]"). 대사·지문은 `[]` |
+| `trigger` | object | **큐만** — 이 큐를 나가게 하는 것, 큐마다 하나(아래 "트리거") |
+| `offsetSec` | number\|null | **큐만** — 트리거 뒤 지연(초). "암전 7초 후" → 트리거 = 암전 큐 후, `offsetSec: 7`. 런에서 저절로 센다 |
 
-### cues[] — 공통
+### 트리거 (v12) — 큐마다 하나
+
+| 모양 | 뜻 | 사이트에 보이는 글 |
+|---|---|---|
+| `{ "type": "line", "itemId": "<대사 id>", "at": "end" }` | 그 대사의 끝(기본). `"at": "start"` 면 시작 | 조예준 “…소개합니다 박대훈” 끝에 (바로 아래면 "대사 끝에") |
+| `{ "type": "cue", "cueId": "<큐 id>", "mode": "after" }` | 다른 큐가 나간 뒤("연속 큐"). `"mode": "with"` 면 함께 | BLACKOUT(Q15) 후 7초 · 객석 OFF(Q2)와 함께 |
+| `{ "type": "signal", "text": "박수 끝" }` | 대본에 없는 신호 — 대사나 큐로 잡을 수 없을 때만 | 박수 끝 |
+
+- 큐를 가리키는 글은 머리글 + 번호다(동작이 여럿이면 첫 머리글 뒤 "…": "무대 ON…(Q17) 후"). 연결이라 번호가 바뀌거나 대사를 고쳐도 글이 따라간다.
+- 문장 가운데에서 나가는 큐는 그 자리에서 대사를 두 항목으로 나누고 앞 대사 끝에 단다(단어 위치는 저장하지 않는다).
+- 트리거가 대사·큐인 큐는 보통 그 대사·앞 큐 바로 아래에 둔다(사이트는 저장할 때 그 자리로 옮긴다). 신호 큐는 놓은 자리에 남는다.
+- 서로를 기다리는 고리(Q4 → Q6 → Q4)는 만들 수 없다(사이트 편집 창·MCP 가 거부, 그래도 생기면 점검 "서로 기다리는 큐").
+- 사이트에서 대사·큐를 지우며 그것을 트리거로 쓰던 큐를 남기면 트리거가 신호로 바뀌고 `"converted": "line"`(대사가 지워짐) · `"cue"`(앞 큐가 지워짐)가 붙는다 — 점검 "신호로 바뀐 트리거"(확인). 새 트리거를 고르거나 "이대로 둠"이면 빠진다.
+- 검증 경고 코드: `trigger-line-missing`(트리거 대사가 없음) · `trigger-cue-missing`(앞 큐가 없음) · `trigger-loop`(고리) · `trigger-signal-empty`(빈 신호) · `trigger-converted`(신호로 바뀜). v12 파일의 옛 모양(대사에 붙은 큐 · 부서 큐의 `trigger`·`offsetSec`)은 `legacy-field`.
+
+### v11 → v12 변환 (불러올 때 자동, `index.html` `migrate()` · `lib/ops.js` `upgradeShow()`)
+
+- 큐가 붙은 대사·지문 → 그 문단(큐 없이) + 바로 뒤에 큐. 부서 큐를 (`trigger` 글, `offsetSec`) 이 같은 것끼리 처음 나온 순서로 묶어 묶음 하나 = 큐 하나. 새 큐 id 는 `"<문단 id>-q"`(둘째 묶음부터 `-q2` …), 코멘트는 문단에 남는다.
+- 큐 지점(`kind:"cue"`) → 그 자리의 큐. 첫 묶음이 옛 id 를 그대로 쓰고, 묶음이 갈리면 `"<id>-q2"` … 로 나뉜다.
+- 트리거: 글이 `"이전 큐 후"`(앱의 "이전 큐 후 +N초" 단추가 쓴 글) → 앞 문단까지의 마지막 큐 후(`offsetSec` 그대로). 대사·지문 문단의 묶음 중 글이 빈 것, 대사 문단의 "대사 끝"·"이 대사 즈음"·"멘트 후" 같은 글 → 그 문단 끝. 그 밖 → 같은 글의 신호.
+- 신호가 됐지만 앞 큐·앞 대사를 가리키는 것 같은 글("암전 후", "음원 시작 후", "'소개합니다 박대훈' 후" …)은 사이트 점검의 참고 "신호를 연결로 바꿀 수 있는 큐" 에 제안으로 뜬다 — 자동으로 바꾸지 않는다.
+- 큐 번호는 다시 매긴다(묶음이 나뉘면 번호가 늘어난다). 글 문단 코멘트 `snapshot` 의 큐는 버린다.
+
+### cues[] — 큐의 부서 동작 (공통)
 
 | 필드 | 타입 | 뜻 |
 |---|---|---|
 | `dept` | `cast` `light` `sound` `stage` | **필수**. 같은 이름의 객체 하나가 내용 |
-| `trigger` | string | 언제 — "암전 후", "'소개합니다 박대훈' 후", "예준 스냅 주면" |
-| `offsetSec` | number\|null | trigger 뒤 지연(초). "암전 7초 후" → `trigger:"암전 후", offsetSec:7` |
 | `note` | string | 상세 — 머리글이 말하지 않는 것을 적는 자유 문장 하나("마이크 들고 들어와 라태형에게 건넴", "밀대로"). 모든 부서 공통. 빈 값 `""` (v8) |
 | `status` | `set` \| `tbd` | 원문이 "미정"이면 `tbd`. 기본 `set` |
 
@@ -191,26 +217,25 @@ show
    - 좋음: `"(한숨 쉬며) 에휴 나가계세요"`, `"…그런 건 아닙니다….(째려보며)"`, `"…고통이에요 (계속 주절주절)"`
    - 나쁨: 말하는 방식을 따로 지문 문단으로 쪼개기
 2. **지문** — `kind:"action"`. 묘사·진행·연출 의도·기획 설명·인/아웃 표기 모두 여기. `text` 는 항상 `(` 로 시작해 `)` 로 끝나는 괄호 **한 쌍**. 괄호 안에 괄호를 또 넣지 말고 보충 설명은 ` — ` 로 잇는다. `*`·`—` 로 시작하는 지문은 쓰지 않는다.
-   - **큐가 있는 지문은 큐가 이미 말하는 대상·동작·트리거를 다시 쓰지 않는다.** 큐 줄(머리글 `조예준 IN`, `BLACKOUT`, 시점 `↳ 암전 후`)이 바로 위에 보이므로, 지문에는 큐에 없는 묘사·연출만 남긴다. 큐를 그대로 다시 적기만 한 지문은 지문이 아니라 **큐 지점**이다 — `kind:"cue"`, `text:""` 로 바꾼다(사이트는 큐 블록만 보인다). 사이트는 큐가 달린 지문을 머리글 아래 보충 디테일로 보고 흐리게 보인다.
-4. **큐만 있는 문단**(예전 이름 "큐 지점") — `kind:"cue"`. 큐는 지문 디테일에 매달린 것이 아니라 대본 흐름 안의 실행 지점 그 자체다. 대사·지문 사이에 큐만 있는 자리(예: 암전, 인/아웃)는 본문 없는 큐 지점으로 둔다.
-   큐가 0개인 지점은 없다 — 사이트·MCP 모두 큐를 지우거나 옮겨 비면 지점도 지운다(코멘트가 달렸으면 빈 지문으로 남긴다). 큐 번호(Q)는 다른 큐 문단과 같이 매긴다.
-   - 좋음: 대사 `"소개합니다 다음 공연자 라태형"` 다음에 `{ "kind": "cue", "text": "", "cues": [조명 BLACKOUT] }`
-   - 나쁨: 지문 `"(암전)"` 에 조명 BLACKOUT 큐를 다는 것(큐를 다시 적은 지문)
-   - 좋음: 출연 큐 `조예준 IN` 이 달린 지문 `"(고개 절레절레하며 들어온다)"`, 큐 없는 지문 `"(로프로 박대훈 묶음)"`
-   - 나쁨: `"* 액트 도중 조예준 인"`, `"— 암전"`, `"(조예준 인 (고개 절레절레))"`, 출연 큐 `조예준 IN` 이 달린 지문 `"(조예준 인)"`(큐를 다시 적음)
-3. **큐** — 조명·음향·무대팀·출연자 인/아웃처럼 스태프나 출연자가 **실제로 실행해야 하는 일**만 큐로 만든다. 문단 text 가 아니라 그 문단의 `cues[]` 로 표현한다. 큐 시점이 대사면 그 대사 문단에, 아니면 그 순간을 설명하는 지문에 단다. 묘사에서 큐를 억지로 끌어내지 않는다.
+   - **지문은 바로 아래 큐가 이미 말하는 대상·동작·트리거를 다시 쓰지 않는다.** 큐 줄(머리글 `조예준 IN`, `BLACKOUT`, 트리거 `BLACKOUT(Q15) 후`)이 바로 보이므로, 지문에는 큐에 없는 묘사·연출만 남긴다. 큐를 그대로 다시 적기만 한 지문은 지우고 큐만 둔다.
+4. **큐** — `kind:"cue"`. 큐는 지문 디테일에 매달린 것이 아니라 대본 흐름 안의 실행 지점 그 자체다. 대사 끝에 나가면 그 대사 바로 뒤에 트리거 `{ "type": "line", "itemId": <대사 id> }` 인 큐를, 대사·지문 없는 자리(예: 암전, 인/아웃)는 신호나 앞 큐 트리거의 큐를 둔다.
+   동작이 0개인 큐는 없다 — 사이트·MCP 모두 동작을 지우거나 옮겨 비면 큐도 지운다(코멘트가 달렸으면 빈 지문으로 남긴다). 큐 번호(Q)는 큐에만 매긴다.
+   - 좋음: 대사 `"소개합니다 다음 공연자 라태형"` 다음에 `{ "kind": "cue", "trigger": { "type": "line", "itemId": <그 대사> }, "cues": [조명 BLACKOUT] }`, 그다음 `{ "kind": "cue", "trigger": { "type": "cue", "cueId": <BLACKOUT 큐> }, "offsetSec": 7, "cues": [조명 ON, 음향 PLAY] }`
+   - 나쁨: 지문 `"(암전)"` 을 따로 두고 그 뒤에 BLACKOUT 큐를 다는 것(큐를 다시 적은 지문)
+   - 나쁨: `"* 액트 도중 조예준 인"`, `"— 암전"`, `"(조예준 인 (고개 절레절레))"`
+3. **큐로 만들 것** — 조명·음향·무대팀·출연자 인/아웃처럼 스태프나 출연자가 **실제로 실행해야 하는 일**만 큐로 만든다. 문단 text 가 아니라 큐의 `cues[]` 로 표현한다. 큐 시점이 대사면 트리거를 그 대사로, 앞 큐면 그 큐로, 대본에 없는 신호면 신호로. 묘사에서 큐를 억지로 끌어내지 않는다.
    - 좋음: 지문 `"(3명이 관객석으로 간다)"` 에 무대팀 `stage` 큐 "테이블 교체" 하나만 단다
    - 나쁨: 같은 지문에서 이동 자체를 `cast` 큐로 만들기
 
 검증은 지문(`action`) 문단만 본다 — `(` 로 시작하지 않거나 `)` 로 끝나지 않으면, 괄호 안에 괄호가 또 있으면 경고. 대사(`line`) 안의 괄호는 검사하지 않는다.
-큐가 달린 지문의 낱말이 전부 그 큐의 대상·액션·트리거뿐이면(`"(조예준 인)"` + 출연 큐 `조예준 IN`) **`action-echo` 경고 — "큐를 다시 적은 지문, 큐 지점으로 바꾸세요(kind:"cue")"**. 옛 데이터를 자동으로 바꾸지는 않는다.
-큐 지점에 본문이 있으면 경고(`cue-text`, 불러올 때 버려짐), 큐가 없으면 오류. 반대로 큐가 붙은 대사·지문의 본문이 비어 있으면 경고(`empty-cued` — 큐 지점으로 바꾸라는 뜻. 사이트 점검 탭 "빈 문단에 붙은 큐", 확인 · [큐 지점으로]). 사이트 대본 편집기에서 큐가 붙은 문단의 글을 지워 문단이 사라지면 그 자리에 큐 지점으로 남긴다. 보수적으로 판정한다(` — ` 보충이 있거나 큐에 없는 낱말이 하나라도 있으면 경고 없음).
+v11 이하 파일에서 큐가 달린 지문의 낱말이 전부 그 큐의 대상·액션·트리거뿐이면(`"(조예준 인)"` + 출연 큐 `조예준 IN`) **`action-echo` 경고**(큐를 다시 적은 지문). 큐(`kind:"cue"`)에 본문이 있으면 경고(`cue-text`, 불러올 때 버려짐), 동작이 없으면 오류.
+v12 의 대사·지문에는 큐가 붙지 않으므로 `action-echo`·`empty-cued` 는 v11 이하 파일에서만 본다. 사이트 대본 편집기에서 트리거로 쓰이는 대사의 글을 지워 문단이 사라지면 빈 문단으로 남긴다(지우려면 패널에서 — 붙은 큐를 함께 지울지 묻는다).
 
 ## 변환 요령
 
 - 원문의 글머리표(`*`)는 괄호 지문으로 바꾼다 (`* 액트 도중 조예준 인` → `(액트 도중 조예준 인)`).
-- 원문의 지문 한 줄 = `action` 문단 하나, 대사 한 줄 = `line` 문단 하나. 큐는 그 큐가 나가는 시점의 문단 `cues` 에 단다.
-  큐만 있고 대본이 없는 지점(예: "하우스 오픈")은 그 순간의 이름만 적은 지문 문단 `"(하우스 오픈)"` 을 만들어 거기에 단다 — "하우스 음악 시작"은 음향 큐가 이미 말하므로 지문에 다시 쓰지 않는다.
+- 원문의 지문 한 줄 = `action` 하나, 대사 한 줄 = `line` 하나. 큐는 그 큐가 나가는 시점 바로 뒤의 `kind:"cue"` 항목으로 두고 트리거를 그 대사(또는 앞 큐 · 신호)로.
+  대본이 없는 지점(예: "하우스 오픈")은 신호 트리거의 큐로 둔다(`"text": "객석 오픈"`) — 지문을 따로 만들 필요 없다.
 - 액트 본편처럼 대본이 없는 씬은 `items: []` 로 둬도 된다.
 - 등장하는 사람은 모두 `people` 에 넣고 id 를 정한다(예: `"p-yejun"`). 음향 큐가 쓰는 트랙 번호는 모두 `tracks` 에 넣는다.
 - 원문에 없는 값은 지어내지 말고 `null` / `""` / `status:"tbd"` + `note` 로 남긴다.
@@ -222,7 +247,7 @@ show
 ```json
 {
   "title": "1부 (초안)",
-  "version": 11,
+  "version": 12,
   "preShowSetup": "탑햇테이블",
   "people": [
     { "id": "p-yejun", "name": "조예준", "role": "mc", "note": "MC 겸 공연자" },
@@ -246,26 +271,37 @@ show
     "scenes": [
       { "id": "s-1", "type": "mc", "title": "", "cast": ["p-yejun"], "durationSec": null, "setup": "", "comments": [],
         "items": [
-          { "id": "i-1", "kind": "action", "speaker": null, "text": "(공연 시작)", "label": null, "comments": [],
+          { "id": "i-1", "kind": "cue", "speaker": null, "text": "", "label": null, "comments": [],
+            "trigger": { "type": "signal", "text": "하우스 음악 페이드 아웃 후" }, "offsetSec": null,
             "cues": [
-              { "id": "q-1", "dept": "light", "trigger": "하우스 페이드 아웃 후", "offsetSec": null, "note": "", "status": "set",
+              { "id": "q-1", "dept": "light", "note": "", "status": "set",
                 "light": { "looks": [], "channels": [
                   { "ch": "back", "action": "off", "dim": null, "color": null, "colorName": null, "timeSec": null },
                   { "ch": "top", "action": "off", "dim": null, "color": null, "colorName": null, "timeSec": null },
                   { "ch": "front", "action": "off", "dim": null, "color": null, "colorName": null, "timeSec": null },
                   { "ch": "house", "action": "off", "dim": null, "color": null, "colorName": null, "timeSec": null }
-                ], "anim": "" } },
-              { "id": "q-2", "dept": "sound", "trigger": "암전 후", "offsetSec": 7, "note": "", "status": "set",
+                ], "anim": "" } }
+            ] },
+          { "id": "i-2", "kind": "cue", "speaker": null, "text": "", "label": null, "comments": [],
+            "trigger": { "type": "cue", "cueId": "i-1", "mode": "after" }, "offsetSec": 7,
+            "cues": [
+              { "id": "q-2", "dept": "sound", "note": "", "status": "set",
                 "sound": { "track": 1, "action": "fadeOut", "timeSec": 3, "level": null } }
             ] },
-          { "id": "i-2", "kind": "line", "speaker": "p-yejun", "text": "소개합니다 박대훈", "label": null, "comments": [],
+          { "id": "i-3", "kind": "line", "speaker": "p-yejun", "text": "소개합니다 박대훈", "label": null, "cues": [], "comments": [] },
+          { "id": "i-4", "kind": "cue", "speaker": null, "text": "", "label": null, "comments": [],
+            "trigger": { "type": "line", "itemId": "i-3", "at": "end" }, "offsetSec": null,
             "cues": [
-              { "id": "q-3", "dept": "cast", "trigger": "멘트 후", "offsetSec": null, "note": "", "status": "set",
+              { "id": "q-3", "dept": "cast", "note": "", "status": "set",
                 "cast": { "people": [{ "personId": "p-daehoon", "move": "in" }] } },
-              { "id": "q-4", "dept": "stage", "trigger": "이 대사 즈음", "offsetSec": null, "note": "시점 리허설 때 확정", "status": "tbd",
-                "stage": { "props": [{ "propId": "pr-tophat", "action": "in", "at": "테이블 위" }] } },
-              { "id": "q-5", "dept": "light", "trigger": "멘트 후", "offsetSec": null, "note": "", "status": "set",
+              { "id": "q-5", "dept": "light", "note": "", "status": "set",
                 "light": { "looks": [{ "lookId": "lk-stage-a", "action": "on" }], "channels": [], "anim": "" } }
+            ] },
+          { "id": "i-5", "kind": "cue", "speaker": null, "text": "", "label": null, "comments": [],
+            "trigger": { "type": "line", "itemId": "i-3", "at": "start" }, "offsetSec": null,
+            "cues": [
+              { "id": "q-4", "dept": "stage", "note": "시점 리허설 때 확정", "status": "tbd",
+                "stage": { "props": [{ "propId": "pr-tophat", "action": "in", "at": "테이블 위" }] } }
             ] }
         ] },
       { "id": "s-2", "type": "act", "title": "멘탈", "cast": ["p-daehoon"], "durationSec": 180, "setup": "", "comments": [], "items": [] }

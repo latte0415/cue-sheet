@@ -53,10 +53,10 @@ function v11() {
 }
 const LOOK = { person: id => ({ 'p-a': '조예준' })[id] || '(삭제된 사람)', track: () => '', prop: () => '', light: id => (LIGHTS.find(l => l.id === id) || { name: '(삭제된 조명)' }).name };
 
-test('v11 형식: SHOW_VER 11, LOOK_ACTS 는 사이트와 같다', () => {
-  assert.equal(SHOW_VER, 11);
-  assert.equal(FE.SHOW_VER, 11);
-  assert.deepEqual(CONST.SHOW_VERS, [5, 6, 7, 8, 9, 10, 11]);
+test('v11 형식(지금은 v12 의 앞): SHOW_VER 12, LOOK_ACTS 는 사이트와 같다', () => {
+  assert.equal(SHOW_VER, 12);
+  assert.equal(FE.SHOW_VER, 12);
+  assert.deepEqual(CONST.SHOW_VERS, [5, 6, 7, 8, 9, 10, 11, 12]);
   assert.deepEqual(Object.keys(FE.LOOK_ACTS), CONST.LOOK_ACTS);
 });
 
@@ -67,7 +67,7 @@ test('migrate v10 → v11: lights: [] 와 조명 큐 looks: [] 만 붙고 채널
   const v10 = plain(FE.migrate(raw)); v10.version = 10; delete v10.lights;
   cues(v10).forEach(c => { if (c.dept === 'light') delete c.light.looks; });
   const m = plain(FE.migrate(v10));
-  assert.equal(m.version, 11);
+  assert.equal(m.version, 12);
   assert.deepEqual(m.lights, []);
   assert.deepEqual(Object.keys(m).slice(Object.keys(m).indexOf('people')), ['people', 'props', 'preShowProps', 'lights', 'tracks', 'parts']);
   const before = cues(v10).filter(c => c.dept === 'light'), after = cues(m).filter(c => c.dept === 'light');
@@ -78,8 +78,8 @@ test('migrate v10 → v11: lights: [] 와 조명 큐 looks: [] 만 붙고 채널
     assert.deepEqual(c.light.channels, before[k].light.channels, '채널은 바뀌지 않는다');
   });
   // 그 밖은 같다
-  const strip = s => { s = plain(s); delete s.version; delete s.lights; cues(s).forEach(c => { if (c.dept === 'light') delete c.light.looks; }); return s; };
-  assert.deepEqual(strip(m), strip(v10));
+  // 큐 id 는 그대로 (v12: 큐가 큐 문단으로 옮겨지는 것은 test/trigger.test.js)
+  assert.deepEqual(cues(m).map(c => c.id), cues(v10).map(c => c.id));
   // 검증: v10 원본도 v11 결과도 오류 없음
   assert.deepEqual(validateShow(v10).errors, []);
   assert.deepEqual(validateShow(m).errors, []);
@@ -181,7 +181,9 @@ test('MCP ops: 조명 큐 light.looks 통째 — 이름 대신 id, 같은 조명
     { op: 'add', kind: 'cue', parent: 'i-2', data: { dept: 'light', trigger: '박수', light: { looks: [{ lookId: 'lk-pin', action: 'off' }, { lookId: 'lk-a' }] } } },
     { op: 'set', id: 'q-4', fields: { light: { looks: [off('lk-b'), on('lk-a')] } } }
   ]);
-  const nc = items(r.show).find(i => i.id === 'i-2').cues[1];
+  // v12: 대사(i-2)에 붙이는 옛 방식은 그 대사 바로 뒤의 큐(트리거 = 신호 "박수")로
+  const nc = cues(r.show).find(c => c.dept === 'light' && c.light.looks.length === 2 && c.light.looks[0].lookId === 'lk-pin');
+  assert.equal(items(r.show).find(i => i.cues.includes(nc)).trigger.text, '박수');
   assert.deepEqual(nc.light, { looks: [off('lk-pin'), on('lk-a')], channels: [], anim: '' }, 'action 기본은 on, 채널은 빈 배열');
   assert.deepEqual(findCue(r.show, 'q-4').light, { looks: [off('lk-b'), on('lk-a')], channels: [ch('house', 'on')], anim: '' }, 'looks 만 바꾸면 채널은 그대로');
   const bad = (light, re) => assert.throws(() => applyOps(s, [{ op: 'set', id: 'q-1', fields: { light } }]), e => e.code === 'bad_field' && re.test(e.message), JSON.stringify(light));
@@ -205,7 +207,7 @@ test('MCP ops: v10 공연에 op 를 적용하면 v11 로 — lights: [] (preShow
   const s = v11(); s.version = 10; delete s.lights;
   cues(s).forEach(c => { c.light = { channels: [ch('front', 'on')], anim: '' }; });
   const r = applyOps(s, [{ op: 'set', kind: 'show', fields: { revision: 'v11' } }]);
-  assert.equal(r.show.version, 11);
+  assert.equal(r.show.version, 12);
   assert.deepEqual(Object.keys(r.show).slice(Object.keys(r.show).indexOf('people')), ['people', 'props', 'preShowProps', 'lights', 'tracks', 'parts']);
   cues(r.show).forEach(c => { assert.deepEqual(Object.keys(c.light), ['looks', 'channels', 'anim']); assert.deepEqual(c.light.channels, [ch('front', 'on')]); });
   // 사이트가 불러와도 같다

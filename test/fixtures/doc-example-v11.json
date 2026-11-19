@@ -1,0 +1,220 @@
+{
+  "title": "1부 (초안)",
+  "version": 11,
+  "preShowSetup": "탑햇테이블",
+  "people": [
+    {
+      "id": "p-yejun",
+      "name": "조예준",
+      "role": "mc",
+      "note": "MC 겸 공연자"
+    },
+    {
+      "id": "p-daehoon",
+      "name": "박대훈",
+      "role": "performer",
+      "note": ""
+    }
+  ],
+  "props": [
+    {
+      "id": "pr-tophat",
+      "name": "탑햇",
+      "note": ""
+    },
+    {
+      "id": "pr-table",
+      "name": "탑햇테이블",
+      "note": ""
+    }
+  ],
+  "preShowProps": [
+    {
+      "propId": "pr-table",
+      "at": "무대 중앙"
+    }
+  ],
+  "lights": [
+    {
+      "id": "lk-stage-a",
+      "name": "무대 A",
+      "note": "프론트 70 + 탑 블루, 리허설 11/12 확정"
+    }
+  ],
+  "tracks": [
+    {
+      "id": "tr-1",
+      "no": 1,
+      "title": "하우스 음악",
+      "durationSec": null,
+      "fileName": null,
+      "fileKey": null,
+      "note": "",
+      "loop": true
+    }
+  ],
+  "parts": [
+    {
+      "id": "pt-1",
+      "name": "1부",
+      "scenes": [
+        {
+          "id": "s-1",
+          "type": "mc",
+          "title": "",
+          "cast": [
+            "p-yejun"
+          ],
+          "durationSec": null,
+          "setup": "",
+          "comments": [],
+          "items": [
+            {
+              "id": "i-1",
+              "kind": "action",
+              "speaker": null,
+              "text": "(공연 시작)",
+              "label": null,
+              "comments": [],
+              "cues": [
+                {
+                  "id": "q-1",
+                  "dept": "light",
+                  "trigger": "하우스 페이드 아웃 후",
+                  "offsetSec": null,
+                  "note": "",
+                  "status": "set",
+                  "light": {
+                    "looks": [],
+                    "channels": [
+                      {
+                        "ch": "back",
+                        "action": "off",
+                        "dim": null,
+                        "color": null,
+                        "colorName": null,
+                        "timeSec": null
+                      },
+                      {
+                        "ch": "top",
+                        "action": "off",
+                        "dim": null,
+                        "color": null,
+                        "colorName": null,
+                        "timeSec": null
+                      },
+                      {
+                        "ch": "front",
+                        "action": "off",
+                        "dim": null,
+                        "color": null,
+                        "colorName": null,
+                        "timeSec": null
+                      },
+                      {
+                        "ch": "house",
+                        "action": "off",
+                        "dim": null,
+                        "color": null,
+                        "colorName": null,
+                        "timeSec": null
+                      }
+                    ],
+                    "anim": ""
+                  }
+                },
+                {
+                  "id": "q-2",
+                  "dept": "sound",
+                  "trigger": "암전 후",
+                  "offsetSec": 7,
+                  "note": "",
+                  "status": "set",
+                  "sound": {
+                    "track": 1,
+                    "action": "fadeOut",
+                    "timeSec": 3,
+                    "level": null
+                  }
+                }
+              ]
+            },
+            {
+              "id": "i-2",
+              "kind": "line",
+              "speaker": "p-yejun",
+              "text": "소개합니다 박대훈",
+              "label": null,
+              "comments": [],
+              "cues": [
+                {
+                  "id": "q-3",
+                  "dept": "cast",
+                  "trigger": "멘트 후",
+                  "offsetSec": null,
+                  "note": "",
+                  "status": "set",
+                  "cast": {
+                    "people": [
+                      {
+                        "personId": "p-daehoon",
+                        "move": "in"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "q-4",
+                  "dept": "stage",
+                  "trigger": "이 대사 즈음",
+                  "offsetSec": null,
+                  "note": "시점 리허설 때 확정",
+                  "status": "tbd",
+                  "stage": {
+                    "props": [
+                      {
+                        "propId": "pr-tophat",
+                        "action": "in",
+                        "at": "테이블 위"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "q-5",
+                  "dept": "light",
+                  "trigger": "멘트 후",
+                  "offsetSec": null,
+                  "note": "",
+                  "status": "set",
+                  "light": {
+                    "looks": [
+                      {
+                        "lookId": "lk-stage-a",
+                        "action": "on"
+                      }
+                    ],
+                    "channels": [],
+                    "anim": ""
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "s-2",
+          "type": "act",
+          "title": "멘탈",
+          "cast": [
+            "p-daehoon"
+          ],
+          "durationSec": 180,
+          "setup": "",
+          "comments": [],
+          "items": []
+        }
+      ]
+    }
+  ]
+}

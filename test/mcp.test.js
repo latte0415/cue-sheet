@@ -338,7 +338,7 @@ test('v10 출연 큐: edit_show 가 cast.people(여러 사람)과 옛 한 사람
     assert.ok(!r.isError, text(r));
     let g = await S.server.store.get(id);
     const at = s => s.parts.flatMap(p => p.scenes.flatMap(x => x.items.flatMap(i => i.cues))).find(q => q.id === cq.id);
-    assert.equal(g.show.version, 11);
+    assert.equal(g.show.version, 12);
     assert.deepEqual(at(g.show).cast, { people: [{ personId: 'p-taehyung', move: 'out' }] });
     // 여러 사람
     const people = [{ personId: 'p-yejun', move: 'in' }, { personId: 'p-taehyung', move: 'in' }, { personId: 'p-daehoon', move: 'out' }];
@@ -374,7 +374,7 @@ test('v11 이름 붙인 조명: edit_show 로 조명(kind:"look")을 등록하�
     ] } });
     assert.ok(!r.isError, text(r));
     const g = await S.server.store.get(id);
-    assert.equal(g.show.version, 11);
+    assert.equal(g.show.version, 12);
     assert.deepEqual(g.show.lights, [{ id: 'lk-a', name: '무대 A', note: '프론트 70 + 탑 블루' }, { id: 'lk-b', name: '엔딩 블루', note: '' }]);
     r = await c.callTool({ name: 'get_show', arguments: { showId: id } });
     assert.match(text(r), /^lights: lk-a=무대 A \(프론트 70 \+ 탑 블루\), lk-b=엔딩 블루$/m);

@@ -62,16 +62,19 @@ test('사이트: 큐를 끼우거나·지우거나·옮기거나·소수 번호�
 
 test('사이트: 불러오기·렌더(migrate·fillLabels)는 저장된 번호를 다시 매기지 않는다 — 빠진 번호가 있을 때만 채운다', () => {
   // 예전 규칙의 소수 번호가 남은 공연을 그대로 연다 → 번호 그대로 (열기만 해서 서버 이력에 변경이 생기지 않게)
-  const d = backstage(); d.parts[0].scenes[2].items.splice(0, 0, newCueItem('n2')); legacyDecimal(d);
+  // v12 파일 기준 (v11 이하는 큐가 큐 문단으로 옮겨지며 묶음이 나뉠 수 있어 불러올 때 다시 매긴다 — 아래)
+  const d = plain(FE.migrate(backstage())); d.parts[0].scenes[2].items.splice(0, 0, Object.assign(newCueItem('n2'), { kind: 'cue', text: '', trigger: { type: 'signal', text: '' }, offsetSec: null })); legacyDecimal(d);
   const want = cueLabels(d);
   const m = plain(FE.migrate(plain(d)));
   assert.deepEqual(cueLabels(m), want);
   assert.equal(FE.fillLabels(m), false);
   assert.deepEqual(cueLabels(m), want);
+  // v11 이하 파일은 큐 문단으로 옮기며 1부터 다시 매긴다 (저장할 때 서버 이력에 변경이 남는 것은 형식이 바뀌어서)
+  const o = backstage(); legacyDecimal(o); assert.equal(FE.labelsInOrder(plain(FE.migrate(o))), true);
   // 번호 없이 올린 파일(문서 예시처럼 label:null) → 화면용으로 1부터
   const md = fs.readFileSync(path.join(__dirname, '..', 'docs', 'cue-format.md'), 'utf8');
   const ex = JSON.parse(/```json\n([\s\S]*?)```/.exec(md)[1]);
-  assert.deepEqual(cueLabels(plain(FE.migrate(ex))), ['1', '2']);
+  assert.deepEqual(cueLabels(plain(FE.migrate(ex))), ['1', '2', '3', '4']); // v12 예시: 큐 넷
   // 샘플은 처음부터 연속
   assert.equal(FE.labelsInOrder(plain(FE.migrate(FE.sampleShow()))), true);
 });

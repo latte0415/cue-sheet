@@ -20,9 +20,12 @@ const plain = o => JSON.parse(JSON.stringify(o)); // vm 쪽 객체는 프로토�
 
 // 작은 공연 하나: show 와 entries(문서 순서)를 만들고 checkCollect 의 입력을 꾸린다
 let n = 0;
-const cue = (dept, body, extra) => Object.assign({ id: 'q' + (++n), dept, trigger: '대사 끝', offsetSec: null, memo: '', status: 'set', [dept]: body }, extra);
+const cue = (dept, body, extra) => Object.assign({ id: 'q' + (++n), dept, memo: '', status: 'set', [dept]: body }, extra);
 const castCue = (pid, move, extra) => cue('cast', { personId: pid, move, text: '' }, extra);
-const item = (cues, comments) => ({ id: 'i' + (++n), kind: 'action', text: '(지문)', cues: cues || [], comments: comments || [] });
+// v12: 동작이 있으면 큐 문단(트리거 = 신호, sig 가 '' 면 빈 신호), 없으면 지문
+const item = (cues, comments, sig) => cues && cues.length
+  ? { id: 'i' + (++n), kind: 'cue', text: '', trigger: { type: 'signal', text: sig == null ? '신호' : sig }, offsetSec: null, cues, comments: comments || [] }
+  : { id: 'i' + (++n), kind: 'action', text: '(지문)', cues: [], comments: comments || [] };
 const scene = (id, type, cast, items, comments) => ({ id, type, title: id, cast, items, comments: comments || [] });
 const people = { a: '박대훈', b: '조예준', c: '라태형' };
 function input(show, over) {
@@ -44,14 +47,14 @@ test('역할 필터: 부서는 자기 부서 + 공통, 공연자는 자기 IN/OU
       item([cue('light', { channels: [], anim: '' }, { status: 'tbd' }), cue('sound', { track: 1, action: 'play' }, { status: 'tbd' })]),
       item([castCue('a', 'in'), castCue('a', 'in')], [{ id: 'c1', author: '연출', text: '확인', resolved: false }])
     ]),
-    scene('s2', 'act', ['b'], [item([cue('stage', { text: '테이블', props: [] }, { trigger: '' })])], [{ id: 'c2', author: '연출', text: '씬 코멘트', resolved: false }]),
+    scene('s2', 'act', ['b'], [item([cue('stage', { text: '테이블', props: [] })], null, '')], [{ id: 'c2', author: '연출', text: '씬 코멘트', resolved: false }]),
     scene('s3', 'act', ['c'], [])
   ], { tracks: [{ id: 't1', no: 1, title: '음악', fileKey: null }] });
   const r = FE.checkCollect(input(s));
-  assert.deepEqual(keys(FE.checkFilter(r, 'all')), { cast: 1, tbd: 2, trig: 1, files: 1, empty: 1, cmt: 2 });
+  assert.deepEqual(keys(FE.checkFilter(r, 'all')), { cast: 1, tbd: 2, tsig: 1, files: 1, empty: 1, cmt: 2 });
   assert.deepEqual(keys(FE.checkFilter(r, 'light')), { tbd: 1, empty: 1, cmt: 2 });
   assert.deepEqual(keys(FE.checkFilter(r, 'sound')), { tbd: 1, files: 1, empty: 1, cmt: 2 });
-  assert.deepEqual(keys(FE.checkFilter(r, 'stage')), { trig: 1, empty: 1, cmt: 2 });
+  assert.deepEqual(keys(FE.checkFilter(r, 'stage')), { tsig: 1, empty: 1, cmt: 2 });
   // 박대훈(a): 자기 IN 반복 + s1 의 문단 코멘트. s2 씬 코멘트·s3 빈 액트는 남의 씬
   assert.deepEqual(keys(FE.checkFilter(r, 'p:a')), { cast: 1, cmt: 1 });
   assert.deepEqual(keys(FE.checkFilter(r, 'p:c')), { empty: 1 });
@@ -66,8 +69,9 @@ test('심각도: 막힘 → 확인 → 참고 순, 건수는 막힘+확인(참�
   assert.deepEqual(sev, [...sev].sort((x, y) => ['block', 'check', 'info'].indexOf(x) - ['block', 'check', 'info'].indexOf(y)));
   const bySev = k => FE.CK_GROUPS.find(g => g.k === k).sev;
   assert.deepEqual(plain(['track', 'light', 'cast', 'props'].map(bySev)), ['block', 'block', 'block', 'block']);
-  assert.deepEqual(['tbd', 'trig', 'noprops', 'files'].map(bySev), ['check', 'check', 'check', 'check']);
-  assert.deepEqual(['empty', 'cmt'].map(bySev), ['info', 'info']);
+  assert.deepEqual(['tbd', 'tsig', 'tconv', 'noprops', 'files'].map(bySev), ['check', 'check', 'check', 'check', 'check']);
+  assert.deepEqual(plain(['tline', 'tcue', 'tloop'].map(bySev)), ['block', 'block', 'block']);
+  assert.deepEqual(['tsug', 'empty', 'cmt'].map(bySev), ['info', 'info', 'info']);
   const s = showOf([
     scene('s1', 'act', [], [item([cue('light', { channels: [], anim: '' }), cue('sound', { track: 9, action: 'play' }, { status: 'tbd' })], [{ id: 'c', author: 'x', text: 'y', resolved: false }])]),
     scene('s2', 'act', [], [])
@@ -127,14 +131,15 @@ test('음원 묶기: "다음" 순서에서 파일 없는 트랙은 한 줄, 트�
 });
 
 test('실제 공연 데이터(backstage-part1): 씬 경계 IN 3건이 빠지고 역할별 건수가 갈린다', () => {
-  const show = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cues', 'backstage-part1.json'), 'utf8'));
+  // v9 파일 → v12 (사이트 migrate 와 같은 규칙의 lib/ops.js upgradeShow) — 큐가 큐 문단이 되어 트리거를 갖는다
+  const show = require('../lib/ops').upgradeShow(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cues', 'backstage-part1.json'), 'utf8')));
   const r = FE.checkCollect(input(show, { pname: id => (show.people.find(p => p.id === id) || {}).name, hasPerson: id => show.people.some(p => p.id === id) }));
   const all = FE.checkFilter(r, 'all');
   // 2026-11-18 배포본(rev 84) 기준: 미정은 조명 2(암전 7초 뒤 조명 On ×2) + 음향 1(하우스 음악 VOLUME "확인 필요").
   // 객석 조명 4개는 현장에서 확정(set)으로 바뀌어 빠졌다
-  assert.deepEqual(keys(all), { tbd: 3, files: 7, empty: 4, cmt: 1 });
+  assert.deepEqual(keys(all), { tbd: 3, files: 7, tsug: 14, empty: 4, cmt: 1 }); // v12: 옮긴 신호 중 앞 큐·대사를 가리키는 14개는 연결 제안(참고)
   assert.equal(all.total, 4);
-  assert.equal(all.info, 5);
+  assert.equal(all.info, 19);
   // 소품 8개를 등록하고 무대 큐 3개에 소품을 지정했다 — 소품 검사가 켜지고, 소품 미지정 무대 큐는 없다
   assert.equal(r.propsSkip, false);
   assert.deepEqual(plain(r.groups.find(g => g.k === 'noprops').list), []);
@@ -164,20 +169,39 @@ test('소품 미지정 무대 큐(v8): 확정 무대 큐에 소품이 없으면 
   assert.deepEqual(plain(r2.groups.find(x => x.k === 'noprops').list), []);
 });
 
-test('빈 문단에 붙은 큐: 큐 지점이 아닌 문단의 본문이 비었으면 "확인" 한 줄(문단마다) + 고치기 [큐 지점으로]', () => {
-  const blank = Object.assign(item([cue('light', { channels: [1], anim: '' }), cue('sound', { track: 1, action: 'play' })]), { text: '  ' });
-  const pt = Object.assign(item([cue('light', { channels: [1], anim: '' })]), { kind: 'cue', text: '' });
-  const noCue = Object.assign(item([]), { text: '' });
-  const s = showOf([scene('s1', 'act', ['a'], [item([cue('light', { channels: [1], anim: '' })]), blank, pt, noCue])], { tracks: [{ id: 't1', no: 1, title: '음악', fileKey: 'f' }] });
-  const r = FE.checkCollect(input(s));
-  const g = r.groups.find(x => x.k === 'emptyq');
-  assert.equal(g.sev, 'check');
-  assert.deepEqual(plain(g.list.map(x => [x.item, x.dept, x.fix])), [[blank.id, 'common', { item: blank.id }]], '큐 지점·큐 없는 빈 문단·본문 있는 문단은 아님');
-  assert.match(g.list[0].text, /빈 문단에 큐 2개 \(조명·음향\)/);
-  assert.match(g.note, /큐만 있는 문단으로/); // 화면 용어: 큐 지점 → 큐만 있는 문단
-  // 확인 건수에 들고, 모든 역할에 보인다(공통)
-  assert.equal(FE.checkFilter(r, 'all').total, 1);
-  assert.equal(keys(FE.checkFilter(r, 'stage')).emptyq, 1);
+test('트리거(v12): 끊긴 대사·앞 큐(막힘) · 고리(막힘, 한 고리 한 줄) · 빈 신호 · 신호로 바뀜(확인) · 연결 제안(참고)', () => {
+  const L = (id, text) => ({ id, kind: 'line', speaker: 'b', text, cues: [], comments: [] });
+  const dark = () => cue('light', { channels: [{ ch: 'top', action: 'off' }, { ch: 'back', action: 'off' }, { ch: 'front', action: 'off' }], anim: '' });
+  const Q = (id, trigger, cues) => ({ id, kind: 'cue', text: '', trigger, offsetSec: null, cues: cues || [cue('cast', { people: [{ personId: 'b', move: 'move' }] })], comments: [] });
+  const snd = () => cue('sound', { track: 1, action: 'play' });
+  const s = showOf([scene('s1', 'mc', ['b'], [
+    L('l1', '소개합니다 다음 공연자 라태형'),
+    Q('q1', { type: 'line', itemId: 'l1', at: 'end' }, [dark()]), // BLACKOUT
+    Q('q2', { type: 'line', itemId: 'gone', at: 'end' }, [cue('cast', { people: [{ personId: 'a', move: 'in' }] })]),
+    Q('q3', { type: 'cue', cueId: 'nope', mode: 'after' }),
+    Q('q4', { type: 'cue', cueId: 'q5', mode: 'after' }), Q('q5', { type: 'cue', cueId: 'q6', mode: 'after' }), Q('q6', { type: 'cue', cueId: 'q4', mode: 'with' }),
+    Q('q7', { type: 'signal', text: '' }),
+    Q('q8', { type: 'signal', text: '조예준 “…라태형” 후', converted: 'line' }),
+    Q('q9', { type: 'signal', text: '암전 후' }, [snd()]),
+    Q('q10', { type: 'signal', text: "'다음 공연자' 후" }, [snd()]),
+    Q('q11', { type: 'signal', text: '박수 끝' }, [snd()])
+  ])], { tracks: [{ id: 't1', no: 1, title: '음악', fileKey: 'f' }] });
+  const r = FE.checkCollect(input(s, { cueRef: it => 'REF(' + it.id + ')', lineRef: it => 'LINE(' + it.id + ')' }));
+  const g = k => plain(r.groups.find(x => x.k === k).list);
+  assert.deepEqual(g('tline').map(x => x.item), ['q2']);
+  assert.equal(g('tline')[0].dept, 'cast', '역할 필터는 큐의 동작 부서'); assert.equal(g('tline')[0].person, 'a');
+  assert.deepEqual(g('tcue').map(x => x.item), ['q3']);
+  assert.deepEqual(g('tloop').map(x => x.text), ['Q4 → Q5 → Q6 → Q4 — 서로 앞 큐를 기다림']);
+  assert.deepEqual(g('tsig').map(x => x.item), ['q7']);
+  assert.deepEqual(g('tconv').map(x => [x.item, x.fixes.map(f => f.act)]), [['q8', ['ck-keep', 'ck-trig']]]);
+  assert.match(g('tconv')[0].text, /트리거 대사가 지워져 신호로 바뀜 “조예준 “…라태형” 후”/);
+  assert.deepEqual(g('tsug').map(x => [x.item, x.fixes[0].sug]), [['q9', { type: 'cue', cueId: 'q1', mode: 'after' }], ['q10', { type: 'line', itemId: 'l1', at: 'end' }]]);
+  assert.match(g('tsug')[0].text, /“암전 후” → REF\(q1\) 후/);
+  assert.match(g('tsug')[1].text, /→ LINE\(l1\) 끝에/);
+  const v = FE.checkFilter(r, 'all');
+  assert.equal(v.block, 3); // 끊긴 대사 · 끊긴 앞 큐 · 고리 하나(한 줄)
+  assert.equal(keys(FE.checkFilter(r, 'sound')).tsug, 2, '연결 제안은 그 큐의 부서에');
+  assert.equal(keys(FE.checkFilter(r, 'light')).tsug, undefined);
 });
 
 // v10: 한 큐에 여러 사람 — 인/아웃 연속성·출연 명단은 사람마다 따로, 공연자 시점에서는 그 큐의 모든 사람에게 보인다
@@ -199,11 +223,11 @@ test('여러 사람 출연 큐(v10): 인/아웃 반복·출연 명단은 사람�
   const cl = plain(r.groups.find(g => g.k === 'castlist').list);
   assert.deepEqual(cl.map(x => [x.person, x.fix && x.fix.person]), [['c', 'c']], 'c 의 IN 만 — MOVE 는 명단을 보지 않는다');
   // 미정·트리거 같은 큐 단위 항목은 큐의 모든 사람의 공연자 시점에 보인다
-  const t = showOf([scene('s1', 'act', ['a', 'b'], [item([multi([['a', 'in'], ['b', 'in']], { status: 'tbd', trigger: '' })])])]);
+  const t = showOf([scene('s1', 'act', ['a', 'b'], [item([multi([['a', 'in'], ['b', 'in']], { status: 'tbd' })], null, '')])]);
   const rt = FE.checkCollect(input(t));
   const tbd = plain(rt.groups.find(g => g.k === 'tbd').list[0]);
   assert.deepEqual([tbd.person, tbd.people], ['a', ['a', 'b']]);
-  assert.deepEqual(keys(FE.checkFilter(rt, 'p:a')), { tbd: 1, trig: 1 });
-  assert.deepEqual(keys(FE.checkFilter(rt, 'p:b')), { tbd: 1, trig: 1 }, '둘째 사람도 자기 큐로 본다');
+  assert.deepEqual(keys(FE.checkFilter(rt, 'p:a')), { tbd: 1, tsig: 1 });
+  assert.deepEqual(keys(FE.checkFilter(rt, 'p:b')), { tbd: 1, tsig: 1 }, '둘째 사람도 자기 큐로 본다');
   assert.deepEqual(keys(FE.checkFilter(rt, 'p:c')), {});
 });

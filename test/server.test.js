@@ -356,7 +356,7 @@ test('옛 화면 차단 (v10): 여러 사람 출연 큐가 있는 v10 저장본�
 });
 
 test('옛 화면 차단 (v11): 이름 붙인 조명이 있는 v11 저장본에 v10 화면(lights·looks 를 모름)이 저장하면 426, 조명은 그대로', async () => {
-  assert.equal(SHOW_VER, 11);
+  assert.equal(SHOW_VER, 12);
   const lights = [{ id: 'lk-a', name: '무대 A', note: '프론트 70 + 탑 블루' }, { id: 'lk-b', name: '엔딩 블루', note: '' }];
   const lq = light => ({ id: 'q1', dept: 'light', trigger: '', offsetSec: null, note: '', status: 'set', light });
   const v = (title, version, light, extra) => show(title, Object.assign({ version, people: [], props: [], preShowProps: [], tracks: [],
@@ -365,13 +365,31 @@ test('옛 화면 차단 (v11): 이름 붙인 조명이 있는 v11 저장본에 v
   const { id } = await (await fetch(S.base + '/api/shows', J('POST', { show: v('교대', 11, swap, { lights }) }))).json();
   let r = await fetch(`${S.base}/api/shows/${id}`, J('PUT', { baseRev: 1, show: v('v10 화면', 10, { channels: [], anim: '' }) }));
   assert.equal(r.status, 426);
-  assert.deepEqual(await r.json().then(x => [x.error, x.version, x.schema]), ['client_outdated', 11, 11]);
+  assert.deepEqual(await r.json().then(x => [x.error, x.version, x.schema]), ['client_outdated', 11, 12]);
   const g = await (await fetch(`${S.base}/api/shows/${id}`)).json();
   assert.deepEqual([g.show.lights, g.show.parts[0].scenes[0].items[0].cues[0].light], [lights, swap]);
   r = await fetch(`${S.base}/api/shows/${id}`, J('PUT', { baseRev: 1, show: v('v11 화면', 11, swap, { lights: lights.slice(0, 2) }) }));
   assert.equal(r.status, 200);
-  // health 의 schema 도 11 — 열어 둔 v10 화면은 새로고침을 요구받는다
-  assert.equal((await (await fetch(S.base + '/api/health')).json()).schema, 11);
+  // health 의 schema 는 지금 형식(12) — 열어 둔 옛 화면은 새로고침을 요구받는다
+  assert.equal((await (await fetch(S.base + '/api/health')).json()).schema, 12);
+});
+
+test('옛 화면 차단 (v12): 트리거가 있는 v12 저장본에 v11 화면(큐가 문단에 붙던 화면)이 저장하면 426, 큐는 그대로', async () => {
+  const v12 = title => show(title, { version: 12, people: [], props: [], preShowProps: [], lights: [], tracks: [],
+    parts: [{ id: 'pt1', name: '1부', scenes: [{ id: 's1', items: [
+      { id: 'i1', kind: 'line', speaker: null, text: '소개합니다', label: null, isCue: false, cues: [], comments: [] },
+      { id: 'i2', kind: 'cue', speaker: null, text: '', label: '1', isCue: true, trigger: { type: 'line', itemId: 'i1', at: 'end' }, offsetSec: null, cues: [{ id: 'q1', dept: 'stage', note: '', status: 'tbd', stage: { props: [] } }], comments: [] }
+    ] }] }] });
+  const v11 = title => show(title, { version: 11, people: [], props: [], preShowProps: [], lights: [], tracks: [],
+    parts: [{ id: 'pt1', name: '1부', scenes: [{ id: 's1', items: [{ id: 'i1', kind: 'line', text: '소개합니다', cues: [{ id: 'q1', dept: 'stage', trigger: '대사 끝', offsetSec: null, note: '', status: 'tbd', stage: { props: [] } }] }] }] }] });
+  const { id } = await (await fetch(S.base + '/api/shows', J('POST', { show: v12('v12') }))).json();
+  let r = await fetch(`${S.base}/api/shows/${id}`, J('PUT', { baseRev: 1, show: v11('v11 화면') }));
+  assert.equal(r.status, 426);
+  assert.deepEqual(await r.json().then(x => [x.error, x.version, x.schema]), ['client_outdated', 12, 12]);
+  const g = await (await fetch(`${S.base}/api/shows/${id}`)).json();
+  assert.deepEqual(g.show.parts[0].scenes[0].items[1].trigger, { type: 'line', itemId: 'i1', at: 'end' });
+  r = await fetch(`${S.base}/api/shows/${id}`, J('PUT', { baseRev: 1, show: v12('v12 화면') }));
+  assert.equal(r.status, 200);
 });
 
 test('옛 화면 차단: POST·복제는 기존 저장본을 덮어쓰지 않고, 복제는 version 을 그대로 둔다', async () => {
@@ -396,7 +414,7 @@ test('옛 화면 차단: MCP edit_show 는 version 을 낮추지 않는다 (v6 �
   let res = await call({ showId: id, ops: [{ op: 'set', id: 'i1', fields: { text: '(MCP 가 고침)' } }] }, 1);
   assert.ok(!res.isError, JSON.stringify(res));
   let g = await (await fetch(`${S.base}/api/shows/${id}`)).json();
-  assert.deepEqual([g.rev, g.show.version, g.show.props.length, g.show.preShowProps.length, g.show.parts[0].scenes[0].items[0].cues[0].stage.props.length], [2, SHOW_VER, 1, 1, 1]);
+  assert.deepEqual([g.rev, g.show.version, g.show.props.length, g.show.preShowProps.length, g.show.parts[0].scenes[0].items.flatMap(i => i.cues)[0].stage.props.length], [2, SHOW_VER, 1, 1, 1]); // v12: 큐는 문단 바로 뒤 큐 문단으로
   const { id: id5 } = await (await fetch(S.base + '/api/shows', J('POST', { show: show('MCP v5') }))).json();
   res = await call({ showId: id5, ops: [{ op: 'set', kind: 'show', fields: { title: 'MCP v5 → v6' } }] }, 2);
   assert.ok(!res.isError, JSON.stringify(res));

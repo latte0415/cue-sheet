@@ -9,8 +9,11 @@ const { fillLabels } = require('../lib/labels');
 
 // 실공연 v5 원본의 고정 사본(test/fixtures) — v5→v8 업그레이드와 원본 id 를 직접 쓰는 테스트가 있다. cues/ 의 현재 데이터는 정리되며 바뀐다
 const backstage = () => JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'backstage-part1-v5.json'), 'utf8'));
-// 문서 예시는 label 이 null — 사이트에 한 번 올라간 상태처럼 번호(1, 2)를 매겨 둔다
-const docExample = () => { const s = JSON.parse(/```json\n([\s\S]*?)```/.exec(fs.readFileSync(path.join(__dirname, '..', 'docs', 'cue-format.md'), 'utf8'))[1]); fillLabels(s); return s; };
+// v11 문서 예시의 고정 사본(test/fixtures/doc-example-v11.json — 문단에 붙은 큐). label 이 null — 사이트에 한 번 올라간 상태처럼 번호(1, 2)를 매겨 둔다.
+// op 를 적용하면 v12 로 올라가 i-1 → i-1 + i-1-q(q-1) + i-1-q2(q-2, 암전 후 +7), i-2 → i-2 + i-2-q(q-3 · q-5, 대사 끝) + i-2-q2(q-4, 대사 끝)
+const docExample = () => { const s = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'doc-example-v11.json'), 'utf8')); fillLabels(s); return s; };
+const addedCue = r => { const c = r.changes.filter(x => x.op === 'add' && x.kind === 'cue').at(-1); return c && find(r.show, c.id); };
+const inOrderOf = sh => { const q = items(sh).filter(i => i.cues.length); return q.every((i, k) => i.label === String(k + 1)) && items(sh).filter(i => !i.cues.length).every(i => i.label == null); };
 const items = s => s.parts.flatMap(p => p.scenes.flatMap(sc => sc.items));
 const find = (s, id) => {
   for (const p of s.parts) for (const sc of p.scenes) {
@@ -84,11 +87,11 @@ test('음향 level: play 시작 볼륨·fadeIn 도착 볼륨은 남고, stop·fa
   // v8 공연에 op 를 적용하면 v9 로 — 모양은 그대로, version 만
   const v8 = docExample(); v8.version = 8;
   r = applyOps(v8, [{ op: 'set', id: 'q-2', fields: { sound: { action: 'play', level: 50 } } }]);
-  assert.equal(r.show.version, 11);
+  assert.equal(r.show.version, 12);
   assert.equal(find(r.show, 'q-2').sound.level, 50);
   // 새 큐로 만들어도 같다
   r = applyOps(s, [{ op: 'add', kind: 'cue', parent: 'i-1', data: { dept: 'sound', sound: { track: 1, action: 'play', level: 50 } } }]);
-  assert.equal(find(r.show, 'i-1').cues.at(-1).sound.level, 50);
+  assert.equal(addedCue(r).sound.level, 50);
 });
 
 test('set: 모르는 필드·id·label·잘못된 값은 거부하고 이유를 말한다', () => {
@@ -130,7 +133,7 @@ test('코멘트 snapshot(사이트가 남기는 코멘트 당시 문단)은 op �
   ]);
   const c = r.show.parts[0].scenes[0].items[0].comments[0];
   assert.equal(c.text, '확인 (수정)');
-  assert.deepEqual(c.snapshot, snapshot);
+  assert.deepEqual(c.snapshot, Object.assign({}, snapshot, { cues: [] }), 'v12: 글 문단의 snapshot 에는 큐가 없다(옛 큐는 버린다) — 나머지는 그대로');
   assert.deepEqual(validateShow(r.show).errors, []);
   rejects(() => applyOps(s, [{ op: 'set', id: 'c-snap', fields: { snapshot: null } }]), 'bad_field', /unknown field "snapshot"/);
 });
@@ -146,32 +149,40 @@ test('add: 브라우저와 같은 id 접두어·기본값, 자식 포함, 위치
     { op: 'add', kind: 'scene', parent: 'pt-1', data: { type: 'act', title: '링앤로프', items: [{ text: '(링 세팅)' }, { kind: 'line', speaker: 'p-yejun', text: '박수!', cues: [{ dept: 'cast', cast: { personId: 'p-daehoon', move: 'out' } }] }] } },
     { op: 'add', kind: 'comment', parent: 'i-1', data: { author: '조명', text: '페이드 시간 확인' } }
   ]);
-  const sc = r.show.parts[0].scenes[0];
-  assert.deepEqual(sc.items.map(i => i.text), ['(하우스 오픈)', '(공연 시작)', '(탑햇 세팅)', '소개합니다 박대훈'], 'first/after 위치, action 은 괄호');
-  const [opened, , mid] = sc.items;
-  assert.match(opened.id, /^i-[a-z0-9]+$/); assert.match(opened.cues[0].id, /^q-/);
+  const sc = r.show.parts[0].scenes[0], texts = sc.items.filter(i => i.kind !== 'cue');
+  assert.deepEqual(texts.map(i => i.text), ['(하우스 오픈)', '(공연 시작)', '(탑햇 세팅)', '소개합니다 박대훈'], 'first/after 위치, action 은 괄호');
+  const [opened, , mid] = texts;
+  // 옛 방식(cues 를 가진 대사·지문)은 그 문단 바로 뒤의 큐 문단으로 — 트리거 = 그 문단 끝 (트리거 글이 비었으니)
+  const openedQ = sc.items[sc.items.indexOf(opened) + 1], midQ = sc.items[sc.items.indexOf(mid) + 1];
+  assert.match(opened.id, /^i-[a-z0-9]+$/); assert.match(openedQ.cues[0].id, /^q-/); assert.match(openedQ.id, /^i-/);
   assert.deepEqual(Object.keys(mid), ['id', 'kind', 'speaker', 'text', 'label', 'isCue', 'cues', 'comments']);
   assert.equal(mid.kind, 'action', '"(" 로 시작하면 action');
-  assert.equal(mid.isCue, true);
-  assert.deepEqual(mid.cues[0], { id: mid.cues[0].id, dept: 'stage', trigger: '', offsetSec: null, note: '탑햇테이블에', status: 'set', stage: { props: [{ propId: 'pr-tophat', action: 'in', at: '' }] } }); // saveCue 와 같은 v8 모양
-  // 번호: 늘 1부터 연속 — 맨 앞·사이에 끼운 큐 문단 때문에 뒤 번호가 밀린다 (i-1: 1→2, i-2: 2→4)
-  assert.deepEqual(items(r.show).map(i => i.label), ['1', '2', '3', '4', null, '5']);
-  assert.deepEqual(r.labels.map(l => [l.was, l.label]).sort(), [[null, '1'], [null, '3'], [null, '5'], ['1', '2'], ['2', '4']]);
-  assert.equal(sc.items[3].cues[3].light.channels[0].action, 'on', '채널 기본값');
-  assert.deepEqual(sc.items[3].cues[3].light.looks, [], 'v11: 채널만 준 조명 큐도 looks 는 빈 배열');
+  assert.deepEqual([mid.isCue, mid.cues, mid.label], [false, [], null]);
+  assert.deepEqual(Object.keys(midQ), ['id', 'kind', 'speaker', 'text', 'label', 'isCue', 'trigger', 'offsetSec', 'cues', 'comments']);
+  assert.deepEqual(midQ.trigger, { type: 'line', itemId: mid.id, at: 'end' });
+  assert.deepEqual(midQ.cues[0], { id: midQ.cues[0].id, dept: 'stage', note: '탑햇테이블에', status: 'set', stage: { props: [{ propId: 'pr-tophat', action: 'in', at: '' }] } }); // saveCue 와 같은 v12 모양
+  assert.ok(r.warnings.some(w => /legacy: cues on paragraph/.test(w.msg)));
+  // 번호: 늘 1부터 연속 (큐 문단만)
+  assert.ok(inOrderOf(r.show));
+  assert.equal(r.labels.filter(l => l.was == null).length, 3, '새 큐 셋에 번호');
+  // "멘트 후" 를 대사 i-2 에 → 대사 끝 큐(i-2-q) 와 같은 트리거라 거기에 합친다
+  const lc = addedCue(r) && items(r.show).flatMap(i => i.cues).find(c => c.dept === 'light' && c.light.channels[0] && c.light.channels[0].ch === 'top');
+  assert.equal(lc.light.channels[0].action, 'on', '채널 기본값');
+  assert.deepEqual(lc.light.looks, [], 'v11: 채널만 준 조명 큐도 looks 는 빈 배열');
+  assert.ok(find(r.show, 'i-2-q').cues.includes(lc));
   const p = r.show.people[2];
   assert.match(p.id, /^p-/); assert.deepEqual([p.name, p.role, p.note], ['라태형', 'performer', '']);
   const t = r.show.tracks[1];
   assert.match(t.id, /^tr-/); assert.equal(t.no, 2, '다음 번호'); assert.equal(t.fileKey, null); assert.equal(t.loop, false);
   const ns = r.show.parts[0].scenes[2];
-  assert.match(ns.id, /^s-/); assert.equal(ns.items.length, 2); assert.deepEqual(ns.items[1].cues[0].cast, { people: [{ personId: 'p-daehoon', move: 'out' }] });
-  const cm = sc.items[1].comments[0];
+  assert.match(ns.id, /^s-/); assert.equal(ns.items.length, 3); assert.deepEqual(ns.items[2].cues[0].cast, { people: [{ personId: 'p-daehoon', move: 'out' }] });
+  const cm = find(r.show, 'i-1').comments[0];
   assert.match(cm.id, /^c-/); assert.equal(cm.author, '조명'); assert.equal(cm.resolved, false); assert.ok(!isNaN(Date.parse(cm.createdAt)));
   assert.deepEqual(validateShow(r.show).errors, []);
   // 바뀐 내용 요약
   assert.ok(r.changes.some(c => c.op === 'label' && c.label === '1' && c.was == null));
-  assert.ok(r.changes.some(c => c.op === 'label' && c.id === 'i-2' && c.was === '2' && c.label === '4' && /Q2 → Q4/.test(c.text)));
-  assert.ok(r.changes.some(c => c.op === 'add' && c.kind === 'scene' && /2 items, 1 cues/.test(c.text)));
+  assert.ok(r.changes.some(c => c.op === 'label' && c.id === 'i-2-q' && /renumbered Q3 → Q\d/.test(c.text)), JSON.stringify(r.changes.filter(c => c.op === 'label')));
+  assert.ok(r.changes.some(c => c.op === 'add' && c.kind === 'scene' && /3 items, 1 cues/.test(c.text)));
 });
 
 test('add: 같은 호출 안에서 data.id 로 만든 항목을 이어서 가리킬 수 있다', () => {
@@ -179,7 +190,7 @@ test('add: 같은 호출 안에서 data.id 로 만든 항목을 이어서 가리
     { op: 'add', kind: 'item', parent: 's-2', data: { id: 'i-new', text: '(카드 세팅)' } },
     { op: 'add', kind: 'cue', parent: 'i-new', data: { dept: 'stage', stage: { props: [{ propId: 'pr-table', action: 'clean' }] } } }
   ]);
-  assert.equal(find(r.show, 'i-new').label, '3');
+  assert.equal(items(r.show).find(i => i.kind === 'cue' && i.trigger.itemId === 'i-new').label, '5', '대사에 단 큐(옛 방식) → 그 대사 끝이 트리거인 새 큐');
   rejects(() => applyOps(docExample(), [{ op: 'add', kind: 'item', parent: 's-2', data: { id: 'i-1' } }]), 'bad_field', /already used/);
   rejects(() => applyOps(docExample(), [{ op: 'add', kind: 'cue', parent: 'i-1', data: { trigger: 'x' } }]), 'bad_field', /needs "dept"/);
   rejects(() => applyOps(docExample(), [{ op: 'add', kind: 'item', data: { text: 'x' } }]), 'bad_op', /"parent" is required/);
@@ -187,7 +198,7 @@ test('add: 같은 호출 안에서 data.id 로 만든 항목을 이어서 가리
   rejects(() => applyOps(docExample(), [{ op: 'add', kind: 'item', parent: 's-1', after: 'i-zz', data: {} }]), 'not_found', /after "i-zz"/);
   // after 가 형제면 parent 생략 가능
   const r2 = applyOps(docExample(), [{ op: 'add', kind: 'item', after: 'i-1', data: { kind: 'line', speaker: 'p-yejun', text: '자!' } }]);
-  assert.deepEqual(r2.show.parts[0].scenes[0].items.map(i => i.text), ['(공연 시작)', '자!', '소개합니다 박대훈']);
+  assert.deepEqual(r2.show.parts[0].scenes[0].items.filter(i => i.kind !== 'cue').map(i => i.text), ['(공연 시작)', '자!', '소개합니다 박대훈']);
 });
 
 test('원자성: 뒤 op 가 실패하면 앞 op 도 반영되지 않는다 (검증 오류 포함)', () => {
@@ -235,15 +246,16 @@ test('remove: 참조 중인 사람·트랙은 거부(목록 포함), force 면 �
   // 안 쓰이는 사람은 그냥 지워진다
   const r3 = applyOps(s, [{ op: 'remove', id: 'q-3' }, { op: 'set', id: 's-2', fields: { cast: [] } }, { op: 'remove', id: 'p-daehoon', kind: 'person' }]);
   assert.equal(r3.show.people.length, 1);
-  assert.equal(find(r3.show, 'i-2').cues.length, 2);
+  assert.deepEqual(find(r3.show, 'i-2-q').cues.map(c => c.id), ['q-5']);
 });
 
 test('remove: 문단·큐·씬 — 큐를 다 지우면 isCue false, 번호도 없어지고 뒤 번호가 당겨진다', () => {
   const r = applyOps(docExample(), [{ op: 'remove', id: 'q-1' }, { op: 'remove', id: 'q-2', kind: 'cue' }]);
   const it = find(r.show, 'i-1');
   assert.deepEqual([it.cues.length, it.isCue, it.label], [0, false, null]);
-  assert.equal(find(r.show, 'i-2').label, '1');
-  assert.ok(r.changes.some(c => c.op === 'label' && c.id === 'i-1' && c.label === null && /cleared/.test(c.text)));
+  assert.equal(find(r.show, 'i-1-q'), null, '동작이 0개가 된 큐는 사라진다');
+  assert.equal(find(r.show, 'i-2-q').label, '1');
+  assert.ok(r.changes.some(c => /removed empty cue item i-1-q2/.test(c.text)));
   const r2 = applyOps(docExample(), [{ op: 'remove', id: 's-2' }]);
   assert.equal(r2.show.parts[0].scenes.length, 1);
 });
@@ -264,14 +276,15 @@ test('move: 순서 바꾸기, 다른 부모로, 큐를 다른 문단으로', () 
   r = applyOps(s, [{ op: 'move', id: it.id, parent: sc[2].id, after: 'first' }]);
   assert.equal(r.show.parts[0].scenes[2].items[0].id, it.id);
   assert.ok(inOrder(r.show));
-  // 큐를 큐 없는 문단으로 → 원래 문단은 isCue false·번호 없음, 번호는 1부터 연속 (소수 없음)
-  const src = items(s).find(i => i.cues.length === 1);
-  const plainItem = items(s).find(i => !i.cues.length && i.label == null);
-  r = applyOps(s, [{ op: 'move', id: src.cues[0].id, parent: plainItem.id }]);
-  const moved = find(r.show, plainItem.id);
-  assert.equal(moved.cues.length, 1); assert.equal(moved.isCue, true); assert.match(moved.label, /^\d+$/);
-  assert.equal(find(r.show, src.id).isCue, false); assert.equal(find(r.show, src.id).label, null);
+  // 동작을 다른 큐로 → 비은 큐는 사라지고 번호는 1부터 연속 (소수 없음). 대사(글 문단)로는 옮길 수 없다(v12)
+  const up = require('../lib/ops').upgradeShow(JSON.parse(JSON.stringify(s)));
+  const qs = items(up).filter(i => i.kind === 'cue');
+  const src = qs.find(i => i.cues.length === 1), dst = qs.find(i => i !== src && i.trigger.type === 'signal');
+  r = applyOps(s, [{ op: 'move', id: src.cues[0].id, parent: dst.id }]);
+  assert.equal(find(r.show, dst.id).cues.length, dst.cues.length + 1);
+  assert.equal(find(r.show, src.id), null);
   assert.ok(inOrder(r.show));
+  rejects(() => applyOps(s, [{ op: 'move', id: src.cues[0].id, parent: items(up).find(i => i.kind === 'line').id }]), 'bad_op', /actions live in cue items/);
   assert.deepEqual(validateShow(r.show).errors, []);
   rejects(() => applyOps(s, [{ op: 'move', id: it.id, parent: s.parts[0].id }]), 'not_found', /is a part, not a scene/);
   rejects(() => applyOps(s, [{ op: 'move', id: 'tr-1', after: 'first' }]), 'bad_op', /ordered by "no"/);
@@ -288,7 +301,7 @@ test('이미 있던 오류는 막지 않는다 (사이트에서 사람을 지워
 });
 
 test('큰 공연(backstage-part1) 전체에 여러 op — 결과 검증 통과, 경고 없음', () => {
-  const s = backstage();
+  const s = require('../lib/ops').upgradeShow(backstage()); // v12 로 올린 뒤 고른다 (큐는 큐 문단)
   // 픽스처에서 고른다: 번호 붙은 큐 문단(뒤에도 번호 붙은 문단이 있는 것) 하나와, 화자 있는 대사 하나
   const all = s.parts.flatMap(p => p.scenes.flatMap(sc => sc.items.map(it => ({ sc, it }))));
   const labeled = all.filter(x => x.it.label != null && x.it.cues.length);
@@ -296,7 +309,8 @@ test('큰 공연(backstage-part1) 전체에 여러 op — 결과 검증 통과, 
   const line = all.find(x => x.it.kind === 'line' && x.it.speaker);
   const r = applyOps(s, [
     { op: 'add', kind: 'prop', data: { id: 'pr-table', name: '테이블' } },
-    { op: 'add', kind: 'item', parent: at.sc.id, after: at.it.id, data: { text: '(관객이 박수 치는 동안)', cues: [{ dept: 'stage', stage: { props: [{ propId: 'pr-table' }] } }] } },
+    { op: 'add', kind: 'item', parent: at.sc.id, after: at.it.id, data: { id: 'i-clap', text: '(관객이 박수 치는 동안)' } },
+    { op: 'add', kind: 'item', after: 'i-clap', data: { kind: 'cue', trigger: { type: 'line', itemId: 'i-clap' }, cues: [{ dept: 'stage', stage: { props: [{ propId: 'pr-table' }] } }] } },
     { op: 'set', id: line.it.id, fields: { text: line.it.text + '!' } },
     { op: 'add', kind: 'comment', parent: at.sc.id, data: { author: '연출', text: '전환 시간 확인' } }
   ]);
@@ -393,7 +407,7 @@ test('v6: 관계없는 op 를 적용해도 props·preShowProps·stage.props 는 
     { op: 'add', kind: 'person', data: { name: '스태프', role: 'stage' } }
   ]);
   assert.equal(JSON.stringify(s), before, '입력은 그대로');
-  assert.equal(r.show.version, 11);
+  assert.equal(r.show.version, 12);
   assert.deepEqual(r.show.props, s.props);
   assert.deepEqual(r.show.preShowProps, s.preShowProps);
   assert.deepEqual(find(r.show, 'q-4').stage, { props: [{ propId: 'pr-tophat', action: 'in', at: '테이블 위' }] });
@@ -407,14 +421,14 @@ test('v8: v5 공연은 migrate 처럼 v8 로 — 빈 props·preShowProps, 무대
   assert.equal(s.version, 5);
   const stageBefore = items(s).flatMap(i => i.cues).filter(c => c.dept === 'stage').map(c => c.stage.text);
   const r = applyOps(s, [{ op: 'set', kind: 'show', fields: { revision: 'v6 테스트' } }]);
-  assert.equal(r.show.version, 11);
+  assert.equal(r.show.version, 12);
   assert.deepEqual(r.show.props, []);
   assert.deepEqual(r.show.preShowProps, []);
   assert.deepEqual(Object.keys(r.show).slice(Object.keys(r.show).indexOf('people')), ['people', 'props', 'preShowProps', 'lights', 'tracks', 'parts'], 'migrate 와 같은 키 순서');
   const st = items(r.show).flatMap(i => i.cues).filter(c => c.dept === 'stage');
   assert.deepEqual(st.map(c => c.note), stageBefore);
   assert.ok(st.length && st.every(c => Array.isArray(c.stage.props) && !c.stage.props.length && !('text' in c.stage)));
-  assert.ok(items(r.show).flatMap(i => i.cues).every(c => !('memo' in c) && typeof c.note === 'string' && Object.keys(c).indexOf('note') === 4), 'memo 없음, note 는 migrate 와 같은 자리');
+  assert.ok(items(r.show).flatMap(i => i.cues).every(c => !('memo' in c) && typeof c.note === 'string' && Object.keys(c).indexOf('note') === 2), 'memo 없음, note 는 migrate 와 같은 자리 (v12: 부서 큐에 trigger · offsetSec 없음)');
   assert.deepEqual(r.warnings, []);
 });
 
@@ -443,9 +457,9 @@ test('v6: set 으로 stage.props 통째 교체 — 빠진 필드는 기본값, �
   rejects(() => applyOps(s, [{ op: 'set', id: 'q-4', fields: { stage: { props: { propId: 'pr-table' } } } }]), 'bad_field', /"stage\.props" must be an array/);
   // 새 무대 큐 기본값은 브라우저 saveCue 와 같다
   r = applyOps(s, [{ op: 'add', kind: 'cue', parent: 'i-1', data: { dept: 'stage', stage: { props: [{ propId: 'pr-table', action: 'move', at: '왼쪽' }] } } }]);
-  const q = find(r.show, 'i-1').cues.at(-1);
+  const q = addedCue(r);
   assert.deepEqual(q.stage, { props: [{ propId: 'pr-table', action: 'move', at: '왼쪽' }] });
-  assert.deepEqual(r.warnings, []);
+  assert.deepEqual(r.warnings.map(w => w.msg.replace(/i-[a-z0-9]+\b/g, 'ID')), ['legacy: cue added to paragraph ID — put in cue item ID (show v12: cues are their own items after the line)'], '대사에 단 큐는 옛 방식 경고만');
   // 부서를 stage 로 바꾸면 기본값 { props:[] } 에서 시작 — 소품을 함께 줘야 한다
   r = applyOps(s, [{ op: 'set', id: 'q-3', fields: { dept: 'stage', stage: { props: [{ propId: 'pr-table' }] } } }]);
   assert.deepEqual(find(r.show, 'q-3').stage, { props: [{ propId: 'pr-table', action: 'in', at: '' }] });
@@ -511,7 +525,7 @@ test('v6: 사이트가 불러와도(index.html migrate) 소품 op 결과가 그�
     { op: 'add', kind: 'cue', parent: st.i.id, data: { dept: 'stage', stage: { props: [{ propId: 'pr-cup', action: 'in' }] } } },
     { op: 'set', id: lt.c.id, fields: { dept: 'stage', note: '의자', stage: { props: [{ propId: 'pr-cup', action: 'clean' }] } } }
   ]);
-  assert.equal(r.show.version, 11);
+  assert.equal(r.show.version, 12);
   const strip = x => { x = JSON.parse(JSON.stringify(x)); delete x.updatedAt; return x; };
   assert.deepEqual(strip(migrate(r.show)), strip(r.show));
 });
@@ -522,7 +536,7 @@ test('v6: 개요·검색에 소품', () => {
   const o = outline(s, { rev: 1 });
   assert.match(o, /^props: pr-tophat=탑햇, pr-table=탑햇테이블$/m);
   assert.match(o, /^preShowProps: 탑햇테이블 in @무대 중앙$/m);
-  assert.match(o, /q-4 stage 탑햇 IN \| → 테이블 위 — 시점 리허설 때 확정 @ "이 대사 즈음" \[tbd\]/, '사이트와 같은 머리글(lib/cuehead.js)');
+  assert.match(o, /q-4 stage 탑햇 IN \| → 테이블 위 — 시점 리허설 때 확정 @ "이 대사 즈음" \[tbd\]/, '사이트와 같은 머리글(lib/cuehead.js) — v11 원본은 옛 시점 글 그대로');
   const r = search(s, '탑햇');
   assert.ok(r.matches.some(m => m.kind === 'prop' && m.id === 'pr-tophat'));
   assert.ok(r.matches.some(m => m.kind === 'cue' && m.id === 'q-4' && m.field === 'stage.prop'));
@@ -533,39 +547,34 @@ test('v6: 개요·검색에 소품', () => {
   assert.match(outline(g, {}), /q-4 stage \(삭제된 소품 pr-tophat\) IN/);
 });
 
-// ---- 큐 지점 (kind:"cue") — 본문 없이 큐만 있는 실행 지점
-test('큐 지점: add 는 큐와 함께, set kind:"cue" 는 본문을 비우고(textToNote 면 첫 큐 note 로), 큐가 0개가 되면 지점이 사라진다', () => {
+// ---- 큐 (kind:"cue", v12) — 본문 없이 트리거 하나 + 부서 동작
+test('큐(v12): add 는 트리거·동작과 함께, 동작이 0개가 되면 큐가 사라진다, 글 문단 ↔ 큐는 바꿀 수 없다', () => {
   const s = docExample();
-  // 새 큐 지점 — 큐 없이 만들거나 본문을 주면 거부
-  let r = applyOps(s, [{ op: 'add', kind: 'item', parent: 's-1', after: 'i-1', data: { id: 'i-pt', kind: 'cue', cues: [{ dept: 'cast', cast: { personId: 'p-yejun', move: 'out' } }] } }]);
+  let r = applyOps(s, [{ op: 'add', kind: 'item', parent: 's-1', after: 'i-1', data: { id: 'i-pt', kind: 'cue', trigger: { type: 'line', itemId: 'i-1' }, offsetSec: 2, cues: [{ dept: 'cast', cast: { personId: 'p-yejun', move: 'out' } }] } }]);
   const pt = find(r.show, 'i-pt');
-  assert.deepEqual([pt.kind, pt.text, pt.speaker, pt.label, pt.isCue], ['cue', '', null, '2', true]);
+  assert.deepEqual([pt.kind, pt.text, pt.speaker, pt.label, pt.isCue, pt.offsetSec], ['cue', '', null, '1', true, 2]);
+  assert.deepEqual(pt.trigger, { type: 'line', itemId: 'i-1', at: 'end' });
+  assert.deepEqual(Object.keys(pt), ['id', 'kind', 'speaker', 'text', 'label', 'isCue', 'trigger', 'offsetSec', 'cues', 'comments']);
   assert.deepEqual(validateShow(r.show).errors, []); assert.deepEqual(r.warnings, []);
-  rejects(() => applyOps(s, [{ op: 'add', kind: 'item', parent: 's-1', data: { kind: 'cue' } }]), 'bad_field', /needs at least one cue/);
+  rejects(() => applyOps(s, [{ op: 'add', kind: 'item', parent: 's-1', data: { kind: 'cue' } }]), 'bad_field', /needs at least one action/);
   rejects(() => applyOps(s, [{ op: 'add', kind: 'item', parent: 's-1', data: { kind: 'cue', text: '(x)', cues: [{ dept: 'cast', cast: { personId: 'p-yejun' } }] } }]), 'bad_field', /has no text/);
-  // 지문을 큐 지점으로: 본문은 비운다. textToNote 면 괄호를 벗긴 옛 본문이 첫 큐 note 뒤에
-  r = applyOps(s, [{ op: 'set', id: 'i-1', fields: { kind: 'cue' } }]);
-  assert.deepEqual([find(r.show, 'i-1').kind, find(r.show, 'i-1').text, find(r.show, 'q-1').note], ['cue', '', '']);
-  r = applyOps(s, [{ op: 'set', id: 'i-1', fields: { kind: 'cue' }, textToNote: true }]);
-  assert.equal(find(r.show, 'q-1').note, '공연 시작');
-  r = applyOps(s, [{ op: 'set', id: 'i-2', fields: { kind: 'cue' } }]);
-  assert.deepEqual([find(r.show, 'i-2').kind, find(r.show, 'i-2').speaker], ['cue', null], '대사도 큐가 있으면 지점이 될 수 있다(화자는 지운다)');
-  rejects(() => applyOps(s, [{ op: 'set', id: 'i-1', fields: { text: 'x' }, textToNote: true }]), 'bad_op', /textToNote/);
-  const s2 = docExample(); s2.parts[0].scenes[0].items[0].cues = [];
-  rejects(() => applyOps(s2, [{ op: 'set', id: 'i-1', fields: { kind: 'cue' } }]), 'bad_field', /needs at least one cue/);
-  // 지점의 큐를 지우거나 옮겨 비면 지점이 사라진다 (번호도 다시)
-  const base = applyOps(s, [{ op: 'set', id: 'i-1', fields: { kind: 'cue' } }]).show;
-  r = applyOps(base, [{ op: 'remove', id: 'q-1' }, { op: 'move', id: 'q-2', parent: 'i-2' }]);
-  assert.equal(find(r.show, 'i-1'), null);
-  assert.ok(r.changes.some(c => /removed empty cue point i-1/.test(c.text)));
-  assert.deepEqual(items(r.show).map(i => [i.id, i.label]), [['i-2', '1']]);
-  // 코멘트가 있으면 빈 지문으로 남긴다
-  const withCmt = JSON.parse(JSON.stringify(base)); find(withCmt, 'i-1').comments.push({ id: 'c-x', author: 'a', text: '확인', createdAt: '2026-11-01T00:00:00.000Z', resolved: false, resolvedBy: null, resolvedAt: null });
-  r = applyOps(withCmt, [{ op: 'remove', id: 'q-1' }, { op: 'remove', id: 'q-2' }]);
-  assert.equal(find(r.show, 'i-1').kind, 'action');
-  // 개요
+  rejects(() => applyOps(s, [{ op: 'set', id: 'i-1', fields: { kind: 'cue' } }]), 'bad_field', /cannot become a cue item/);
+  rejects(() => applyOps(s, [{ op: 'set', id: 'i-1', fields: { trigger: { type: 'signal', text: 'x' } } }]), 'bad_field', /belong to cue items/);
+  rejects(() => applyOps(s, [{ op: 'set', id: 'i-1', fields: { text: 'x' }, textToNote: true }]), 'bad_op', /unknown key "textToNote"/);
+  // 동작을 지우거나 옮겨 비면 큐가 사라진다 (번호도 다시)
+  r = applyOps(s, [{ op: 'remove', id: 'q-1' }, { op: 'move', id: 'q-2', parent: 'i-2-q' }]);
+  assert.equal(find(r.show, 'i-1-q'), null); assert.equal(find(r.show, 'i-1-q2'), null);
+  assert.ok(r.changes.some(c => /removed empty cue item i-1-q /.test(c.text)));
+  assert.deepEqual(items(r.show).filter(i => i.label).map(i => [i.id, i.label]), [['i-2-q', '1'], ['i-2-q2', '2']]);
+  // 코멘트가 있으면 빈 지문으로 남긴다 (트리거는 버린다)
+  const up = applyOps(s, [{ op: 'set', kind: 'show', fields: { revision: 'x' } }]).show;
+  find(up, 'i-1-q').comments.push({ id: 'c-x', author: 'a', text: '확인', createdAt: '2026-11-01T00:00:00.000Z', resolved: false, resolvedBy: null, resolvedAt: null });
+  r = applyOps(up, [{ op: 'remove', id: 'q-1' }]);
+  assert.equal(find(r.show, 'i-1-q').kind, 'action'); assert.equal('trigger' in find(r.show, 'i-1-q'), false);
+  // 개요: 큐 줄에 트리거 (사이트와 같은 글)
   const { outline } = require('../lib/view');
-  assert.match(outline(base, {}), /i-1 Q1 \(cue point\)/);
+  assert.match(outline(up, {}), /i-1-q Q1 cue ← signal: 하우스 페이드 아웃 후/);
+  assert.match(outline(up, {}), /i-2-q Q3 cue ← line: 조예준 “소개합니다 박대훈” 끝에 \(i-2\)/);
 });
 
 // ---- show v8: 상세 note · 소품 필수 · clean · 객석 on/off
@@ -595,15 +604,15 @@ test('v8: v7 공연은 migrate 와 같게 올린다 — memo · text → note, �
   i2.cues[1].stage.text = '탑햇테이블에 탑햇 세팅';
   i2.comments.push({ id: 'c-s', author: 'a', text: '확인', createdAt: '2026-11-01T00:00:00.000Z', resolved: false, resolvedBy: null, resolvedAt: null, snapshot: { kind: i2.kind, speaker: i2.speaker, text: i2.text, cues: JSON.parse(JSON.stringify(i2.cues)) } });
   const r = applyOps(s, [{ op: 'set', kind: 'show', fields: { revision: 'v8' } }]);
-  assert.equal(r.show.version, 11);
-  const [q1] = find(r.show, 'i-1').cues, [q3, q4] = find(r.show, 'i-2').cues;
+  assert.equal(r.show.version, 12);
+  const q1 = find(r.show, 'q-1'), q3 = find(r.show, 'q-3'), q4 = find(r.show, 'q-4');
   assert.deepEqual(q1.light.channels[3], { ch: 'house', action: 'off', dim: null, color: null, colorName: null, timeSec: null });
   assert.equal(q1.note, '(객석: 원래 FADE OUT 4s)');
   assert.equal(q3.note, '천천히');
   assert.deepEqual(q3.cast, { people: [{ personId: 'p-daehoon', move: 'in' }] });
   assert.equal(q4.note, '탑햇테이블에 탑햇 세팅 / 시점 리허설 때 확정');
-  assert.deepEqual(Object.keys(q4), ['id', 'dept', 'trigger', 'offsetSec', 'note', 'status', 'stage'], 'migrate 와 같은 키 순서');
-  assert.equal(find(r.show, 'i-2').comments[0].snapshot.cues[1].note, '탑햇테이블에 탑햇 세팅 / 시점 리허설 때 확정');
+  assert.deepEqual(Object.keys(q4), ['id', 'dept', 'note', 'status', 'stage'], 'migrate 와 같은 키 순서 (v12: trigger · offsetSec 은 큐 문단에)');
+  assert.deepEqual(find(r.show, 'i-2').comments[0].snapshot.cues, [], 'v12: 글 문단 snapshot 의 큐는 버린다');
   const strip = x => { x = JSON.parse(JSON.stringify(x)); delete x.updatedAt; delete x.id; items(x).forEach(i => delete i.isCue); return x; }; // 문서 예시엔 isCue 가 없다
   assert.deepEqual(strip(migrate(r.show)), strip(r.show), '사이트가 불러와도 그대로');
   assert.deepEqual(validateShow(r.show).warnings, []);
@@ -656,7 +665,7 @@ test('v10 출연 큐: v9 공연에 op 를 적용하면 출연 큐가 people 한 
   s.version = 9;
   s.parts[0].scenes[0].items[1].cues[0].cast = { personId: 'p-daehoon', move: 'in' }; // v9 모양
   let r = applyOps(s, [{ op: 'set', id: 's-1', fields: { title: 'x' } }]);
-  assert.equal(r.show.version, 11);
+  assert.equal(r.show.version, 12);
   assert.deepEqual(find(r.show, 'q-3').cast, { people: [{ personId: 'p-daehoon', move: 'in' }] });
   assert.deepEqual(r.warnings, [], '형식만 바뀐 것은 경고가 아니다');
   // v9 의 끊긴 사람 참조(원래 오류)는 op 를 막지 않는다 — 경로가 cast.personId → cast.people[0].personId 로 바뀌어도
