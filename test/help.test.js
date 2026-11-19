@@ -56,7 +56,7 @@ test('글 본문의 "따옴표 말" 중 글 제목 모양인 링크 대상이 �
     if (m) [...m[1].matchAll(/"([^"]+)"/g)].forEach(x => assert.ok(titles.has(x[1]), `${a.id}: 다음 → 없는 글 "${x[1]}"`));
   });
   const all = JSON.stringify([arts, gl, tips, empty]) + fs.readFileSync(path.join(dir, 'crew-guide.md'), 'utf8');
-  ['큐만 있는 줄', '큐 지점', '상세(채널)', '머리글 미리보기', '데이터 메뉴', '공연 모드', '판 이름', '점검 탭', '저장됨 · rev'].forEach(w => assert.ok(!all.includes(w), `옛 화면 용어 "${w}" 가 남아 있습니다`));
+  ['큐만 있는 문단', '큐만 있는 줄', '큐 지점', '상세(채널)', '머리글 미리보기', '데이터 메뉴', '공연 모드', '판 이름', '점검 탭', '저장됨 · rev'].forEach(w => assert.ok(!all.includes(w), `옛 화면 용어 "${w}" 가 남아 있습니다`));
 });
 
 test('크루 안내: 네 역할 절이 있고 역할 이름은 글 역할로 시작한다', () => {

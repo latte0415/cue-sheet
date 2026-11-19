@@ -95,7 +95,7 @@ async function main(argv) {
   log(`검증 통과: "${show.title || '(제목 없음)'}" — 파트 ${c.parts} · 씬 ${c.scenes} · 문단 ${c.items} · 큐 ${c.cues} · 사람 ${c.people} · 트랙 ${c.tracks}${v.warnings.length ? ` (경고 ${v.warnings.length})` : ''}`);
   if (filled) log(`id 없는 항목 ${filled}개에 id 를 붙여 올립니다 (파일은 그대로)`);
   // v8 안내: 옛 형식은 사이트가 불러올 때 바꾼다 · 소품 없는 무대 큐는 올라가지만 사이트에 빨간 "소품 미지정"
-  if (typeof show.version === 'number' && show.version < SHOW_VER && show.version >= 5) log(`version ${show.version} 형식 — 그대로 올리고, 사이트가 불러올 때 version ${SHOW_VER} 로 바꿉니다 (v7 이하: 큐 memo · cast.text · stage.text → 상세 note, 객석 채널은 ON/OFF 만 · v9 이하: 출연 큐 { personId, move } → { people: [{ personId, move }] } · v10 이하: 빈 lights · 조명 큐 looks 가 붙음, 채널 큐는 그대로). 새 파일은 version ${SHOW_VER} 로 쓰세요 (docs/cue-format.md)`);
+  if (typeof show.version === 'number' && show.version < SHOW_VER && show.version >= 5) log(`version ${show.version} 형식 — 그대로 올리고, 사이트가 불러올 때 version ${SHOW_VER} 로 바꿉니다 (v7 이하: 큐 memo · cast.text · stage.text → 상세 note, 객석 채널은 ON/OFF 만 · v9 이하: 출연 큐 { personId, move } → { people: [{ personId, move }] } · v10 이하: 빈 lights · 조명 큐 looks 가 붙음, 채널 큐는 그대로 · v11 이하: 문단에 붙은 큐 → 그 문단 바로 뒤의 큐(kind:"cue", 트리거 하나)). 새 파일은 version ${SHOW_VER} 로 쓰세요 (docs/cue-format.md)`);
   const noProps = v.warnings.filter(w => w.code === 'stage-no-props').length;
   if (noProps) log(`소품 없는 무대 큐 ${noProps}개 — 올라가지만 사이트에 빨간 "소품 미지정" 으로 보입니다. props 에 소품을 등록하고 stage.props 에 넣으세요 (설명 글은 note)`);
 
