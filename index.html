@@ -339,7 +339,7 @@ tr.tbd .cs-num{border-left:2px dashed var(--red)}
 /* 연속 큐: 트리거 칸을 앞 큐 아래로 들여 쓴다 */
 .cs-q.fol{padding-left:calc(10px + var(--d, 0) * 16px)}
 .cs-text{font-size:14px;line-height:1.6;white-space:pre-wrap}
-/* 휴대폰 큐시트: 부서 열 대신 "언제" 아래에 큐 머리글을 줄마다 (대본 큐 줄과 같은 모양) */
+/* 휴대폰 큐시트: 부서 열 대신 "트리거" 아래에 큐 머리글을 줄마다 (대본 큐 줄과 같은 모양) */
 .cs-mob{display:none}
 @media (max-width:600px){
   .cs-table{width:100%!important;min-width:0!important}
@@ -8895,7 +8895,7 @@ function dndMoveGroup(fromId, toId, ids) {
   const ac = document.activeElement; if (ac && ac.classList && ac.classList.contains('doc')) ac.blur(); // dndMoveCue 와 같은 이유
   dndRedraw(sids, !!r.pruned, null);
   const ne = IDX.byItem.get(toId), q = ne && ne.q ? 'Q' + ne.q : '';
-  toast(merged ? `${q} 에 합쳤습니다 — 언제(신호) 확인 · Ctrl+Z 되돌리기`
+  toast(merged ? `${q} 에 합쳤습니다 — 트리거 확인 · Ctrl+Z 되돌리기`
     : `큐 ${r.ids.length}개를 옮겼습니다 → ${q ? q + ' · ' : ''}${cut(ne ? itemRefText(ne, 24) : '', 30)} — Ctrl+Z 되돌리기`);
   return r;
 }
