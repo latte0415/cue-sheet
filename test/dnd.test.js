@@ -255,6 +255,29 @@ test('큐 지점: Q 묶음을 통째로 옮겨도 정리, 큐가 남거나 일�
   assert.equal(r.pruned, null); assert.equal(find(s4, 'pc').kind, 'action');
 });
 
+test('v12: 마지막 동작이 빠져 사라지는 큐를 따라가던 큐는 신호 "<머리글> 후"(함께면 "… 때", converted:cue) — 되돌리면 원래 트리거', () => {
+  const s = show(), S1 = s.parts[0].scenes[0].items;
+  const pt = point('pt', [cue('qp')]); pt.trigger = { type: 'signal', text: '' }; pt.label = '7';
+  const f1 = point('f1', [cue('qf1')]); f1.trigger = { type: 'cue', cueId: 'pt', mode: 'after' };
+  const f2 = point('f2', [cue('qf2')]); f2.trigger = { type: 'cue', cueId: 'pt', mode: 'with' };
+  const f3 = point('f3', [cue('qf3')]); f3.trigger = { type: 'cue', cueId: 'f1', mode: 'after' }; // 손자는 그대로
+  S1.splice(1, 0, pt, f1, f2, f3);
+  const before = plain([f1.trigger, f2.trigger, f3.trigger]);
+  // 노드 테스트에는 머리글 함수가 없어 "Q<번호>" 로 (사이트에서는 cueItemHead — e2e 가 본다)
+  for (const [name, run] of [['relocateCue', x => FE.relocateCue(x, 'qp', 'd', null)], ['relocateCueGroup', x => FE.relocateCueGroup(x, 'pt', 'd', null)], ['relocateCuesToNewPoint', x => FE.relocateCuesToNewPoint(x, ['qp'], 'S2', 0, 'np', null)]]) {
+    const x = plain(s), r = run(x);
+    assert.ok(!find(x, 'pt'), name);
+    assert.deepEqual(plain([find(x, 'f1').trigger, find(x, 'f2').trigger, find(x, 'f3').trigger]), [
+      { type: 'signal', text: 'Q7 후', converted: 'cue' }, { type: 'signal', text: 'Q7 때', converted: 'cue' }, before[2]], name);
+    assert.deepEqual(plain(r.pruned.conv), [{ id: 'f1', trigger: before[0] }, { id: 'f2', trigger: before[1] }], name);
+    assert.equal(FE.restoreCuePoint(x, r.pruned), true);
+    assert.deepEqual(plain([find(x, 'f1').trigger, find(x, 'f2').trigger, find(x, 'f3').trigger]), before, name + ' 되돌리기');
+  }
+  // 따라가는 큐가 없으면 pruned 에 conv 를 붙이지 않는다
+  const s2 = show(); s2.parts[0].scenes[0].items.splice(1, 0, point('pz', [cue('qz')]));
+  assert.ok(!('conv' in FE.relocateCue(s2, 'qz', 'd', null).pruned));
+});
+
 test('큐 지점은 큐 번호 대상이다 (큐가 있는 문단)', () => {
   const s = show();
   s.parts[0].scenes[0].items.splice(1, 0, point('pt', [cue('qp')]));

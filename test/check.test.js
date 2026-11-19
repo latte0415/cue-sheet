@@ -191,7 +191,8 @@ test('트리거(v12): 끊긴 대사·앞 큐(막힘) · 고리(막힘, 한 고�
   assert.deepEqual(g('tline').map(x => x.item), ['q2']);
   assert.equal(g('tline')[0].dept, 'cast', '역할 필터는 큐의 동작 부서'); assert.equal(g('tline')[0].person, 'a');
   assert.deepEqual(g('tcue').map(x => x.item), ['q3']);
-  assert.deepEqual(g('tloop').map(x => x.text), ['Q4 → Q5 → Q6 → Q4 — 서로 앞 큐를 기다림']);
+  assert.deepEqual(g('tloop').map(x => x.text), ['REF(q4) → REF(q5) → REF(q6) → REF(q4) — 서로 앞 큐를 기다림']); // 사슬 = cueRef("<머리글>(Qn)") 꼴
+  assert.deepEqual(g('tloop').map(x => x.fixes[0].label), ['Q4 고치기']);
   assert.deepEqual(g('tsig').map(x => x.item), ['q7']);
   assert.deepEqual(g('tconv').map(x => [x.item, x.fixes.map(f => f.act)]), [['q8', ['ck-keep', 'ck-trig']]]);
   assert.match(g('tconv')[0].text, /트리거 대사가 지워져 신호로 바뀜 “조예준 “…라태형” 후”/);

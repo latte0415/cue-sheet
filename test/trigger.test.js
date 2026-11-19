@@ -51,7 +51,7 @@ test('v11 → v12 migrate: 묶음(트리거 글 · offsetSec) 하나 = 큐 하�
     ['i-1-q3', 'cue', '4', { type: 'line', itemId: 'i-1', at: 'end' }, null, ['q-3']], // "대사 끝" (대사 문단)
     ['i-1-q4', 'cue', '5', { type: 'signal', text: '암전 후' }, 7, ['q-4']],
     ['i-2', 'action', null, null, undefined, []],
-    ['i-2-q', 'cue', '6', { type: 'signal', text: '대사 끝' }, null, ['q-5']], // 지문의 "대사 끝" 은 그 지문이 아니다 → 신호
+    ['i-2-q', 'cue', '6', { type: 'line', itemId: 'i-2', at: 'end' }, null, ['q-5']], // 지문의 "대사 끝" 도 그 지문 끝 (문단 종류와 상관없는 규칙)
     ['i-2-q2', 'cue', '7', { type: 'line', itemId: 'i-2', at: 'end' }, null, ['q-6']], // 지문이라도 빈 글은 그 지문 끝
     ['i-3', 'cue', '8', { type: 'signal', text: '박수 끝' }, null, ['q-7', 'q-8']], // 큐 지점: 첫 묶음이 옛 id
     ['i-3-q2', 'cue', '9', { type: 'cue', cueId: 'i-2-q2', mode: 'after' }, 2, ['q-9']],
@@ -111,7 +111,8 @@ test('검증(v12): 트리거 코드 — 끊긴 대사 · 끊긴 앞 큐 · 고�
     ['trigger-loop', 'items[7].trigger'],
     ['trigger-signal-empty', 'items[12].trigger.text']
   ].sort());
-  assert.match(v.warnings.find(x => x.code === 'trigger-loop').msg, /Q6 → Q7 → Q8 → Q6/);
+  // 사슬은 사이트 트리거 고르기 칸과 같은 "<머리글>(Qn)" 꼴
+  assert.match(v.warnings.find(x => x.code === 'trigger-loop').msg, /— 조예준 IN\(Q6\) → 조예준 IN\(Q7\) → 조예준 IN…\(Q8\) → 조예준 IN\(Q6\) \(화살표/);
   assert.deepEqual(w.filter(x => x[0] === 'legacy-field').map(x => x[1]).sort(), ['items[0].cues[0].trigger', 'items[13].cues', 'items[13].cues[0].trigger'].sort());
   // 트리거 type 이 틀리면 오류
   set('i-0', { type: 'later' });
