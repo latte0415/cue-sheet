@@ -41,7 +41,7 @@ function legacyShow() {
 
 test('v11 → v12 migrate: 묶음(트리거 글 · offsetSec) 하나 = 큐 하나, 대사·지문의 큐는 글과 상관없이 그 끝(결정 1) · 이전 큐 후 · 큐 지점은 신호, id 고정, 코멘트 자리', () => {
   const m = migrate(legacyShow());
-  assert.equal(m.version, 12);
+  assert.equal(m.version, 13);
   const row = i => [i.id, i.kind, i.label, i.kind === 'cue' ? i.trigger : null, i.kind === 'cue' ? i.offsetSec : undefined, i.cues.map(c => c.id)];
   assert.deepEqual(items(m).map(row), [
     ['i-0', 'cue', '1', { type: 'signal', text: '공연 시작' }, null, ['q-0']],
@@ -111,7 +111,7 @@ test('index.html migrate 와 lib/ops.js upgradeShow 는 같은 큐 문단을 만
   const read = f => JSON.parse(fs.readFileSync(path.join(__dirname, ...f), 'utf8'));
   for (const [name, s] of [['작은 공연', legacyShow()], ['문서 예시 v11', read(['fixtures', 'doc-example-v11.json'])], ['실데이터 v5', read(['fixtures', 'backstage-part1-v5.json'])], ['실데이터 v9', read(['..', 'cues', 'backstage-part1.json'])]]) {
     const a = migrate(s), b = upgradeShow(plain(s));
-    assert.equal(b.version, 12, name);
+    assert.equal(b.version, 13, name);
     assert.deepEqual(shape(b), shape(a), name);
     assert.deepEqual(items(b).flatMap(i => i.cues.map(c => c.note)), items(a).flatMap(i => i.cues.map(c => c.note)), name + ' — 동작 메모(옮기기 전 글)도 같다');
   }

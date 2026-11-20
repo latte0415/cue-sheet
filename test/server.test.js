@@ -356,7 +356,7 @@ test('옛 화면 차단 (v10): 여러 사람 출연 큐가 있는 v10 저장본�
 });
 
 test('옛 화면 차단 (v11): 이름 붙인 조명이 있는 v11 저장본에 v10 화면(lights·looks 를 모름)이 저장하면 426, 조명은 그대로', async () => {
-  assert.equal(SHOW_VER, 12);
+  assert.equal(SHOW_VER, 13);
   const lights = [{ id: 'lk-a', name: '무대 A', note: '프론트 70 + 탑 블루' }, { id: 'lk-b', name: '엔딩 블루', note: '' }];
   const lq = light => ({ id: 'q1', dept: 'light', trigger: '', offsetSec: null, note: '', status: 'set', light });
   const v = (title, version, light, extra) => show(title, Object.assign({ version, people: [], props: [], preShowProps: [], tracks: [],
@@ -365,13 +365,13 @@ test('옛 화면 차단 (v11): 이름 붙인 조명이 있는 v11 저장본에 v
   const { id } = await (await fetch(S.base + '/api/shows', J('POST', { show: v('교대', 11, swap, { lights }) }))).json();
   let r = await fetch(`${S.base}/api/shows/${id}`, J('PUT', { baseRev: 1, show: v('v10 화면', 10, { channels: [], anim: '' }) }));
   assert.equal(r.status, 426);
-  assert.deepEqual(await r.json().then(x => [x.error, x.version, x.schema]), ['client_outdated', 11, 12]);
+  assert.deepEqual(await r.json().then(x => [x.error, x.version, x.schema]), ['client_outdated', 11, SHOW_VER]);
   const g = await (await fetch(`${S.base}/api/shows/${id}`)).json();
   assert.deepEqual([g.show.lights, g.show.parts[0].scenes[0].items[0].cues[0].light], [lights, swap]);
   r = await fetch(`${S.base}/api/shows/${id}`, J('PUT', { baseRev: 1, show: v('v11 화면', 11, swap, { lights: lights.slice(0, 2) }) }));
   assert.equal(r.status, 200);
   // health 의 schema 는 지금 형식(12) — 열어 둔 옛 화면은 새로고침을 요구받는다
-  assert.equal((await (await fetch(S.base + '/api/health')).json()).schema, 12);
+  assert.equal((await (await fetch(S.base + '/api/health')).json()).schema, SHOW_VER);
 });
 
 test('옛 화면 차단 (v12): 트리거가 있는 v12 저장본에 v11 화면(큐가 문단에 붙던 화면)이 저장하면 426, 큐는 그대로', async () => {
@@ -385,7 +385,7 @@ test('옛 화면 차단 (v12): 트리거가 있는 v12 저장본에 v11 화면(�
   const { id } = await (await fetch(S.base + '/api/shows', J('POST', { show: v12('v12') }))).json();
   let r = await fetch(`${S.base}/api/shows/${id}`, J('PUT', { baseRev: 1, show: v11('v11 화면') }));
   assert.equal(r.status, 426);
-  assert.deepEqual(await r.json().then(x => [x.error, x.version, x.schema]), ['client_outdated', 12, 12]);
+  assert.deepEqual(await r.json().then(x => [x.error, x.version, x.schema]), ['client_outdated', 12, SHOW_VER]);
   const g = await (await fetch(`${S.base}/api/shows/${id}`)).json();
   assert.deepEqual(g.show.parts[0].scenes[0].items[1].trigger, { type: 'line', itemId: 'i1', at: 'end' });
   r = await fetch(`${S.base}/api/shows/${id}`, J('PUT', { baseRev: 1, show: v12('v12 화면') }));

@@ -1,7 +1,7 @@
-# 큐시트 JSON 형식 (show v12)과 업로드
+# 큐시트 JSON 형식 (show v13)과 업로드
 
 원문 큐시트(대본 + 조명·음향·무대·출연 큐)를 이 JSON 으로 바꿔 `scripts/upload.js` 로 올린다.
-사이트의 "내보내기"가 만드는 JSON 과 같은 형식이다. `version` 5·6·7·8·9·10·11 파일도 그대로 읽힌다(옛 필드는 불러올 때 v12 모양으로 옮겨진다). 새로 만들 땐 12 를 쓴다. 기준 구현은 `index.html` 의 `migrate()`, 검증은 `lib/validate.js`.
+사이트의 "내보내기"가 만드는 JSON 과 같은 형식이다. `version` 5·6·7·8·9·10·11·12 파일도 그대로 읽힌다(옛 필드는 불러올 때 v13 모양으로 옮겨진다). 새로 만들 땐 13 을 쓴다. 기준 구현은 `index.html` 의 `migrate()`, 검증은 `lib/validate.js`.
 
 ## 형식 버전
 
@@ -17,6 +17,7 @@
 | 10 | 출연 큐 하나에 여러 사람: `cast` = `{ people: [{ personId, move }] }`(사람마다 IN/OUT/MOVE, 순서 = 머리글 순서). 9 까지의 `{ personId, move }` 는 불러올 때 한 줄짜리 `people` 로 옮겨진다(사람이 비어 있어도 줄은 남김). 9 화면은 `people` 을 몰라 저장하면 사람을 잃으므로 올린다 |
 | 11 | 이름 붙인 조명: `lights[]` `{ id, name, note }`(리허설에서 정해 이름을 붙인 조명 — `note` 에 상세 설명) + 조명 큐 `light.looks[]` `{ lookId, action: on\|off }`. 조명 큐는 이제 이름 붙인 조명을 켜고 끄는 것이 기본이고, 채널(`light.channels`)은 "상세(채널)" 로 그대로 쓴다 — 한 큐에 둘 다 있어도 된다. 10 → 11 은 `lights: []`·`looks: []` 만 붙고 채널 큐는 바꾸지 않는다. 10 화면은 `looks` 를 몰라 저장하면 지우므로 올린다 |
 | 12 | 트리거: 대본 흐름(`items[]`)에는 **대사**(`line`·`action`)와 **큐**(`kind:"cue"`)만 있다. 큐는 그 자체로 한 항목이고 트리거 하나(`trigger` — 대사의 끝·시작 / 다른 큐 후·함께 / 신호)와 `offsetSec`, 부서 동작 `cues[]` 를 갖는다. 부서 큐(동작)에는 `trigger`·`offsetSec` 이 없고, 대사·지문에는 큐가 붙지 않는다(`cues: []`). 11 까지의 "문단에 붙은 큐" 는 불러올 때 그 문단 바로 뒤의 큐로 옮겨진다(아래 "v11 → v12 변환"). 11 화면은 이 모양을 몰라 저장하면 큐를 잃으므로 올린다 |
+| 13 | 조명 룩의 배치: `lights[].rig`(선택) `[{ pos, count, color, side? }]` — 사이트가 룩 이름에 올리거나 누르면 위에서 본 무대 그림으로 보여 준다(아래 "lights[]"). 없으면 12 와 같다 — 12 → 13 은 `version` 만 바뀐다. 12 화면은 `rig` 를 몰라 저장하면 지우므로 올린다 |
 
 ## 올리기
 
@@ -47,11 +48,11 @@ node scripts/upload.js cues/show.json --project <id|제목> --edit-key <편집 �
 
 ```
 show
-├─ title, version: 11, preShowSetup, revision
+├─ title, version: 13, preShowSetup, revision
 ├─ people[]  { id, name, role, note }
 ├─ props[]   { id, name, note }                            ← 소품 목록 (v6)
 ├─ preShowProps[]  { propId, at }                          ← 공연 시작 때 무대에 있는 소품 (v6)
-├─ lights[]  { id, name, note }                            ← 이름 붙인 조명 목록 (v11)
+├─ lights[]  { id, name, note, rig? }                      ← 이름 붙인 조명 목록 (v11, rig 배치 v13)
 ├─ tracks[]  { id, no, title, durationSec, fileName, fileKey, note, loop }
 └─ parts[]   { id, name, scenes[] }                       ← 1부, 2부 …
    └─ scenes[] { id, type, title, cast[], durationSec, setup, comments[], items[] }
@@ -111,6 +112,20 @@ show
 | `id` | string | 조명을 가리키는 값 (예: `"lk-stage-a"`) |
 | `name` | string | 조명팀이 부르는 이름 ("무대 A", "엔딩 블루", "핀") — 머리글에 그대로 쓰인다 |
 | `note` | string | 상세 설명 ("프론트 70 + 탑 블루, 리허설 11/12 확정"). 채널·밝기·색·페이드는 여기에 |
+| `rig` | array | (선택, v13) 배치 — 이 룩에서 켜지는 조명기의 위치·개수·색. 없거나 `[]` 이면 그림 없이 지금처럼 이름·설명만 |
+
+`rig[]` 한 줄 = 같은 위치·색인 조명기 묶음:
+
+| 필드 | 타입 | 뜻 |
+|---|---|---|
+| `pos` | `"back"` \| `"top"` \| `"front"` | 위치 — 백(무대 안쪽), 탑(머리 위), 프론트(객석 쪽). 그 밖은 오류(줄이 버려짐, `rig-pos`) |
+| `count` | integer | 개수 1~24. 없거나 1 미만은 오류(줄이 버려짐, `rig-count`), 소수는 반올림·24 초과는 24 로(경고) |
+| `color` | string | 색 이름 (40자까지): `노랑` `연노랑` `화이트` `웜화이트` `레드` `마젠타` `핑크` `그린` `시안` `블루` `퍼플` `앰버` `오렌지` `라임`. 섞인 색은 `+` 로 잇는다 (`"레드+화이트"`, `"블루+화이트"`) — 그림에서 원을 나눠 칠한다. 모르는 이름·빈 값은 경고(`rig-color`)이고 회색으로 그린다(글에는 이름 그대로) |
+| `side` | `"in"` \| `"out"` | (선택) 안쪽 한 쌍 / 바깥쪽 한 쌍 — 주로 백. 안쪽은 가운데 가까이, 바깥쪽은 양 끝에 그린다. 없으면 고르게. 그 밖의 값은 오류(버려짐, `rig-side`) |
+
+예 — "링앤로프": `[{ "pos": "top", "count": 3, "color": "노랑" }, { "pos": "back", "count": 2, "color": "마젠타", "side": "in" }, { "pos": "back", "count": 2, "color": "그린", "side": "out" }, { "pos": "front", "count": 2, "color": "화이트" }]`
+→ 한 줄 글 "백 안쪽 마젠타 2 · 백 바깥쪽 그린 2 · 탑 노랑 3 · 프론트 화이트 2" (백 → 탑 → 프론트 순서). 배열이 아닌 `rig` 는 오류(`rig-shape`).
+병합(동시 편집)에서 `rig` 는 통째 값이다 — 두 기기가 같은 룩의 배치를 다르게 고치면 충돌(서버 것).
 
 목록에서 지워도 조명 큐의 줄은 지우지 않는다 — 다른 줄(조명·채널)이 있는 큐에서는 그 줄만 빠지고, 그 조명뿐인 큐는 "(삭제된 조명)" 으로 남아 점검이 알린다(사이트 삭제·MCP `force` 삭제 같은 규칙, 사이트에서는 Ctrl+Z 로 되돌린다).
 
@@ -247,7 +262,7 @@ v12 의 대사·지문에는 큐가 붙지 않으므로 `action-echo`·`empty-cu
 ```json
 {
   "title": "1부 (초안)",
-  "version": 12,
+  "version": 13,
   "preShowSetup": "탑햇테이블",
   "people": [
     { "id": "p-yejun", "name": "조예준", "role": "mc", "note": "MC 겸 공연자" },
@@ -261,7 +276,8 @@ v12 의 대사·지문에는 큐가 붙지 않으므로 `action-echo`·`empty-cu
     { "propId": "pr-table", "at": "무대 중앙" }
   ],
   "lights": [
-    { "id": "lk-stage-a", "name": "무대 A", "note": "프론트 70 + 탑 블루, 리허설 11/12 확정" }
+    { "id": "lk-stage-a", "name": "무대 A", "note": "프론트 70 + 탑 블루, 리허설 11/12 확정",
+      "rig": [{ "pos": "front", "count": 2, "color": "화이트" }, { "pos": "top", "count": 4, "color": "블루" }] }
   ],
   "tracks": [
     { "id": "tr-1", "no": 1, "title": "하우스 음악", "durationSec": null, "fileName": null, "fileKey": null, "note": "", "loop": true }

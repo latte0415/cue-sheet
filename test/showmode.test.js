@@ -136,7 +136,7 @@ test('오프라인 부팅: 옛 형식(v7) 사본은 migrate 로 v8 이 된다 (s
     { id: 'q', dept: 'cast', trigger: '', memo: '메모', status: 'set', cast: { personId: null, move: 'in', text: '천천히' } }] }] }] }] };
   const pick = FE.smBootPick({ rev: 3, savedAt: '2026-11-18T10:00:00Z', base: false, show: v7 }, null);
   const m = plain(migrate(pick.show));
-  assert.equal(m.version, 12);
+  assert.equal(m.version, 13);
   assert.equal(m.parts[0].scenes[0].items[1].cues[0].note, '천천히 / 메모'); // v12: 지문 i 바로 뒤의 큐 문단
   assert.deepEqual(m.parts[0].scenes[0].items[1].cues[0].cast, { people: [{ personId: null, move: 'in' }] }, 'v10: 사람이 비어 있어도 줄은 남는다');
   // 코드: 오프라인 부팅은 migrate 를 거치고, 이 화면보다 새 형식 사본은 열지 않는다

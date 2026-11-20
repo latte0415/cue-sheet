@@ -37,7 +37,7 @@ test('상수가 index.html 과 같다', () => {
   // 프런트가 내보내는 version = 서버 스키마 SHOW_VER (MCP ops 도 이 값으로 저장)
   assert.equal(plain(FE.migrate({ version: 6, parts: [] })).version, SHOW_VER);
   assert.ok(CONST.SHOW_VERS.includes(SHOW_VER) && SHOW_VER === Math.max(...CONST.SHOW_VERS), 'SHOW_VER 는 읽을 수 있는 형식 중 가장 새 것');
-  assert.equal(plain(FE.migrate({ version: 7, parts: [] })).version, 12);
+  assert.equal(plain(FE.migrate({ version: 7, parts: [] })).version, 13);
   assert.equal(FE.ACT_RE.source, CONST.ACT_RE.source);
 });
 
@@ -314,7 +314,7 @@ test('v8: 객석(house)에 on/off 외 액션이나 밝기·색·시간이 있으
 test('v8 migrate: memo · text → note, 소품 없는 무대 큐는 남김, 객석은 on/off 로 접고 흔적, 왕복해도 같다', () => {
   const real = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'backstage-part1-v5.json'), 'utf8'));
   const m = plain(FE.migrate(unwrapShow(real)));
-  assert.equal(m.version, 12);
+  assert.equal(m.version, 13);
   const cues = m.parts.flatMap(p => p.scenes.flatMap(s => s.items.flatMap(i => i.cues)));
   const raw = unwrapShow(real).parts.flatMap(p => p.scenes.flatMap(s => s.items.flatMap(i => i.cues)));
   assert.equal(cues.length, raw.length, '큐를 하나도 잃지 않는다');

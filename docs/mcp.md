@@ -134,6 +134,9 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
   머리글(`조예준 OUT`, `조예준·라태형 IN`, `BGM 4 PLAY`, `무대 A OFF · 엔딩 블루 ON`, `BLACKOUT`, `카드 CLEAN`)은 대상·액션에서 만들어지므로 `note` 에 다시 쓰지 않는다.
 - **이름 붙인 조명 (show v11).** 리허설에서 정해 이름을 붙인 조명은 `lights[]` `{ id, name, note }` — 사람·소품처럼 `kind:"look"` 의
   add/set(name·note)/remove/move 로 고친다(`move` 로 목록 순서). `note` 에 상세 설명("프론트 70 + 탑 블루, 리허설 11/12 확정").
+  **배치 `rig` (show v13, 선택)**: `set`/`add` 의 `rig` = `[{ pos: back|top|front, count: 1~24, color, side?: in|out }]` 통째(키 순서 pos·count·color·side 로 정리).
+  `null`·`[]` 이면 지운다. `pos` 가 틀리거나 `count` 가 1~24 정수가 아니거나 `color` 가 빈 글이거나 40자를 넘거나 `side` 가 in|out 이 아니거나 모르는 필드면 거부(`bad_field`).
+  모르는 색 이름은 받되 경고(사이트 그림에서 회색). 색 이름과 섞기(`"레드+화이트"`)는 `docs/cue-format.md` "lights[]". 개요(outline)의 `lights:` 줄에 `[rig: 백 노랑 4 · 탑 연노랑 3]` 로 보이고 `search_show` 도 찾는다.
   조명 큐의 기본은 `light: { looks: [{ lookId, action: on|off }] }` — 한 큐에 여러 줄(`무대 A OFF` + `엔딩 블루 ON`). `light.looks` 는 통째로 바뀌고,
   줄마다 `lookId` 필수, `action` 은 `on`·`off` 만(기본 `on`), 같은 조명 두 줄은 거부, `timeSec` 같은 다른 필드는 거부(페이드·밝기는 그 조명의 `note` 나 `channels` 에).
   `light.channels`(채널 상세)는 그대로 받는다 — `looks` 만 보내면 채널은 그대로, 한 큐에 둘 다 있어도 된다. 조명·채널·애니메이션이 모두 비면 경고.
@@ -176,7 +179,7 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
 - **소품 (show v6~).** `props[]` 는 사람처럼 `kind:"prop"` 의 add/set(name·note)/remove/move 로 고친다. force 삭제는 브라우저 소품
   삭제와 같이 `preShowProps` 에서는 빼고, 무대 큐의 소품 행은 그대로 둬 "(삭제된 소품)" 으로 보인다(validateShow 경고).
   `preShowProps` 는 항목 id 가 없어 `set kind:"show"` 의 배열 통째 교체만 된다.
-- **v5~v11 → v12.** 옛 공연에 op 를 적용하면 사이트가 불러올 때(migrate)처럼 `version:12` 로 올린다. v11 → v12 는 문단에 붙은 큐를 그 문단 바로 뒤의 큐 문단으로 옮긴다(`docs/cue-format.md` "v11 → v12 변환" — `lib/ops.js` `upgradeTriggers`, 큐 번호도 다시 매긴다)(v8 → v9 는 `version` 만 바뀐다 — PLAY 시작 볼륨.
+- **v5~v12 → v13.** 옛 공연에 op 를 적용하면 사이트가 불러올 때(migrate)처럼 `version:13` 으로 올린다. v12 → v13 은 `version` 만 바뀐다(룩 배치 `rig` 는 선택 필드). v11 → v12 는 문단에 붙은 큐를 그 문단 바로 뒤의 큐 문단으로 옮긴다(`docs/cue-format.md` "v11 → v12 변환" — `lib/ops.js` `upgradeTriggers`, 큐 번호도 다시 매긴다)(v8 → v9 는 `version` 만 바뀐다 — PLAY 시작 볼륨.
   v9 → v10 은 출연 큐 `{ personId, move }` → `{ people: [{ personId, move }] }` 한 줄, 사람이 비어 있어도 줄은 남긴다.
   v10 → v11 은 빈 `lights` 와 조명 큐의 빈 `light.looks` 만 붙고 채널 큐는 그대로): 빈 `props`·`preShowProps`·`stage.props` 를 붙이고,
   큐(코멘트 snapshot 안의 큐 포함)의 `note` = 기존 note · `cast.text`/`stage.text` · `memo` 를 `" / "` 로 이어 붙인 것, 객석 채널은 on/off 로 접고
@@ -233,6 +236,7 @@ annotations: 읽기 도구는 `readOnlyHint`, `edit_show` 는 `destructiveHint`(
     출연 큐의 사람 줄(`cast.people`, v10)은 사람 id 로 맞춘다 — 양쪽에서 다른 사람을 더하면 둘 다, 한쪽이 뺀 사람은 빠지고, 같은 사람의 액션을
     다르게 바꾸거나 한쪽이 빼고 다른 쪽이 그 사람의 액션을 바꾸면 충돌(서버 것). 순서는 한쪽만 바꿨으면 그쪽.
     조명 큐의 조명 줄(`light.looks`, v11)도 같은 방식으로 조명 id 로 맞춘다(`light.channels` 는 그대로 통째).
+    조명 목록의 **배치(`lights[].rig`, v13)는 통째 값** — 한쪽만 바꾸면(지운 것 포함) 그쪽, 양쪽이 다르게 바꾸면 충돌(서버 것). 줄 단위로 섞지 않는다.
     큐 문단의 **트리거(`trigger`, v12)는 통째 값** — 한쪽만 바꾸면 그쪽 값 전체, 양쪽이 다르게 바꾸면 충돌(서버 것). 대사 쪽 트리거와 큐 쪽 트리거의 안쪽 필드를 섞지 않는다.
     새 큐 문단은 다른 문단처럼 id 로, 그 동작(`cues[]`)은 부서 큐처럼 동작 id 로 맞춘다.
   - **추가**는 양쪽 모두 남는다. **삭제**: 다른 쪽이 그대로면 삭제. 다른 쪽이 그 항목이나 **그 안의 어느 것이라도**(자식 추가·수정·옮겨 넣기)

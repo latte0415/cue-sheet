@@ -53,10 +53,10 @@ function v11() {
 }
 const LOOK = { person: id => ({ 'p-a': '조예준' })[id] || '(삭제된 사람)', track: () => '', prop: () => '', light: id => (LIGHTS.find(l => l.id === id) || { name: '(삭제된 조명)' }).name };
 
-test('v11 형식(지금은 v12 의 앞): SHOW_VER 12, LOOK_ACTS 는 사이트와 같다', () => {
-  assert.equal(SHOW_VER, 12);
-  assert.equal(FE.SHOW_VER, 12);
-  assert.deepEqual(CONST.SHOW_VERS, [5, 6, 7, 8, 9, 10, 11, 12]);
+test('v11 형식(지금은 v13 의 앞): SHOW_VER 13, LOOK_ACTS 는 사이트와 같다', () => {
+  assert.equal(SHOW_VER, 13);
+  assert.equal(FE.SHOW_VER, 13);
+  assert.deepEqual(CONST.SHOW_VERS, [5, 6, 7, 8, 9, 10, 11, 12, 13]);
   assert.deepEqual(Object.keys(FE.LOOK_ACTS), CONST.LOOK_ACTS);
 });
 
@@ -67,7 +67,7 @@ test('migrate v10 → v11: lights: [] 와 조명 큐 looks: [] 만 붙고 채널
   const v10 = plain(FE.migrate(raw)); v10.version = 10; delete v10.lights;
   cues(v10).forEach(c => { if (c.dept === 'light') delete c.light.looks; });
   const m = plain(FE.migrate(v10));
-  assert.equal(m.version, 12);
+  assert.equal(m.version, 13);
   assert.deepEqual(m.lights, []);
   assert.deepEqual(Object.keys(m).slice(Object.keys(m).indexOf('people')), ['people', 'props', 'preShowProps', 'lights', 'tracks', 'parts']);
   const before = cues(v10).filter(c => c.dept === 'light'), after = cues(m).filter(c => c.dept === 'light');
@@ -208,7 +208,7 @@ test('MCP ops: v10 공연에 op 를 적용하면 v11 로 — lights: [] (preShow
   const s = v11(); s.version = 10; delete s.lights;
   cues(s).forEach(c => { c.light = { channels: [ch('front', 'on')], anim: '' }; });
   const r = applyOps(s, [{ op: 'set', kind: 'show', fields: { revision: 'v11' } }]);
-  assert.equal(r.show.version, 12);
+  assert.equal(r.show.version, 13);
   assert.deepEqual(Object.keys(r.show).slice(Object.keys(r.show).indexOf('people')), ['people', 'props', 'preShowProps', 'lights', 'tracks', 'parts']);
   cues(r.show).forEach(c => { assert.deepEqual(Object.keys(c.light), ['looks', 'channels', 'anim']); assert.deepEqual(c.light.channels, [ch('front', 'on')]); });
   // 사이트가 불러와도 같다
