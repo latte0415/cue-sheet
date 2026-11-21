@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 </head>
 <body>
 <!-- ARTIFACT:START -->
@@ -124,7 +124,7 @@ input[type=color]{padding:0 2px;width:40px;height:30px;cursor:pointer}
 .count{color:var(--red);font-family:var(--mono);font-weight:500;font-size:12px;margin-left:4px}
 .menu-wrap{position:relative}
 .menu-btn{font-size:16px;line-height:1;padding:0 4px 2px;letter-spacing:.05em}
-.menu{position:absolute;right:0;top:calc(100% + 6px);background:var(--paper);border:1px solid var(--rule-2);min-width:270px;z-index:30;max-height:calc(100vh - 80px);overflow:auto}
+.menu{position:absolute;right:0;top:calc(100% + 6px);background:var(--paper);border:1px solid var(--rule-2);min-width:270px;z-index:30;max-height:calc(100vh - 80px);max-height:calc(100dvh - 80px);overflow:auto}
 .menu button{display:block;width:100%;text-align:left;padding:7px 12px;font-size:13px;border-bottom:1px solid var(--rule)}
 .menu button:last-child{border-bottom:0}
 .menu button:hover{background:var(--tint)}
@@ -916,7 +916,7 @@ body.has-player .app,body.has-preview .app{padding-bottom:calc(var(--player-h, 0
 .sv-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sv-d{font-size:11px;color:var(--ink-3);font-weight:400;white-space:nowrap;flex:none}
 .sv-i.other .sv-t,.sv-i.other .sv-q{color:var(--ink-3)}
-.sv-panel{position:sticky;top:0;max-height:calc(100vh - 110px);overflow:auto;padding:0 2px 24px 0}
+.sv-panel{position:sticky;top:0;max-height:calc(100vh - 110px);max-height:calc(100dvh - 110px);overflow:auto;padding:0 2px 24px 0}
 .sv-head{border-top:2px solid var(--accent);border-bottom:1px solid var(--rule-2);padding:10px 0 8px}
 .sv-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 14px}
 .sv-pos{font-family:var(--mono);font-size:26px;font-weight:500;color:var(--accent);line-height:1.15}
@@ -1210,6 +1210,48 @@ body.has-player .app,body.has-preview .app{padding-bottom:calc(var(--player-h, 0
 .lkr-a{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
 .lk-desc .rig-svg{margin:4px 0 2px}
 @media print{.lkpop{display:none!important}.lkref{text-decoration:none}.lkr-t,.lkr-a .tb{display:none!important}}
+/* ---------- 휴대폰 · 터치: 화면 맞춤과 스크롤 ----------
+   골격: 문서(html·body)는 스크롤하지 않고 화면에 고정, 스크롤은 #main(그리고 목차 · 패널 · 모달 · 메뉴) 안에서만.
+   그 안쪽 스크롤이 끝에 닿으면 남은 움직임이 문서로 넘어가 화면 전체가 튕기거나(iOS) 당겨서 새로고침이 걸리고(Android),
+   그 사이 다음 손가락은 안쪽이 아니라 문서를 잡아 스크롤이 멈춘 것처럼 보인다 → 넘기지 않는다(contain). 넓은 표 · 흐름 그림은 제 칸 안에서만 가로로 */
+html,body{overscroll-behavior:none}
+.main,.nav,.panel,.overlay,.menu,.proj-menu,.pl-q,.spk-pop,.gate{overscroll-behavior:contain}
+.table-wrap,.fl-scroll{overscroll-behavior-x:contain}
+@media screen and (pointer:coarse){
+  /* iOS 는 16px 보다 작은 입력 칸에 포커스하면 화면을 확대하고 되돌리지 않는다 — 화면이 폭에 안 맞고 옆으로 밀리는 원인. 입력 칸만 16px */
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]),select,textarea{font-size:16px!important}
+  .pre-v[contenteditable="true"],.rev-v[contenteditable="true"],.scene.mc .sc-title[contenteditable="true"]{font-size:16px}
+  /* 상단 바의 글자 단추는 눌리는 자리만 넓힌다(보이는 모양은 그대로) */
+  .topbar .tb,.tabs>button,.tab-list>button{position:relative}
+  .topbar .tb::after,.tabs>button::after,.tab-list>button::after{content:"";position:absolute;inset:-8px -4px}
+}
+/* 가로로 눕힌 휴대폰(넓지만 낮은 화면): 왼쪽 목차를 좁은 화면처럼 서랍으로 — 본문 폭을 다 쓴다 */
+@media screen and (min-width:821px) and (max-height:500px) and (pointer:coarse){
+  .nav-toggle{display:inline}
+  .nav{position:fixed;left:0;top:0;bottom:0;z-index:40;width:min(290px,86vw);background:var(--paper);border-right:1px solid var(--rule-2);padding:calc(12px + env(safe-area-inset-top, 0px)) 14px 24px max(16px, env(safe-area-inset-left, 0px));transform:translateX(-105%);visibility:hidden;transition:transform .2s ease, visibility .2s}
+  .nav.open{transform:none;visibility:visible}
+  .main{padding-left:0}
+  /* 상단 바를 한 줄로 — 세로 폰처럼 버전 메모·저장 시각은 숨긴다(저장 상태는 남김) */
+  .brand .rev{display:none}
+}
+/* 낮은 가로 화면은 높이가 귀하다 — 상단 바를 한 줄로 두고, 모자라면 제목이 줄어든다(말줄임) */
+@media screen and (min-width:601px) and (max-height:500px) and (pointer:coarse){
+  .topbar{flex-wrap:nowrap}
+  .brand{flex:0 1 auto}
+  .tabs,.tools-r{flex:none}
+  .tools-r{flex-wrap:nowrap}
+  .role-sel{max-width:110px}
+  .brand .rev{display:none}
+}
+@media (max-width:600px){
+  /* 소품 · 조명 목록: 360px 폭에서도 순서 · 삭제 칸까지 한 화면에 */
+  .pr-table input[type=text]{min-width:56px}
+  .pr-table th,.pr-table td{padding-right:6px}
+  .lkr-b{flex-basis:100%}
+  .lkr-t{width:100%}
+  .lkr-t input.rg-c{width:100%;min-width:4em}
+  .lkr-t input[type=number]{width:3.6em}
+}
 </style>
 
 <div class="app" id="app">
@@ -9146,6 +9188,19 @@ document.addEventListener('keydown', ev => {
     }
   }
 });
+// 문서는 스크롤하지 않는다(스크롤은 #main 안에서만). iOS 는 입력 칸에 포커스하면 키보드 위로 보이게 문서 전체를 밀어 올리고,
+// 키보드를 닫아도 그대로 두는 일이 있다 — 상단 바가 화면 밖으로 밀리고 화면이 어긋난 채 남는다. 편집 중인 칸이 없을 때 제자리로
+let rootRaf = 0;
+function rootReset() {
+  rootRaf = 0;
+  const se = document.scrollingElement; if (!se || (!se.scrollTop && !se.scrollLeft)) return;
+  const a = document.activeElement;
+  if (a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) return;
+  se.scrollTop = 0; se.scrollLeft = 0;
+}
+window.addEventListener('scroll', () => { if (!rootRaf) rootRaf = requestAnimationFrame(rootReset); }, { passive: true });
+document.addEventListener('focusout', () => setTimeout(rootReset, 150));
+if (window.visualViewport) visualViewport.addEventListener('resize', () => setTimeout(rootReset, 150));
 let spyRaf = 0;
 $('#main').addEventListener('scroll', () => {
   if (spkOpenNow()) spkPlace();
